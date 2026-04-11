@@ -1,0 +1,125 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: user is authenticated
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Helper: user's profile
+    function getUserProfile() {
+      return get(/databases/$(database)/documents/perfiles/$(request.auth.uid)).data;
+    }
+
+    // Helper: user belongs to community
+    function belongsToCommunity(comunidadId) {
+      return isAuth() && getUserProfile().comunidad_id == comunidadId;
+    }
+
+    // Helper: user is admin or presidente
+    function isAdmin() {
+      return isAuth() && getUserProfile().rol in ['admin', 'presidente'];
+    }
+
+    // Comunidades (public read for invite page)
+    match /comunidades/{comunidadId} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update: if isAuth();
+    }
+
+    // Perfiles (public read for invite vecino count)
+    match /perfiles/{userId} {
+      allow read: if true;
+      allow create: if isAuth() && request.auth.uid == userId;
+      allow update: if isAuth() && (request.auth.uid == userId || isAdmin());
+    }
+
+    // Categorias de incidencia (read-only, seeded by admin)
+    match /categorias_incidencia/{catId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Incidencias
+    match /incidencias/{incidenciaId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && belongsToCommunity(request.resource.data.comunidad_id);
+      allow update: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+    }
+
+    // Comentarios
+    match /comentarios/{comentarioId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+    }
+
+    // Incidencia afectados
+    match /incidencia_afectados/{afectadoId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow delete: if isAuth();
+    }
+
+    // Anuncios
+    match /anuncios/{anuncioId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow delete: if isAuth();
+    }
+
+    // Documentos
+    match /documentos/{docId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+    }
+
+    // Votaciones
+    match /votaciones/{votacionId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+    }
+
+    // Opciones de votacion
+    match /opciones_votacion/{opcionId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+    }
+
+    // Respuestas de votacion
+    match /respuestas_votacion/{respuestaId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+    }
+
+    // Cuotas vecinos
+    match /cuotas_vecinos/{cuotaId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth();
+    }
+
+    // Mediaciones
+    match /mediaciones/{mediacionId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth();
+    }
+
+    // Notificaciones
+    match /notificaciones/{notifId} {
+      allow read: if isAuth() && request.auth.uid == resource.data.usuario_id;
+      allow create: if isAuth();
+      allow update: if isAuth() && request.auth.uid == resource.data.usuario_id;
+    }
+
+    // Consultas normativas
+    match /consultas_normativas/{consultaId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth();
+    }
+  }
+}
