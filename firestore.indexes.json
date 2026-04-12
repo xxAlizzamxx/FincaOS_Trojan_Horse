@@ -59,6 +59,22 @@
       ]
     },
     {
+      "collectionGroup": "cuotas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "fecha_limite", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cuotas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "documentos",
       "queryScope": "COLLECTION",
       "fields": [

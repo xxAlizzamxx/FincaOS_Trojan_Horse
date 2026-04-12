@@ -139,3 +139,22 @@ export interface VotoUsuario {
   opcion_id: string;
   created_at: string;
 }
+
+/* ─── Cuotas ─── */
+
+export type EstadoPago = 'pendiente' | 'pagado';
+
+export interface Cuota {
+  id: string;
+  comunidad_id: string;
+  nombre: string;
+  monto: number;
+  fecha_limite: string;   // ISO string
+  created_at: string;
+}
+
+export interface PagoCuota {
+  usuario_id: string;
+  estado: EstadoPago;
+  fecha_pago: string | null;
+}
