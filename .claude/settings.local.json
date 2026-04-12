@@ -5,7 +5,8 @@
       "Bash(firebase projects:list)",
       "Bash(firebase deploy:*)",
       "Bash(firebase login:list)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)"
     ]
   }
 }
