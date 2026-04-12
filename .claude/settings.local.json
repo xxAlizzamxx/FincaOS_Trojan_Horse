@@ -6,7 +6,8 @@
       "Bash(firebase deploy:*)",
       "Bash(firebase login:list)",
       "Bash(npx tsc:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(dir \"C:\\\\Users\\\\USER\\\\Documents\\\\Batch8-cooweb\\\\Proyecto final cooweb\\\\FincaOS_Trojan_Horse\\\\app\\\\\\(app\\)\\\\cuotas\" /s /b)"
     ]
   }
 }

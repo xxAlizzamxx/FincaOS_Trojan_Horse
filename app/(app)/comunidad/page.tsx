@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Users, Megaphone, Building2, Share2, Vote, ChevronRight, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle } from 'lucide-react';
+import { FileText, Users, Megaphone, Building2, Share2, Vote, ChevronRight, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import {
@@ -23,7 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { format } from 'date-fns';
+import { format, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface Votacion {
@@ -35,13 +35,13 @@ interface Votacion {
   opciones: { id: string; texto: string; votos: number }[];
 }
 
-interface Cuota {
+interface CuotaItem {
   id: string;
-  vecino_id: string;
-  mes_anio: string;
-  importe: number;
-  estado: 'al_dia' | 'pendiente' | 'moroso';
-  pagado_at: string | null;
+  nombre: string;
+  monto: number;
+  fecha_limite: string;
+  pagado: boolean;
+  fecha_pago: string | null;
 }
 
 export default function ComunidadPage() {
@@ -52,7 +52,7 @@ export default function ComunidadPage() {
   const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [votaciones, setVotaciones] = useState<Votacion[]>([]);
-  const [cuotas, setCuotas] = useState<Cuota[]>([]);
+  const [cuotas, setCuotas] = useState<CuotaItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -126,16 +126,31 @@ export default function ComunidadPage() {
     );
     setVotaciones(votSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Votacion)));
 
-    // 6. Fetch cuotas for this vecino
+    // 6. Fetch cuotas de la comunidad + pago del vecino actual
     const cuotaSnap = await getDocs(
       query(
-        collection(db, 'cuotas_vecinos'),
-        where('vecino_id', '==', perfil!.id),
-        orderBy('mes_anio', 'desc'),
+        collection(db, 'cuotas'),
+        where('comunidad_id', '==', cid),
+        orderBy('fecha_limite', 'desc'),
         limit(6)
       )
     );
-    setCuotas(cuotaSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Cuota)));
+    const cuotasItems: CuotaItem[] = await Promise.all(
+      cuotaSnap.docs.map(async (cuotaDoc) => {
+        const data = cuotaDoc.data();
+        const pagoSnap = await getDoc(firestoreDoc(db, 'cuotas', cuotaDoc.id, 'pagos', perfil!.id));
+        const pagado = pagoSnap.exists() && pagoSnap.data()?.estado === 'pagado';
+        return {
+          id: cuotaDoc.id,
+          nombre: data.nombre ?? '',
+          monto: data.monto ?? 0,
+          fecha_limite: data.fecha_limite ?? '',
+          pagado,
+          fecha_pago: pagoSnap.data()?.fecha_pago ?? null,
+        };
+      })
+    );
+    setCuotas(cuotasItems);
 
     setLoading(false);
   }
@@ -151,17 +166,12 @@ export default function ComunidadPage() {
     }
   }
 
+  const esAdmin = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
   const rolLabel: Record<string, string> = { vecino: 'Vecino', presidente: 'Presidente', admin: 'Administrador' };
   const rolColor: Record<string, string> = {
     vecino: 'bg-gray-100 text-gray-600',
     presidente: 'bg-finca-peach/50 text-finca-coral',
     admin: 'bg-finca-coral text-white',
-  };
-
-  const cuotaConfig = {
-    al_dia: { label: 'Al día', color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
-    pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
-    moroso: { label: 'Moroso', color: 'bg-red-100 text-red-700', icon: AlertCircle },
   };
 
   if (loading) {
@@ -306,58 +316,105 @@ export default function ComunidadPage() {
         </TabsContent>
 
         <TabsContent value="finanzas" className="mt-4 space-y-3">
-          <p className="text-xs text-muted-foreground">Estado de tus cuotas comunitarias</p>
+          {/* Header row */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              {esAdmin ? 'Cuotas de tu comunidad' : 'Estado de tus cuotas comunitarias'}
+            </p>
+            {esAdmin && (
+              <button
+                onClick={() => router.push('/cuotas/nueva')}
+                className="flex items-center gap-1 text-xs font-medium text-finca-coral bg-finca-peach/30 hover:bg-finca-peach/50 px-2.5 py-1 rounded-full transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+                Nueva cuota
+              </button>
+            )}
+          </div>
+
           {cuotas.length === 0 ? (
             <div className="py-10 text-center space-y-2">
               <Wallet className="w-10 h-10 text-muted-foreground/30 mx-auto" />
               <p className="text-sm font-medium text-finca-dark">Sin cuotas registradas</p>
-              <p className="text-xs text-muted-foreground">El administrador registrará el estado de tus cuotas aquí</p>
+              <p className="text-xs text-muted-foreground">
+                {esAdmin
+                  ? 'Crea una cuota y se asignará a todos los vecinos'
+                  : 'El administrador registrará el estado de tus cuotas aquí'}
+              </p>
+              {esAdmin && (
+                <button
+                  onClick={() => router.push('/cuotas/nueva')}
+                  className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-finca-coral bg-finca-peach/30 hover:bg-finca-peach/50 px-3 py-1.5 rounded-full transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Crear primera cuota
+                </button>
+              )}
             </div>
           ) : (
             <>
-              <Card className={cn('border-0 shadow-sm', cuotas[0]?.estado === 'al_dia' ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-red-400')}>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Estado actual</p>
-                  <div className="flex items-center gap-2">
-                    {cuotas[0]?.estado === 'al_dia' ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-600" />
-                    ) : (
-                      <AlertCircle className="w-5 h-5 text-red-500" />
-                    )}
-                    <p className={cn('font-bold text-lg', cuotas[0]?.estado === 'al_dia' ? 'text-green-700' : 'text-red-600')}>
-                      {cuotas[0]?.estado === 'al_dia' ? 'Al corriente de pago' : cuotas[0]?.estado === 'moroso' ? 'Cuenta en mora' : 'Cuota pendiente'}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Resumen estado */}
+              {(() => {
+                const pendientes = cuotas.filter((c) => !c.pagado).length;
+                const alDia = pendientes === 0;
+                return (
+                  <Card className={cn('border-0 shadow-sm border-l-4', alDia ? 'border-l-green-500' : 'border-l-red-400')}>
+                    <CardContent className="p-3 flex items-center gap-2">
+                      {alDia ? (
+                        <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+                      )}
+                      <p className={cn('font-semibold text-sm', alDia ? 'text-green-700' : 'text-red-600')}>
+                        {alDia ? 'Al corriente de pago' : `${pendientes} cuota${pendientes > 1 ? 's' : ''} pendiente${pendientes > 1 ? 's' : ''}`}
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
 
               <div className="space-y-2">
                 {cuotas.map((cuota) => {
-                  const config = cuotaConfig[cuota.estado];
-                  const Icon = config.icon;
+                  const vencida = !cuota.pagado && cuota.fecha_limite && isPast(new Date(cuota.fecha_limite));
                   return (
-                    <Card key={cuota.id} className="border-0 shadow-sm">
-                      <CardContent className="p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', cuota.estado === 'al_dia' ? 'bg-green-50' : cuota.estado === 'moroso' ? 'bg-red-50' : 'bg-yellow-50')}>
-                            <Icon className={cn('w-4.5 h-4.5', cuota.estado === 'al_dia' ? 'text-green-600' : cuota.estado === 'moroso' ? 'text-red-500' : 'text-yellow-600')} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-finca-dark">{cuota.mes_anio}</p>
-                            {cuota.pagado_at && (
-                              <p className="text-xs text-muted-foreground">Pagado {format(new Date(cuota.pagado_at), "d MMM", { locale: es })}</p>
-                            )}
-                          </div>
+                    <Card key={cuota.id} className={cn('border-0 shadow-sm overflow-hidden', cuota.pagado && 'opacity-70')}>
+                      <div className={cn('h-1', cuota.pagado ? 'bg-green-400' : vencida ? 'bg-red-500' : 'bg-finca-coral')} />
+                      <CardContent className="p-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-finca-dark truncate">{cuota.nombre}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {cuota.pagado && cuota.fecha_pago
+                              ? `✓ Pagado ${format(new Date(cuota.fecha_pago), "d MMM", { locale: es })}`
+                              : cuota.fecha_limite
+                              ? `Límite: ${format(new Date(cuota.fecha_limite), "d MMM yyyy", { locale: es })}`
+                              : ''}
+                          </p>
                         </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-finca-dark">{cuota.importe.toFixed(2)}€</p>
-                          <Badge className={cn('text-[10px] border-0', config.color)}>{config.label}</Badge>
+                        <div className="text-right shrink-0">
+                          <p className="font-bold text-finca-dark">
+                            {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(cuota.monto)}
+                          </p>
+                          <Badge className={cn('text-[10px] border gap-1 mt-0.5',
+                            cuota.pagado
+                              ? 'bg-green-100 text-green-700 border-green-200'
+                              : 'bg-red-100 text-red-700 border-red-200'
+                          )}>
+                            {cuota.pagado ? <><Check className="w-2.5 h-2.5" />Pagado</> : <><Clock className="w-2.5 h-2.5" />Pendiente</>}
+                          </Badge>
                         </div>
                       </CardContent>
                     </Card>
                   );
                 })}
               </div>
+
+              <Button
+                className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
+                onClick={() => router.push('/cuotas')}
+              >
+                <Wallet className="w-4 h-4 mr-2" />
+                Ver todas las cuotas
+              </Button>
             </>
           )}
         </TabsContent>

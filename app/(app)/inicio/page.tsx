@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Clock, TrendingUp, ChevronRight, Plus, Share2, Copy } from 'lucide-react';
+import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Clock, TrendingUp, ChevronRight, Plus, Share2, Copy, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 import { collection, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Incidencia, Anuncio } from '@/types/database';
+import { Incidencia, Anuncio, Mediacion } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +31,11 @@ export default function InicioPage() {
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
   const [stats, setStats] = useState({ abiertas: 0, resueltas: 0, vecinos: 0 });
+  const [mediacionesCount, setMediacionesCount] = useState<{ disponibles: number; total: number } | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
+
+  const verMediaciones = perfil?.rol === 'mediador' || perfil?.rol === 'admin' || perfil?.rol === 'presidente';
+  const esMediador = perfil?.rol === 'mediador';
 
   const nombreCorto = perfil?.nombre_completo?.split(' ')[0] || 'Vecino';
   const comunidadId = perfil?.comunidad_id;
@@ -47,11 +51,24 @@ export default function InicioPage() {
   }, [comunidadId, authLoading]);
 
   async function fetchData() {
-    const [incSnap, anuncSnap, allIncSnap] = await Promise.all([
+    const rol = perfil?.rol;
+    const uid = user?.uid;
+    const canSeeMediaciones = rol === 'mediador' || rol === 'admin' || rol === 'presidente';
+
+    const baseQueries: Promise<any>[] = [
       getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(5))),
       getDocs(query(collection(db, 'anuncios'), where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3))),
       getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId))),
-    ]);
+    ];
+
+    if (canSeeMediaciones) {
+      baseQueries.push(
+        getDocs(query(collection(db, 'mediaciones'), where('comunidad_id', '==', comunidadId), where('estado', '==', 'solicitada'))),
+        getDocs(query(collection(db, 'mediaciones'), where('comunidad_id', '==', comunidadId))),
+      );
+    }
+
+    const [incSnap, anuncSnap, allIncSnap, ...mediSnaps] = await Promise.all(baseQueries);
 
     const incs = incSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Incidencia));
     const anuncs = anuncSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Anuncio));
@@ -75,6 +92,14 @@ export default function InicioPage() {
     const abiertas = allIncs.filter((i: any) => !['resuelta', 'cerrada'].includes(i.estado)).length;
     const resueltas = allIncs.filter((i: any) => i.estado === 'resuelta').length;
     setStats({ abiertas, resueltas, vecinos: 0 });
+
+    if (mediSnaps.length >= 2) {
+      setMediacionesCount({
+        disponibles: mediSnaps[0].size,
+        total: mediSnaps[1].size,
+      });
+    }
+
     setDataLoading(false);
   }
 
@@ -210,6 +235,49 @@ export default function InicioPage() {
               </Card>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* ── Acceso rápido Mediaciones (mediador / admin / presidente) ── */}
+      {verMediaciones && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-finca-dark">Mediaciones</h2>
+            <Link href="/mediaciones" className="text-xs text-finca-coral flex items-center gap-0.5">
+              Ver todo <ChevronRight className="w-3 h-3" />
+            </Link>
+          </div>
+          <Link href="/mediaciones" className="block">
+            <Card className="border-0 shadow-sm bg-gradient-to-r from-violet-50 to-purple-50 hover:shadow-md transition-shadow active:scale-[0.99]">
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="w-11 h-11 rounded-2xl bg-violet-100 flex items-center justify-center shrink-0">
+                  <Scale className="w-5 h-5 text-violet-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-finca-dark">
+                    {esMediador ? 'Solicitudes disponibles' : 'Conflictos en la comunidad'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {esMediador
+                      ? mediacionesCount?.disponibles
+                        ? `${mediacionesCount.disponibles} solicitud${mediacionesCount.disponibles > 1 ? 'es' : ''} sin asignar`
+                        : 'Sin solicitudes nuevas'
+                      : mediacionesCount?.total
+                      ? `${mediacionesCount.total} mediación${mediacionesCount.total > 1 ? 'es' : ''} registradas`
+                      : 'Sin mediaciones registradas'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {esMediador && mediacionesCount?.disponibles ? (
+                    <span className="w-5 h-5 rounded-full bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center">
+                      {mediacionesCount.disponibles}
+                    </span>
+                  ) : null}
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         </section>
       )}
 

@@ -2,31 +2,19 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, User, Scale } from 'lucide-react';
+import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/useAuth';
 
 export function BottomTabBar() {
   const pathname = usePathname();
-  const { perfil } = useAuth();
-  const esMediador    = perfil?.rol === 'mediador';
-  const verMediaciones = esMediador || perfil?.rol === 'admin' || perfil?.rol === 'presidente';
 
-  const tabs = verMediaciones
-    ? [
-        { href: '/inicio',      icon: Home,        label: 'Inicio'      },
-        { href: '/mediaciones', icon: Scale,        label: 'Mediaciones' },
-        { href: '/nueva',       icon: Plus,         label: 'Nuevo', isFab: true },
-        { href: '/comunidad',   icon: Users,        label: 'Comunidad'   },
-        { href: '/perfil',      icon: User,         label: 'Perfil'      },
-      ]
-    : [
-        { href: '/inicio',      icon: Home,         label: 'Inicio'      },
-        { href: '/incidencias', icon: AlertCircle,  label: 'Incidencias' },
-        { href: '/nueva',       icon: Plus,         label: 'Nuevo', isFab: true },
-        { href: '/comunidad',   icon: Users,        label: 'Comunidad'   },
-        { href: '/perfil',      icon: User,         label: 'Perfil'      },
-      ];
+  const tabs = [
+    { href: '/inicio',      icon: Home,        label: 'Inicio'      },
+    { href: '/incidencias', icon: AlertCircle, label: 'Incidencias' },
+    { href: '/nueva',       icon: Plus,        label: 'Nuevo', isFab: true },
+    { href: '/comunidad',   icon: Users,       label: 'Comunidad'   },
+    { href: '/perfil',      icon: User,        label: 'Perfil'      },
+  ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border safe-bottom">
