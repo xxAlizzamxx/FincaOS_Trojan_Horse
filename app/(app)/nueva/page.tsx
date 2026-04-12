@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CircleAlert as AlertCircle, Scale, BookOpen, Megaphone, Vote, ChevronRight, X } from 'lucide-react';
+import { CircleAlert as AlertCircle, Scale, BookOpen, Megaphone, Vote, Wallet, ChevronRight, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -48,6 +48,15 @@ const acciones = [
     href: '/votos/nuevo',
     color: 'bg-violet-50 text-violet-500',
     border: 'hover:border-violet-200',
+    adminOnly: true,
+  },
+  {
+    icon: Wallet,
+    titulo: 'Nueva cuota',
+    descripcion: 'Crea una cuota y asígnala a todos los vecinos',
+    href: '/cuotas/nueva',
+    color: 'bg-emerald-50 text-emerald-600',
+    border: 'hover:border-emerald-200',
     adminOnly: true,
   },
 ];

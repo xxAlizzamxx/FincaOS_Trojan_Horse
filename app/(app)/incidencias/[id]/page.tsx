@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  ArrowLeft, ArrowRight, Clock, MessageSquare, Send,
-  MapPin, Tag, UserPlus, UserMinus, Users, Star,
+  ArrowLeft, ArrowRight, MessageSquare, Send,
+  UserPlus, UserMinus, Users, Star,
   CircleCheck as CheckCircle2, Loader2, History,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -56,6 +56,22 @@ export default function IncidenciaDetailPage() {
 
   const incidenciaId = params.id as string;
 
+  /* ── Vivienda del autor (torre · piso · puerta, con fallback a numero_piso) ── */
+  function lineaVivienda(autor: any): string {
+    const parts = [
+      autor?.torre  && `Torre ${autor.torre}`,
+      autor?.piso   && `${autor.piso}º`,
+      autor?.puerta,
+    ].filter(Boolean);
+    if (parts.length > 0) return parts.join(' · ');
+    return autor?.numero_piso ?? '';
+  }
+
+  /* ── Emoji de prioridad ── */
+  const prioridadEmoji: Record<string, string> = {
+    baja: '🟢', normal: '🔵', alta: '⚠️', urgente: '🚨',
+  };
+
   useEffect(() => { fetchIncidencia(); fetchAfectados(); }, [incidenciaId]);
 
   async function fetchIncidencia() {
@@ -67,7 +83,14 @@ export default function IncidenciaDetailPage() {
         const autorSnap = await getDoc(doc(db, 'perfiles', incData.autor_id));
         if (autorSnap.exists()) {
           const a = autorSnap.data();
-          incData.autor = { id: autorSnap.id, nombre_completo: a.nombre_completo, numero_piso: a.numero_piso };
+          incData.autor = {
+            id: autorSnap.id,
+            nombre_completo: a.nombre_completo,
+            torre: a.torre ?? null,
+            piso:  a.piso  ?? null,
+            puerta: a.puerta ?? null,
+            numero_piso: a.numero_piso ?? null,  // fallback legacy
+          };
         }
       }
 
@@ -312,7 +335,7 @@ export default function IncidenciaDetailPage() {
               <div>
                 <p className="font-medium text-sm text-finca-dark">{(incidencia.autor as any)?.nombre_completo}</p>
                 <p className="text-xs text-muted-foreground">
-                  {(incidencia.autor as any)?.numero_piso && `Piso ${(incidencia.autor as any).numero_piso} · `}
+                  {lineaVivienda(incidencia.autor) && `${lineaVivienda(incidencia.autor)} · `}
                   {format(new Date(incidencia.created_at), "d 'de' MMMM, HH:mm", { locale: es })}
                 </p>
               </div>
@@ -325,18 +348,20 @@ export default function IncidenciaDetailPage() {
             <div className="flex flex-wrap gap-2 pt-1">
               {(incidencia.categoria as any)?.nombre && (
                 <div className="flex items-center gap-1.5 bg-muted rounded-lg px-2.5 py-1.5">
-                  <Tag className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-sm leading-none">
+                    {(incidencia.categoria as any)?.icono ?? '🏷️'}
+                  </span>
                   <span className="text-xs text-muted-foreground">{(incidencia.categoria as any).nombre}</span>
                 </div>
               )}
               {incidencia.ubicacion && (
                 <div className="flex items-center gap-1.5 bg-muted rounded-lg px-2.5 py-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-sm leading-none">📍</span>
                   <span className="text-xs text-muted-foreground">{incidencia.ubicacion}</span>
                 </div>
               )}
               <div className="flex items-center gap-1.5 bg-muted rounded-lg px-2.5 py-1.5">
-                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-sm leading-none">{prioridadEmoji[incidencia.prioridad] ?? '🔵'}</span>
                 <span className="text-xs text-muted-foreground capitalize">{incidencia.prioridad}</span>
               </div>
             </div>
@@ -484,11 +509,13 @@ export default function IncidenciaDetailPage() {
         )}
 
         {/* ── Estimación IA ── */}
-        {(incidencia.estimacion_min || incidencia.estimacion_max) && (
+        {(incidencia.estimacion_min != null || incidencia.estimacion_max != null) && (
           <Card className="border-0 shadow-sm bg-finca-peach/20 border-l-4 border-l-finca-coral">
             <CardContent className="p-4">
               <p className="text-xs font-semibold text-finca-coral uppercase tracking-wide mb-1">Estimación IA</p>
-              <p className="text-lg font-bold text-finca-dark">{incidencia.estimacion_min}€ – {incidencia.estimacion_max}€</p>
+              <p className="text-lg font-bold text-finca-dark">
+                {incidencia.estimacion_min ?? 0}€ – {incidencia.estimacion_max ?? 0}€
+              </p>
               <p className="text-xs text-muted-foreground mt-0.5">Rango estimado de coste de reparación</p>
             </CardContent>
           </Card>

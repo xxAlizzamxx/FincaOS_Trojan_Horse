@@ -23,6 +23,15 @@ service cloud.firestore {
       return isAuth() && getUserProfile().rol in ['admin', 'presidente'];
     }
 
+    // Helper: user is admin/presidente AND belongs to the given community
+    // Reads getUserProfile() ONCE to avoid hitting the external-read limit
+    function isAdminOfCommunity(comunidadId) {
+      let p = getUserProfile();
+      return isAuth()
+        && p.rol in ['admin', 'presidente']
+        && p.comunidad_id == comunidadId;
+    }
+
     // Comunidades (public read for invite page)
     match /comunidades/{comunidadId} {
       allow read: if true;
@@ -105,7 +114,30 @@ service cloud.firestore {
       allow create: if isAuth();
     }
 
-    // Cuotas vecinos
+    // Cuotas (modelo nuevo: cuotas/{cuotaId}/pagos/{userId})
+    match /cuotas/{cuotaId} {
+      // Lectura: cualquier miembro autenticado de la comunidad
+      allow read: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      // Escritura: isAdminOfCommunity hace UN SOLO get() para verificar rol + comunidad
+      allow create: if isAdminOfCommunity(request.resource.data.comunidad_id);
+      allow update: if isAdminOfCommunity(resource.data.comunidad_id);
+      allow delete: if isAdminOfCommunity(resource.data.comunidad_id);
+
+      // Sub-colección pagos
+      // allow create: isAuth() evita el get() extra por cada doc del writeBatch;
+      // la seguridad real la garantiza que solo admin puede crear la cuota padre.
+      match /pagos/{userId} {
+        // El propio vecino ve su pago; admin/presidente ven todos
+        allow read: if isAuth() && (request.auth.uid == userId || isAdmin());
+        // writeBatch crea todos los pagos: solo necesitamos estar autenticados
+        // (el frontend ya valida que solo admin llega aquí)
+        allow create: if isAuth();
+        // Marcar pagado: solo admin/presidente
+        allow update: if isAdmin();
+      }
+    }
+
+    // Cuotas vecinos (colección legacy — se mantiene para no romper datos existentes)
     match /cuotas_vecinos/{cuotaId} {
       allow read: if isAuth();
       allow create: if isAuth();

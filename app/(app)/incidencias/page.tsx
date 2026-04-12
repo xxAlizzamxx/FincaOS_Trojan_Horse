@@ -17,11 +17,11 @@ import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ESTADO_CONFIG } from '@/lib/incidencias/workflow';
 
-const prioridadConfig: Record<string, string> = {
-  baja: 'text-green-600',
-  normal: 'text-blue-600',
-  alta: 'text-orange-600',
-  urgente: 'text-red-600',
+const prioridadConfig: Record<string, { color: string; emoji: string; label: string }> = {
+  baja:    { color: 'text-green-600',  emoji: '🟢', label: 'Baja'    },
+  normal:  { color: 'text-blue-600',   emoji: '🔵', label: 'Normal'  },
+  alta:    { color: 'text-orange-600', emoji: '⚠️', label: 'Alta'    },
+  urgente: { color: 'text-red-600',    emoji: '🚨', label: 'Urgente' },
 };
 
 const filtros = ['Todas', 'Pendiente', 'En revisión', 'Resuelta'];
@@ -168,12 +168,24 @@ export default function IncidenciasPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           {(inc.categoria as any)?.nombre && (
                             <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                              {(inc.categoria as any).nombre}
+                              {(inc.categoria as any)?.icono
+                                ? `${(inc.categoria as any).icono} ${(inc.categoria as any).nombre}`
+                                : `🏷️ ${(inc.categoria as any).nombre}`}
                             </span>
                           )}
-                          <span className={cn('text-xs font-medium', prioridadConfig[inc.prioridad])}>
-                            {inc.prioridad === 'urgente' ? '🚨 Urgente' : inc.prioridad === 'alta' ? '⚠️ Alta' : ''}
-                          </span>
+                          {inc.ubicacion && (
+                            <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                              📍 {inc.ubicacion}
+                            </span>
+                          )}
+                          {(() => {
+                            const p = prioridadConfig[inc.prioridad];
+                            return p ? (
+                              <span className={cn('text-xs font-medium', p.color)}>
+                                {p.emoji} {p.label}
+                              </span>
+                            ) : null;
+                          })()}
                         </div>
                         <div className="flex items-center gap-2 mt-1.5">
                           <span className="text-[11px] text-muted-foreground">
@@ -185,10 +197,10 @@ export default function IncidenciasPage() {
                         {estado.label}
                       </Badge>
                     </div>
-                    {inc.estimacion_min && inc.estimacion_max && (
+                    {(inc.estimacion_min != null || inc.estimacion_max != null) && (
                       <div className="mt-2 pt-2 border-t border-border/50">
                         <p className="text-xs text-muted-foreground">
-                          Estimación IA: <span className="font-medium text-finca-dark">{inc.estimacion_min}€ – {inc.estimacion_max}€</span>
+                          Estimación IA: <span className="font-medium text-finca-dark">{inc.estimacion_min ?? 0}€ – {inc.estimacion_max ?? 0}€</span>
                         </p>
                       </div>
                     )}
