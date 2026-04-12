@@ -1,0 +1,38 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper: usuario autenticado
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Helper: rol del usuario (leído de Firestore)
+    function getUserRol() {
+      return firestore.get(/databases/(default)/documents/perfiles/$(request.auth.uid)).data.rol;
+    }
+
+    function isAdmin() {
+      return isAuth() && getUserRol() in ['admin', 'presidente'];
+    }
+
+    // Documentos comunitarios
+    // Ruta: docs/{comunidadId}/{filename}
+    match /docs/{comunidadId}/{filename} {
+      // Cualquier usuario autenticado puede leer/descargar
+      allow read: if isAuth();
+
+      // Solo admin o presidente pueden subir
+      allow write: if isAdmin();
+
+      // Solo admin o presidente pueden eliminar
+      allow delete: if isAdmin();
+    }
+
+    // Cualquier otra ruta: denegado por defecto
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

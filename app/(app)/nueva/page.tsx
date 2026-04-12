@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CircleAlert as AlertCircle, Scale, BookOpen, Megaphone, ChevronRight, X } from 'lucide-react';
+import { CircleAlert as AlertCircle, Scale, BookOpen, Megaphone, Vote, ChevronRight, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,15 @@ const acciones = [
     href: '/nueva/anuncio',
     color: 'bg-green-50 text-green-500',
     border: 'hover:border-green-200',
+    adminOnly: true,
+  },
+  {
+    icon: Vote,
+    titulo: 'Crear votación',
+    descripcion: 'Lanza una votación para que los vecinos decidan',
+    href: '/votos/nuevo',
+    color: 'bg-violet-50 text-violet-500',
+    border: 'hover:border-violet-200',
     adminOnly: true,
   },
 ];
