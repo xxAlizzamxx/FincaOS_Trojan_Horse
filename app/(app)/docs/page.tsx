@@ -4,17 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Upload, FileText, FileSpreadsheet, File,
-  Download, Loader2, X, CheckCircle2, AlertCircle,
+  Download, ExternalLink, Loader2, X, CheckCircle2, AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  collection, query, where, orderBy, getDocs,
-  addDoc,
+  collection, query, where, orderBy, getDocs, addDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
-import {
-  subirDocumento, inferirTipo, EXTENSIONES_ACEPTADAS,
-} from '@/lib/firebase/storage-docs';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,77 +19,92 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle,
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { Documento, TipoDocumento } from '@/types/database';
 
-/* ─── Configuración visual por tipo ─── */
+/* ─── Validación MIME client-side ─── */
+const MIME_TIPOS: Record<string, TipoDocumento> = {
+  'application/pdf':                                                          'pdf',
+  'application/msword':                                                       'word',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'word',
+  'application/vnd.ms-excel':                                                 'excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':        'excel',
+};
+const EXTENSIONES_ACEPTADAS = '.pdf,.doc,.docx,.xls,.xlsx';
+
+function inferirTipo(file: File): TipoDocumento | null {
+  return MIME_TIPOS[file.type] ?? null;
+}
+
+/* ─── Config visual por tipo ─── */
 const TIPO_CONFIG: Record<TipoDocumento, {
-  label: string;
-  icon: React.ElementType;
-  bg: string;
-  text: string;
-  badge: string;
+  label: string; icon: React.ElementType;
+  bg: string; text: string; badge: string;
 }> = {
-  pdf: {
-    label: 'PDF',
-    icon: FileText,
-    bg: 'bg-red-50',
-    text: 'text-red-500',
-    badge: 'bg-red-100 text-red-700',
-  },
-  word: {
-    label: 'Word',
-    icon: File,
-    bg: 'bg-blue-50',
-    text: 'text-blue-500',
-    badge: 'bg-blue-100 text-blue-700',
-  },
-  excel: {
-    label: 'Excel',
-    icon: FileSpreadsheet,
-    bg: 'bg-green-50',
-    text: 'text-green-500',
-    badge: 'bg-green-100 text-green-700',
-  },
+  pdf:   { label: 'PDF',   icon: FileText,        bg: 'bg-red-50',   text: 'text-red-500',   badge: 'bg-red-100 text-red-700'   },
+  word:  { label: 'Word',  icon: File,             bg: 'bg-blue-50',  text: 'text-blue-500',  badge: 'bg-blue-100 text-blue-700'  },
+  excel: { label: 'Excel', icon: FileSpreadsheet,  bg: 'bg-green-50', text: 'text-green-500', badge: 'bg-green-100 text-green-700' },
 };
-
 const TIPO_CONFIG_FALLBACK = {
-  label: 'Doc',
-  icon: FileText,
-  bg: 'bg-gray-50',
-  text: 'text-gray-500',
-  badge: 'bg-gray-100 text-gray-600',
+  label: 'Doc', icon: FileText,
+  bg: 'bg-gray-50', text: 'text-gray-500', badge: 'bg-gray-100 text-gray-600',
 };
-
-function tipoConfig(tipo: string | undefined) {
+function tipoConfig(tipo?: string) {
   return TIPO_CONFIG[tipo as TipoDocumento] ?? TIPO_CONFIG_FALLBACK;
 }
 
-/* ─── Componente ─── */
+/* ─── Progreso simulado ─── */
+function useFakeProgress(active: boolean) {
+  const [progreso, setProgreso] = useState(0);
+  const ref = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (active) {
+      setProgreso(0);
+      ref.current = setInterval(() => {
+        setProgreso((p) => {
+          // Sube rápido hasta 60, luego desacelera para no llegar a 100
+          if (p >= 90) return p;
+          const step = p < 40 ? 8 : p < 70 ? 4 : 1;
+          return Math.min(p + step, 90);
+        });
+      }, 300);
+    } else {
+      if (ref.current) clearInterval(ref.current);
+      setProgreso(0);
+    }
+    return () => { if (ref.current) clearInterval(ref.current); };
+  }, [active]);
+
+  const completar = () => setProgreso(100);
+  return { progreso, completar };
+}
+
+/* ─── Componente principal ─── */
 export default function DocsPage() {
-  const router = useRouter();
+  const router   = useRouter();
   const { perfil } = useAuth();
 
   const puedeSubir = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
 
   const [documentos, setDocumentos] = useState<Documento[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]       = useState(true);
 
-  /* Sheet de subida */
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  /* Sheet */
+  const [sheetOpen, setSheetOpen]                     = useState(false);
+  const fileInputRef                                   = useRef<HTMLInputElement>(null);
   const [archivoSeleccionado, setArchivoSeleccionado] = useState<File | null>(null);
   const [nombrePersonalizado, setNombrePersonalizado] = useState('');
-  const [errorArchivo, setErrorArchivo] = useState<string | null>(null);
-  const [subiendo, setSubiendo] = useState(false);
-  const [progreso, setProgreso] = useState(0);
+  const [errorArchivo, setErrorArchivo]               = useState<string | null>(null);
+  const [subiendo, setSubiendo]                       = useState(false);
 
+  const { progreso, completar } = useFakeProgress(subiendo);
+
+  /* ── Fetch documentos ── */
   useEffect(() => {
     if (perfil?.comunidad_id) fetchDocumentos();
   }, [perfil?.comunidad_id]);
@@ -104,7 +115,7 @@ export default function DocsPage() {
       const q = query(
         collection(db, 'documentos'),
         where('comunidad_id', '==', perfil!.comunidad_id),
-        orderBy('created_at', 'desc')
+        orderBy('created_at', 'desc'),
       );
       const snap = await getDocs(q);
       setDocumentos(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Documento)));
@@ -123,8 +134,7 @@ export default function DocsPage() {
 
     if (!file) return;
 
-    const tipo = inferirTipo(file);
-    if (!tipo) {
+    if (!inferirTipo(file)) {
       setErrorArchivo('Formato no permitido. Usa PDF, Word o Excel.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
@@ -132,7 +142,6 @@ export default function DocsPage() {
 
     setArchivoSeleccionado(file);
     if (!nombrePersonalizado.trim()) {
-      // Autocompletar nombre sin extensión
       setNombrePersonalizado(file.name.replace(/\.[^.]+$/, ''));
     }
   }
@@ -141,41 +150,64 @@ export default function DocsPage() {
     setArchivoSeleccionado(null);
     setNombrePersonalizado('');
     setErrorArchivo(null);
-    setProgreso(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  /* ── Subida ── */
+  /* ── Subida a Cloudinary vía API route ── */
   async function handleSubir() {
     if (!archivoSeleccionado || !perfil?.comunidad_id) return;
+
+    // Doble check de rol en frontend
+    if (!puedeSubir) {
+      toast.error('No tienes permisos para subir documentos.');
+      return;
+    }
+
     const nombre = nombrePersonalizado.trim() || archivoSeleccionado.name;
 
     setSubiendo(true);
-    setProgreso(0);
     try {
-      const { url, storagePath, tipo } = await subirDocumento(
-        archivoSeleccionado,
-        perfil.comunidad_id,
-        setProgreso
-      );
+      /* 1. Construir FormData */
+      const formData = new FormData();
+      formData.append('file', archivoSeleccionado);
+      formData.append('comunidad_id', perfil.comunidad_id);
 
+      /* 2. POST al API route — Cloudinary server-side */
+      const res = await fetch('/api/upload-doc', {
+        method: 'POST',
+        body:   formData,
+      });
+
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: 'Error en el servidor.' }));
+        throw new Error(error ?? `Error ${res.status}`);
+      }
+
+      const { url, public_id, tipo } = await res.json() as {
+        url: string; public_id: string; tipo: TipoDocumento;
+      };
+
+      completar(); // barra al 100%
+
+      /* 3. Guardar metadata en Firestore */
       await addDoc(collection(db, 'documentos'), {
         comunidad_id: perfil.comunidad_id,
         nombre,
         url,
-        storage_path: storagePath,
+        storage_path: public_id,   // public_id de Cloudinary
         tipo,
-        tipo_mime: archivoSeleccionado.type,
-        subido_por: perfil.id,
-        created_by: perfil.id,
-        descripcion: null,
-        created_at: new Date().toISOString(),
+        tipo_mime:    archivoSeleccionado.type,
+        subido_por:   perfil.id,
+        created_by:   perfil.id,
+        descripcion:  null,
+        created_at:   new Date().toISOString(),
       });
 
       toast.success('Documento subido correctamente');
       setSheetOpen(false);
       resetSheet();
       fetchDocumentos();
+
     } catch (err: any) {
       toast.error(err.message ?? 'Error al subir el documento');
     } finally {
@@ -183,13 +215,32 @@ export default function DocsPage() {
     }
   }
 
-  /* ── Descarga ── */
-  function descargar(doc: Documento) {
-    if (!doc.url) { toast.error('URL no disponible'); return; }
-    window.open(doc.url, '_blank', 'noopener,noreferrer');
+  /* ── URL del proxy same-origin ──
+   * En lugar de apuntar directamente a res.cloudinary.com (cross-origin,
+   * bloqueado en ciertos contextos por Chrome con el error
+   * "Unsafe attempt to load URL from chrome-error://chromewebdata/"),
+   * redirigimos a /api/open-doc que hace el fetch server-side y devuelve
+   * el fichero con los headers correctos (Content-Type + Content-Disposition).
+   * Al ser same-origin jamás puede ser bloqueado por el navegador.
+   */
+  function proxyUrl(documento: Documento): string {
+    // Pasamos el public_id (guardado como storage_path) para que el proxy
+    // genere una URL firmada con el API secret. Nunca enviamos la URL raw
+    // directamente porque Cloudinary devuelve 401 sin firma.
+    const params = new URLSearchParams({
+      public_id: documento.storage_path ?? '',
+      nombre:    documento.nombre,
+      tipo:      documento.tipo ?? 'pdf',
+    });
+    return `/api/open-doc?${params.toString()}`;
   }
 
-  /* ── Loading skeleton ── */
+  function accionPorTipo(tipo?: string): { label: string; icono: React.ElementType } {
+    if (tipo === 'pdf') return { label: 'Ver',       icono: ExternalLink };
+    return                      { label: 'Descargar', icono: Download     };
+  }
+
+  /* ── Skeleton ── */
   if (loading) {
     return (
       <div className="px-4 py-5 space-y-4">
@@ -212,14 +263,11 @@ export default function DocsPage() {
 
   return (
     <div className="px-4 py-5 space-y-4">
+
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost" size="icon"
-            className="w-8 h-8 -ml-1"
-            onClick={() => router.back()}
-          >
+          <Button variant="ghost" size="icon" className="w-8 h-8 -ml-1" onClick={() => router.back()}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
@@ -265,20 +313,19 @@ export default function DocsPage() {
         </div>
       )}
 
-      {/* ── Lista de documentos ── */}
+      {/* ── Lista ── */}
       <div className="space-y-2">
         {documentos.map((documento) => {
-          const cfg = tipoConfig(documento.tipo);
+          const cfg  = tipoConfig(documento.tipo);
           const Icon = cfg.icon;
           return (
             <Card key={documento.id} className="border-0 shadow-sm">
               <CardContent className="p-4 flex items-center gap-3">
-                {/* Icono tipo */}
+
                 <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', cfg.bg)}>
                   <Icon className={cn('w-5 h-5', cfg.text)} />
                 </div>
 
-                {/* Info */}
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm text-finca-dark truncate leading-snug">
                     {documento.nombre}
@@ -293,16 +340,25 @@ export default function DocsPage() {
                   </div>
                 </div>
 
-                {/* Acción */}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 px-3 text-xs border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white shrink-0"
-                  onClick={() => descargar(documento)}
-                >
-                  <Download className="w-3.5 h-3.5 mr-1" />
-                  Abrir
-                </Button>
+                {documento.url ? (
+                  (() => {
+                    const { label, icono: Icono } = accionPorTipo(documento.tipo);
+                    return (
+                      <a
+                        href={proxyUrl(documento)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 h-8 px-3 rounded-md text-xs font-medium border border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white transition-colors shrink-0"
+                      >
+                        <Icono className="w-3.5 h-3.5" />
+                        {label}
+                      </a>
+                    );
+                  })()
+                ) : (
+                  <span className="text-xs text-muted-foreground shrink-0">Sin URL</span>
+                )}
+
               </CardContent>
             </Card>
           );
@@ -317,23 +373,23 @@ export default function DocsPage() {
           </SheetHeader>
 
           <div className="space-y-5 pb-8">
-            {/* Selector de archivo */}
+
+            {/* Zona de selección */}
             <div className="space-y-2">
               <Label>Archivo <span className="text-finca-coral">*</span></Label>
 
-              {/* Zona de drop / click */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={subiendo}
                 className={cn(
                   'w-full rounded-2xl border-2 border-dashed p-6 text-center transition-colors',
                   errorArchivo
                     ? 'border-red-300 bg-red-50'
                     : archivoSeleccionado
                     ? 'border-finca-coral bg-finca-peach/10'
-                    : 'border-border hover:border-finca-coral hover:bg-finca-peach/5'
+                    : 'border-border hover:border-finca-coral hover:bg-finca-peach/5',
                 )}
-                disabled={subiendo}
               >
                 {archivoSeleccionado ? (
                   <div className="flex flex-col items-center gap-2">
@@ -342,8 +398,8 @@ export default function DocsPage() {
                       {archivoSeleccionado.name}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {(archivoSeleccionado.size / 1024 / 1024).toFixed(2)} MB ·{' '}
-                      {tipoConfig(inferirTipo(archivoSeleccionado) ?? '').label}
+                      {(archivoSeleccionado.size / 1024 / 1024).toFixed(2)} MB
+                      {' · '}{tipoConfig(inferirTipo(archivoSeleccionado) ?? undefined).label}
                     </p>
                   </div>
                 ) : (
@@ -395,7 +451,10 @@ export default function DocsPage() {
             {subiendo && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Subiendo...</span>
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Subiendo a Cloudinary...
+                  </span>
                   <span>{progreso}%</span>
                 </div>
                 <Progress value={progreso} className="h-2" />
@@ -418,23 +477,13 @@ export default function DocsPage() {
                 onClick={handleSubir}
                 disabled={subiendo || !archivoSeleccionado || !nombrePersonalizado.trim()}
               >
-                {subiendo ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4 mr-1.5" />
-                    Subir
-                  </>
-                )}
+                {subiendo
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <><Upload className="w-4 h-4 mr-1.5" />Subir</>
+                }
               </Button>
             </div>
 
-            {/* Info roles */}
-            {!puedeSubir && (
-              <p className="text-xs text-center text-muted-foreground">
-                Solo administradores y presidentes pueden subir documentos.
-              </p>
-            )}
           </div>
         </SheetContent>
       </Sheet>
