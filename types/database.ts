@@ -1,5 +1,18 @@
 export type Rol = 'vecino' | 'presidente' | 'admin';
-export type EstadoIncidencia = 'pendiente' | 'en_revision' | 'presupuestada' | 'aprobada' | 'en_ejecucion' | 'resuelta' | 'cerrada';
+export type EstadoIncidencia =
+  | 'pendiente'      // inicial / "Reportada" en UI
+  | 'en_revision'
+  | 'presupuestada'
+  | 'en_ejecucion'
+  | 'resuelta'
+  | 'aprobada'       // legacy
+  | 'cerrada';       // legacy
+
+export interface EntradaHistorialEstado {
+  estado:       EstadoIncidencia;
+  fecha:        string;            // ISO string
+  cambiado_por: string;            // uid
+}
 export type PrioridadIncidencia = 'baja' | 'normal' | 'alta' | 'urgente';
 
 export interface Comunidad {
@@ -66,6 +79,7 @@ export interface Incidencia {
   created_at: string;
   updated_at: string;
   resuelta_at: string | null;
+  historial_estados?: EntradaHistorialEstado[];
   autor?: Perfil;
   categoria?: CategoriaIncidencia;
   fotos?: IncidenciaFoto[];

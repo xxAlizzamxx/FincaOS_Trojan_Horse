@@ -15,16 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-
-const estadoConfig: Record<string, { label: string; color: string; dot: string }> = {
-  pendiente:    { label: 'Pendiente',    color: 'bg-yellow-100 text-yellow-700 border-yellow-200', dot: 'bg-yellow-500' },
-  en_revision:  { label: 'En revisión',  color: 'bg-blue-100 text-blue-700 border-blue-200',       dot: 'bg-blue-500' },
-  presupuestada:{ label: 'Presupuestada', color: 'bg-orange-100 text-orange-700 border-orange-200', dot: 'bg-orange-500' },
-  aprobada:     { label: 'Aprobada',     color: 'bg-teal-100 text-teal-700 border-teal-200',       dot: 'bg-teal-500' },
-  en_ejecucion: { label: 'En ejecución', color: 'bg-blue-100 text-blue-700 border-blue-200',       dot: 'bg-blue-600' },
-  resuelta:     { label: 'Resuelta',     color: 'bg-green-100 text-green-700 border-green-200',    dot: 'bg-green-500' },
-  cerrada:      { label: 'Cerrada',      color: 'bg-gray-100 text-gray-500 border-gray-200',       dot: 'bg-gray-400' },
-};
+import { ESTADO_CONFIG } from '@/lib/incidencias/workflow';
 
 const prioridadConfig: Record<string, string> = {
   baja: 'text-green-600',
@@ -163,7 +154,7 @@ export default function IncidenciasPage() {
       ) : (
         <div className="space-y-2">
           {incidenciasFiltradas.map((inc) => {
-            const estado = estadoConfig[inc.estado] || estadoConfig.pendiente;
+            const estado = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG['pendiente'];
             return (
               <Link key={inc.id} href={`/incidencias/${inc.id}`}>
                 <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-[0.99] cursor-pointer">
@@ -190,7 +181,7 @@ export default function IncidenciasPage() {
                           </span>
                         </div>
                       </div>
-                      <Badge className={cn('text-[10px] border shrink-0 self-start', estado.color)}>
+                      <Badge className={cn('text-[10px] border shrink-0 self-start', estado.badge)}>
                         {estado.label}
                       </Badge>
                     </div>

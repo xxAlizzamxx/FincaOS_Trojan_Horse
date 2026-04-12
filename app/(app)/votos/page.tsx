@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Vote, CheckCircle2, Lock, ChevronRight } from 'lucide-react';
+import { Plus, Vote, CheckCircle2, Lock, ChevronRight, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, getDocs,
@@ -132,11 +132,20 @@ export default function VotosPage() {
     <div className="px-4 py-5 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-finca-dark">Votaciones</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {votaciones.filter((v) => v.activa).length} activas
-          </p>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost" size="icon"
+            className="w-8 h-8 -ml-1"
+            onClick={() => router.push('/comunidad')}
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold text-finca-dark">Votaciones</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {votaciones.filter((v) => v.activa).length} activas
+            </p>
+          </div>
         </div>
         {esPresidente && (
           <Button
