@@ -15,7 +15,10 @@ export interface Perfil {
   id: string;
   comunidad_id: string | null;
   nombre_completo: string;
-  numero_piso: string | null;
+  numero_piso: string | null;   // campo combinado legacy "Torre A · 3º · B"
+  torre: string | null;         // campo individual
+  piso: string | null;          // campo individual
+  puerta: string | null;        // campo individual (también guardado como "apartamento")
   rol: Rol;
   avatar_url: string | null;
   telefono: string | null;
@@ -82,13 +85,43 @@ export interface Anuncio {
   autor?: Perfil;
 }
 
+export type TipoDocumento = 'pdf' | 'word' | 'excel';
+
 export interface Documento {
   id: string;
   comunidad_id: string;
-  subido_por: string | null;
+  subido_por: string | null;    // uid del autor
+  created_by: string | null;    // alias semántico (mismo valor)
   nombre: string;
   descripcion: string | null;
+  url: string;                  // downloadURL de Storage
   storage_path: string;
-  tipo_mime: string | null;
+  tipo: TipoDocumento;
+  tipo_mime: string | null;     // MIME original (retrocompatibilidad)
+  created_at: string;
+}
+
+/* ─── Votaciones ─── */
+
+export interface OpcionVotacion {
+  id: string;    // uuid generado en cliente
+  texto: string;
+  votos: number;
+}
+
+export interface Votacion {
+  id: string;
+  comunidad_id: string;
+  created_by: string;          // uid del presidente/admin
+  titulo: string;
+  descripcion: string | null;
+  opciones: OpcionVotacion[];
+  activa: boolean;
+  created_at: string;
+  cierre_at: string | null;    // fecha opcional de cierre
+}
+
+export interface VotoUsuario {
+  opcion_id: string;
   created_at: string;
 }

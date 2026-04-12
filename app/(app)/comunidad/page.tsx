@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { FileText, Users, Megaphone, Building2, Share2, Vote, ChevronRight, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
@@ -12,7 +13,6 @@ import {
   limit,
   getDocs,
   getDoc,
-  addDoc,
   doc as firestoreDoc,
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
@@ -23,18 +23,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface Votacion {
   id: string;
   titulo: string;
   descripcion: string | null;
-  estado: 'abierta' | 'cerrada';
-  fecha_cierre: string | null;
+  activa: boolean;
   created_at: string;
-  opciones?: { id: string; texto: string; orden: number }[];
-  respuestas?: { opcion_id: string; vecino_id: string }[];
+  opciones: { id: string; texto: string; votos: number }[];
 }
 
 interface Cuota {
@@ -48,6 +46,7 @@ interface Cuota {
 
 export default function ComunidadPage() {
   const { perfil } = useAuth();
+  const router = useRouter();
   const [comunidad, setComunidad] = useState<Comunidad | null>(null);
   const [vecinos, setVecinos] = useState<Perfil[]>([]);
   const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
@@ -55,7 +54,6 @@ export default function ComunidadPage() {
   const [votaciones, setVotaciones] = useState<Votacion[]>([]);
   const [cuotas, setCuotas] = useState<Cuota[]>([]);
   const [loading, setLoading] = useState(true);
-  const [votando, setVotando] = useState<string | null>(null);
 
   useEffect(() => {
     if (perfil?.comunidad_id) fetchData();
@@ -118,7 +116,7 @@ export default function ComunidadPage() {
     );
     setDocumentos(docSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Documento)));
 
-    // 5. Fetch votaciones, then for each fetch opciones and respuestas
+    // 5. Fetch votaciones (new structure: opciones embedded, activa boolean)
     const votSnap = await getDocs(
       query(
         collection(db, 'votaciones'),
@@ -126,32 +124,7 @@ export default function ComunidadPage() {
         orderBy('created_at', 'desc')
       )
     );
-    const votacionesRaw = votSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-    const votacionesCompletas: Votacion[] = await Promise.all(
-      votacionesRaw.map(async (v: any) => {
-        const [opcionesSnap, respuestasSnap] = await Promise.all([
-          getDocs(
-            query(
-              collection(db, 'opciones_votacion'),
-              where('votacion_id', '==', v.id)
-            )
-          ),
-          getDocs(
-            query(
-              collection(db, 'respuestas_votacion'),
-              where('votacion_id', '==', v.id)
-            )
-          ),
-        ]);
-        return {
-          ...v,
-          opciones: opcionesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-          respuestas: respuestasSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-        } as Votacion;
-      })
-    );
-    setVotaciones(votacionesCompletas);
+    setVotaciones(votSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Votacion)));
 
     // 6. Fetch cuotas for this vecino
     const cuotaSnap = await getDocs(
@@ -165,38 +138,6 @@ export default function ComunidadPage() {
     setCuotas(cuotaSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Cuota)));
 
     setLoading(false);
-  }
-
-  async function votar(votacionId: string, opcionId: string) {
-    if (!perfil) return;
-    setVotando(votacionId);
-
-    try {
-      // Check for duplicate vote since Firestore has no unique constraints
-      const existingSnap = await getDocs(
-        query(
-          collection(db, 'respuestas_votacion'),
-          where('votacion_id', '==', votacionId),
-          where('vecino_id', '==', perfil.id)
-        )
-      );
-
-      if (!existingSnap.empty) {
-        toast.error('Ya has votado en esta votación');
-      } else {
-        await addDoc(collection(db, 'respuestas_votacion'), {
-          votacion_id: votacionId,
-          opcion_id: opcionId,
-          vecino_id: perfil.id,
-        });
-        toast.success('Voto registrado correctamente');
-        fetchData();
-      }
-    } catch (error) {
-      toast.error('Error al registrar tu voto');
-    }
-
-    setVotando(null);
   }
 
   async function compartirLink() {
@@ -275,7 +216,7 @@ export default function ComunidadPage() {
                   </div>
                 )}
                 <div className="text-center">
-                  <p className="text-xl font-bold">{votaciones.filter((v) => v.estado === 'abierta').length}</p>
+                  <p className="text-xl font-bold">{votaciones.filter((v) => v.activa).length}</p>
                   <p className="text-xs opacity-70">Votaciones</p>
                 </div>
               </div>
@@ -326,82 +267,42 @@ export default function ComunidadPage() {
         </TabsContent>
 
         <TabsContent value="votaciones" className="mt-4 space-y-3">
-          {votaciones.length === 0 ? (
-            <div className="py-10 text-center space-y-2">
+          {/* Resumen rápido */}
+          {votaciones.slice(0, 2).map((votacion) => {
+            const totalVotos = votacion.opciones.reduce((s, o) => s + o.votos, 0);
+            return (
+              <Card key={votacion.id} className="border-0 shadow-sm">
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge className={cn('text-[10px] border-0', votacion.activa ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')}>
+                      {votacion.activa ? 'Activa' : 'Cerrada'}
+                    </Badge>
+                    <span className="text-[11px] text-muted-foreground">{totalVotos} votos</span>
+                  </div>
+                  <p className="font-semibold text-sm text-finca-dark leading-snug">{votacion.titulo}</p>
+                  {votacion.descripcion && (
+                    <p className="text-xs text-muted-foreground line-clamp-1">{votacion.descripcion}</p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {votaciones.length === 0 && (
+            <div className="py-8 text-center space-y-2">
               <Vote className="w-10 h-10 text-muted-foreground/30 mx-auto" />
               <p className="text-sm font-medium text-finca-dark">Sin votaciones</p>
-              <p className="text-xs text-muted-foreground">El presidente o administrador puede crear una votación</p>
+              <p className="text-xs text-muted-foreground">El presidente puede crear votaciones comunitarias</p>
             </div>
-          ) : (
-            votaciones.map((votacion) => {
-              const totalVotos = votacion.respuestas?.length || 0;
-              const miVoto = votacion.respuestas?.find((r) => r.vecino_id === perfil?.id);
-              const yaVote = !!miVoto;
-
-              return (
-                <Card key={votacion.id} className="border-0 shadow-sm">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge className={cn('text-[10px] border-0', votacion.estado === 'abierta' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')}>
-                            {votacion.estado === 'abierta' ? 'Abierta' : 'Cerrada'}
-                          </Badge>
-                          {votacion.fecha_cierre && votacion.estado === 'abierta' && (
-                            <span className="text-[11px] text-muted-foreground">
-                              Cierra {formatDistanceToNow(new Date(votacion.fecha_cierre), { addSuffix: true, locale: es })}
-                            </span>
-                          )}
-                        </div>
-                        <p className="font-semibold text-sm text-finca-dark">{votacion.titulo}</p>
-                        {votacion.descripcion && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{votacion.descripcion}</p>}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      {(votacion.opciones || []).sort((a, b) => a.orden - b.orden).map((opcion) => {
-                        const votosOpcion = votacion.respuestas?.filter((r) => r.opcion_id === opcion.id).length || 0;
-                        const porcentaje = totalVotos > 0 ? Math.round((votosOpcion / totalVotos) * 100) : 0;
-                        const esMiOpcion = miVoto?.opcion_id === opcion.id;
-
-                        return (
-                          <div key={opcion.id} className="space-y-1">
-                            {!yaVote && votacion.estado === 'abierta' ? (
-                              <button
-                                onClick={() => votar(votacion.id, opcion.id)}
-                                disabled={votando === votacion.id}
-                                className="w-full text-left px-3 py-2.5 rounded-xl border border-border hover:border-finca-coral hover:bg-finca-peach/10 transition-all text-sm font-medium text-finca-dark"
-                              >
-                                {opcion.texto}
-                              </button>
-                            ) : (
-                              <div className={cn('rounded-xl overflow-hidden', esMiOpcion && 'ring-2 ring-finca-coral')}>
-                                <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
-                                  <span className="text-sm font-medium text-finca-dark flex items-center gap-1.5">
-                                    {esMiOpcion && <CheckCircle2 className="w-3.5 h-3.5 text-finca-coral" />}
-                                    {opcion.texto}
-                                  </span>
-                                  <span className="text-xs font-semibold text-finca-dark">{porcentaje}%</span>
-                                </div>
-                                <div className="h-1.5 w-full bg-muted overflow-hidden rounded-none">
-                                  <div className="h-full bg-finca-coral transition-all" style={{ width: `${porcentaje}%` }} />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <p className="text-xs text-muted-foreground">
-                      {totalVotos} {totalVotos === 1 ? 'voto' : 'votos'} registrados
-                      {yaVote && ' · Ya has votado'}
-                    </p>
-                  </CardContent>
-                </Card>
-              );
-            })
           )}
+
+          <Button
+            className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
+            onClick={() => router.push('/votos')}
+          >
+            <Vote className="w-4 h-4 mr-2" />
+            {votaciones.length > 0 ? 'Ver todas las votaciones' : 'Ir a votaciones'}
+          </Button>
         </TabsContent>
 
         <TabsContent value="finanzas" className="mt-4 space-y-3">
@@ -461,47 +362,69 @@ export default function ComunidadPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="vecinos" className="mt-4 space-y-2">
-          <p className="text-xs text-muted-foreground mb-3">{vecinos.length} vecinos en la comunidad</p>
-          {vecinos.map((v) => (
+        <TabsContent value="vecinos" className="mt-4 space-y-3">
+          {/* Vista previa: primeros 3 vecinos */}
+          {vecinos.slice(0, 3).map((v) => (
             <Card key={v.id} className="border-0 shadow-sm">
               <CardContent className="p-3 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center shrink-0">
-                  <span className="font-semibold text-finca-coral text-sm">{v.nombre_completo.charAt(0)}</span>
+                  <span className="font-semibold text-finca-coral text-sm">
+                    {v.nombre_completo.charAt(0).toUpperCase()}
+                  </span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm text-finca-dark truncate">{v.nombre_completo}</p>
-                  {v.numero_piso && <p className="text-xs text-muted-foreground">Piso {v.numero_piso}</p>}
+                  {v.numero_piso && (
+                    <p className="text-xs text-muted-foreground">{v.numero_piso}</p>
+                  )}
                 </div>
                 <Badge className={cn('text-[10px] border-0', rolColor[v.rol])}>{rolLabel[v.rol]}</Badge>
               </CardContent>
             </Card>
           ))}
+
+          <Button
+            className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
+            onClick={() => router.push('/vecinos')}
+          >
+            <Users className="w-4 h-4 mr-2" />
+            Ver todos los vecinos ({vecinos.length})
+          </Button>
         </TabsContent>
 
-        <TabsContent value="docs" className="mt-4 space-y-2">
-          {documentos.length === 0 ? (
-            <div className="py-10 text-center space-y-2">
+        <TabsContent value="docs" className="mt-4 space-y-3">
+          {/* Vista previa de últimos 2 documentos */}
+          {documentos.slice(0, 2).map((documento) => (
+            <Card key={documento.id} className="border-0 shadow-sm">
+              <CardContent className="p-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-finca-peach/50 flex items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5 text-finca-coral" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm text-finca-dark truncate">{documento.nombre}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {format(new Date(documento.created_at), "d MMM yyyy", { locale: es })}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {documentos.length === 0 && (
+            <div className="py-8 text-center space-y-2">
               <FileText className="w-10 h-10 text-muted-foreground/30 mx-auto" />
               <p className="text-sm font-medium text-finca-dark">Sin documentos</p>
-              <p className="text-xs text-muted-foreground">Pídele a tu administrador que suba los estatutos y actas</p>
+              <p className="text-xs text-muted-foreground">El administrador subirá estatutos y actas aquí</p>
             </div>
-          ) : (
-            documentos.map((doc) => (
-              <Card key={doc.id} className="border-0 shadow-sm">
-                <CardContent className="p-3 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-finca-peach/50 flex items-center justify-center shrink-0">
-                    <FileText className="w-5 h-5 text-finca-coral" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-finca-dark truncate">{doc.nombre}</p>
-                    {doc.descripcion && <p className="text-xs text-muted-foreground truncate">{doc.descripcion}</p>}
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{format(new Date(doc.created_at), "d MMM yyyy", { locale: es })}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
           )}
+
+          <Button
+            className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
+            onClick={() => router.push('/docs')}
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            {documentos.length > 0 ? 'Ver todos los documentos' : 'Ir a documentos'}
+          </Button>
         </TabsContent>
       </Tabs>
     </div>

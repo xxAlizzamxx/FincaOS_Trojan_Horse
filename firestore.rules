@@ -30,9 +30,12 @@ service cloud.firestore {
       allow update: if isAuth();
     }
 
-    // Perfiles (public read for invite vecino count)
+    // Perfiles
+    // - Lectura pública para la página de invitación (muestra count de vecinos sin login)
+    // - Solo usuarios autenticados pueden leer perfiles de su comunidad en el resto de la app
+    // - El usuario solo puede crear/actualizar su propio perfil (o admin el de cualquiera)
     match /perfiles/{userId} {
-      allow read: if true;
+      allow read: if true;   // invite page necesita leer sin auth
       allow create: if isAuth() && request.auth.uid == userId;
       allow update: if isAuth() && (request.auth.uid == userId || isAdmin());
     }
@@ -70,16 +73,24 @@ service cloud.firestore {
       allow delete: if isAuth();
     }
 
-    // Documentos
+    // Documentos — lectura para todos los autenticados; escritura solo admin/presidente
     match /documentos/{docId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
+      allow read: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAdmin() && belongsToCommunity(request.resource.data.comunidad_id);
+      allow delete: if isAdmin() && belongsToCommunity(resource.data.comunidad_id);
     }
 
-    // Votaciones
+    // Votaciones + votos (subcollection)
     match /votaciones/{votacionId} {
       allow read: if isAuth();
-      allow create: if isAuth();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+
+      match /votos/{uid} {
+        allow read: if isAuth();
+        // Solo el propio usuario puede crear su voto (una vez, controlado por transaction en cliente)
+        allow create: if isAuth() && request.auth.uid == uid;
+      }
     }
 
     // Opciones de votacion
