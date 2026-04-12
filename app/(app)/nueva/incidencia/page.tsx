@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, CircleCheck as CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
-import { collection, getDocs, addDoc } from 'firebase/firestore';
+import { collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
-import { CategoriaIncidencia } from '@/types/database';
 import { notificarAdmins } from '@/lib/firebase/notifications';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +14,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+
+const CATEGORIAS = [
+  { id: 'filtraciones', nombre: 'Filtraciones' },
+  { id: 'altavoces',   nombre: 'Altavoces'    },
+  { id: 'mascotas',    nombre: 'Mascotas'      },
+  { id: 'parking',     nombre: 'Parking'       },
+  { id: 'obras',       nombre: 'Obras'         },
+  { id: 'otros',       nombre: 'Otros'         },
+];
 
 const prioridades = [
   { value: 'baja', label: 'Baja', color: 'border-green-300 bg-green-50 text-green-700' },
@@ -28,7 +36,6 @@ const ubicaciones = ['Mi vivienda', 'Zona común', 'Garaje', 'Jardín', 'Otro'];
 export default function NuevaIncidenciaPage() {
   const router = useRouter();
   const { perfil } = useAuth();
-  const [categorias, setCategorias] = useState<CategoriaIncidencia[]>([]);
   const [loading, setLoading] = useState(false);
   const [enviado, setEnviado] = useState(false);
   const [estimacion, setEstimacion] = useState<{ min: number; max: number } | null>(null);
@@ -39,13 +46,6 @@ export default function NuevaIncidenciaPage() {
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
   const [prioridad, setPrioridad] = useState('normal');
   const [ubicacion, setUbicacion] = useState('Zona común');
-
-  useEffect(() => {
-    getDocs(collection(db, 'categorias_incidencia')).then((snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as CategoriaIncidencia[];
-      setCategorias(data);
-    });
-  }, []);
 
   async function fetchEstimacion(catNombre: string, desc: string, ubi: string) {
     setEstimando(true);
@@ -66,7 +66,7 @@ export default function NuevaIncidenciaPage() {
 
   async function handleCategoriaChange(id: string) {
     setCategoriaId(id);
-    const cat = categorias.find((c) => c.id === id);
+    const cat = CATEGORIAS.find((c) => c.id === id);
     if (!cat) return;
     setEstimacion(null);
     await fetchEstimacion(cat.nombre, descripcion, ubicacion);
@@ -74,7 +74,7 @@ export default function NuevaIncidenciaPage() {
 
   async function handleDescripcionBlur() {
     if (!categoriaId) return;
-    const cat = categorias.find((c) => c.id === categoriaId);
+    const cat = CATEGORIAS.find((c) => c.id === categoriaId);
     if (!cat) return;
     setEstimacion(null);
     await fetchEstimacion(cat.nombre, descripcion, ubicacion);
@@ -89,7 +89,7 @@ export default function NuevaIncidenciaPage() {
     const est = estimacion || { min: 100, max: 600 };
 
     try {
-      await addDoc(collection(db, 'incidencias'), {
+      const ref = await addDoc(collection(db, 'incidencias'), {
         comunidad_id: perfil.comunidad_id,
         autor_id: perfil.id,
         titulo: titulo.trim(),
@@ -104,8 +104,14 @@ export default function NuevaIncidenciaPage() {
         updated_at: new Date().toISOString(),
         resuelta_at: null,
       });
-      // Notify admins
-      notificarAdmins(perfil.comunidad_id, 'incidencia', 'Nueva incidencia', `${perfil.nombre_completo} reportó: ${titulo.trim()}`, '/incidencias');
+      // Notificar con título real y link con ID
+      notificarAdmins(
+        perfil.comunidad_id,
+        'incidencia',
+        titulo.trim(),
+        `Reportado por ${perfil.nombre_completo}`,
+        `/incidencias/${ref.id}`
+      );
       setEnviado(true);
     } catch {
       toast.error('Error al crear la incidencia');
@@ -164,7 +170,7 @@ export default function NuevaIncidenciaPage() {
         <div className="space-y-2">
           <Label>Categoría</Label>
           <div className="grid grid-cols-3 gap-2">
-            {categorias.map((cat) => (
+            {CATEGORIAS.map((cat) => (
               <button key={cat.id} type="button" onClick={() => handleCategoriaChange(cat.id)}
                 className={cn('p-2.5 rounded-xl border text-center text-xs font-medium transition-all',
                   categoriaId === cat.id ? 'border-finca-coral bg-finca-peach/30 text-finca-coral' : 'border-border bg-white text-muted-foreground hover:border-finca-salmon'

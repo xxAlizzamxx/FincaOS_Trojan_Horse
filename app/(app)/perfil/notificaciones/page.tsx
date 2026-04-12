@@ -20,23 +20,7 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-function parseNotif(notif: Notificacion): { reporter: string; incTitle: string } {
-  const isOld = notif.titulo === 'Nueva incidencia';
-  if (isOld && notif.mensaje) {
-    const sepIdx = notif.mensaje.indexOf(' reportó: ');
-    if (sepIdx !== -1) {
-      return {
-        reporter: notif.mensaje.slice(0, sepIdx).trim(),
-        incTitle: notif.mensaje.slice(sepIdx + ' reportó: '.length).trim(),
-      };
-    }
-    return { reporter: '', incTitle: notif.mensaje };
-  }
-  const reporter = notif.mensaje?.replace('Reportado por ', '').trim() ?? '';
-  return { reporter, incTitle: notif.titulo };
-}
-
-/* ─── Categorías hardcodeadas (mismas que en crear incidencia) ─── */
+/* ── Categorías ── */
 const CATEGORIAS: Record<string, string> = {
   filtraciones: 'Filtraciones',
   altavoces:    'Altavoces',
@@ -52,11 +36,9 @@ const PRIORIDAD_COLOR: Record<string, string> = {
   alta:    'bg-orange-100 text-orange-700',
   urgente: 'bg-red-100 text-red-700',
 };
-
 const PRIORIDAD_LABEL: Record<string, string> = {
   baja: 'Baja', normal: 'Normal', alta: 'Alta', urgente: 'Urgente',
 };
-
 const TIPO_COLOR: Record<string, string> = {
   incidencia: 'bg-orange-100 text-orange-700',
   estado:     'bg-blue-100 text-blue-700',
@@ -65,7 +47,6 @@ const TIPO_COLOR: Record<string, string> = {
   mediacion:  'bg-purple-100 text-purple-700',
   votacion:   'bg-violet-100 text-violet-700',
 };
-
 const TIPO_LABEL: Record<string, string> = {
   incidencia: 'Nueva incidencia',
   estado:     'Cambio de estado',
@@ -79,8 +60,8 @@ interface Notificacion {
   id: string;
   usuario_id: string;
   tipo: string | null;
-  titulo: string;       // título real de la incidencia
-  mensaje: string | null; // "Reportado por X"
+  titulo: string;       // puede ser "Nueva incidencia" (antiguo) o título real (nuevo)
+  mensaje: string | null; // "X reportó: título" (antiguo) o "Reportado por X" (nuevo)
   link: string | null;
   leida: boolean;
   created_at: string;
@@ -93,9 +74,9 @@ interface DetalleIncidencia {
   categoria_id: string | null;
   ubicacion: string | null;
   prioridad: string;
-  estado: string;
 }
 
+/* Extrae el ID de una incidencia desde el link "/incidencias/[id]" */
 function getIncidenciaId(link: string | null): string | null {
   if (!link) return null;
   const parts = link.split('/');
@@ -103,28 +84,59 @@ function getIncidenciaId(link: string | null): string | null {
   return idx !== -1 && parts[idx + 1] ? parts[idx + 1] : null;
 }
 
-export default function NotificacionesPage() {
-  const { perfil } = useAuth();
+/*
+  Normaliza cualquier formato de notificación al mismo objeto de display:
+  - Formato antiguo: titulo="Nueva incidencia", mensaje="Ana reportó: Grieta en..."
+  - Formato nuevo:   titulo="Grieta en...",      mensaje="Reportado por Ana"
+*/
+function parseNotif(notif: Notificacion): { reporter: string; incTitle: string } {
+  const isOld = notif.titulo === 'Nueva incidencia';
+
+  if (isOld && notif.mensaje) {
+    // "Ana García reportó: Grieta en la fachada"
+    const sepIdx = notif.mensaje.indexOf(' reportó: ');
+    if (sepIdx !== -1) {
+      return {
+        reporter: notif.mensaje.slice(0, sepIdx).trim(),
+        incTitle: notif.mensaje.slice(sepIdx + ' reportó: '.length).trim(),
+      };
+    }
+    return { reporter: '', incTitle: notif.mensaje };
+  }
+
+  // Formato nuevo
+  const reporter = notif.mensaje?.replace('Reportado por ', '').trim() ?? '';
+  return { reporter, incTitle: notif.titulo };
+}
+
+export default function NotificacionesPerfilPage() {
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [marcandoTodas, setMarcandoTodas] = useState(false);
 
+  /* Sheet */
   const [sheetOpen, setSheetOpen] = useState(false);
   const [notifActiva, setNotifActiva] = useState<Notificacion | null>(null);
   const [detalle, setDetalle] = useState<DetalleIncidencia | null>(null);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
 
   useEffect(() => {
-    if (perfil?.id) fetchNotificaciones();
-  }, [perfil?.id]);
+    if (!authLoading && !user) router.replace('/login');
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (user) fetchNotificaciones();
+  }, [user]);
 
   async function fetchNotificaciones() {
+    setLoading(true);
     try {
       const q = query(
         collection(db, 'notificaciones'),
-        where('usuario_id', '==', perfil!.id),
+        where('usuario_id', '==', user!.uid),
         orderBy('created_at', 'desc')
       );
       const snap = await getDocs(q);
@@ -166,8 +178,11 @@ export default function NotificacionesPage() {
     setNotifActiva(notif);
     setDetalle(null);
     setSheetOpen(true);
+
+    // Marcar como leída al abrir — solo una vez
     if (!notif.leida) marcarLeida(notif.id);
 
+    // Intentar cargar datos completos si hay ID
     const incidenciaId = getIncidenciaId(notif.link);
     if (!incidenciaId) return;
 
@@ -184,30 +199,31 @@ export default function NotificacionesPage() {
 
   const noLeidas = notificaciones.filter((n) => !n.leida).length;
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
-      <div className="px-4 py-5 space-y-4">
-        <Skeleton className="h-8 w-40" />
-        {[1, 2, 3].map((i) => (
-          <Card key={i} className="border-0 shadow-sm">
-            <CardContent className="p-4 space-y-2">
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-3 w-1/2" />
-              <Skeleton className="h-7 w-20" />
-            </CardContent>
-          </Card>
-        ))}
+      <div className="px-4 py-5 space-y-5">
+        <Skeleton className="h-8 w-48" />
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="border-0 shadow-sm">
+              <CardContent className="p-4 space-y-2">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-7 w-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="px-4 py-5 space-y-4">
+    <div className="px-4 py-5 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="w-8 h-8 -ml-1">
+          <Button variant="ghost" size="icon" className="w-9 h-9 shrink-0" onClick={() => router.back()}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
@@ -235,7 +251,7 @@ export default function NotificacionesPage() {
             <BellOff className="w-7 h-7 text-muted-foreground/50" />
           </div>
           <p className="font-medium text-finca-dark">Sin notificaciones</p>
-          <p className="text-sm text-muted-foreground">Aquí aparecerán las actualizaciones de tu comunidad</p>
+          <p className="text-sm text-muted-foreground">Aquí aparecerán las alertas de tu comunidad</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -269,6 +285,7 @@ export default function NotificacionesPage() {
 
                   {/* Acciones */}
                   <div className="flex items-center gap-2 pt-1">
+                    {/* Ver — siempre visible */}
                     <Button
                       size="sm"
                       className="h-7 text-xs bg-finca-coral hover:bg-finca-coral/90 text-white px-3"
@@ -277,6 +294,8 @@ export default function NotificacionesPage() {
                       <Eye className="w-3 h-3 mr-1.5" />
                       Ver
                     </Button>
+
+                    {/* Leída — desaparece tras pulsar */}
                     {!notif.leida && (
                       <Button
                         size="sm" variant="outline"
@@ -303,7 +322,9 @@ export default function NotificacionesPage() {
           </SheetHeader>
 
           {(() => {
+            // Datos que siempre tenemos desde la notificación
             const parsed = notifActiva ? parseNotif(notifActiva) : null;
+
             return loadingDetalle ? (
               <div className="space-y-3 py-2">
                 <Skeleton className="h-5 w-3/4" />
@@ -312,10 +333,12 @@ export default function NotificacionesPage() {
               </div>
             ) : (
               <div className="space-y-4 pb-6">
+                {/* Título */}
                 <p className="font-bold text-lg text-finca-dark leading-snug">
                   {detalle?.titulo ?? parsed?.incTitle}
                 </p>
 
+                {/* Quién reportó */}
                 {parsed?.reporter && (
                   <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-xl">
                     <div className="w-8 h-8 rounded-full bg-finca-peach/60 flex items-center justify-center shrink-0">
@@ -332,6 +355,7 @@ export default function NotificacionesPage() {
 
                 <Separator />
 
+                {/* Descripción */}
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Descripción</p>
                   <p className="text-sm text-finca-dark leading-relaxed">
@@ -339,11 +363,14 @@ export default function NotificacionesPage() {
                   </p>
                 </div>
 
+                {/* Categoría + Urgencia */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-muted/50 rounded-xl p-3">
                     <p className="text-xs text-muted-foreground mb-1">Categoría</p>
                     <p className="text-sm font-medium text-finca-dark">
-                      {detalle?.categoria_id ? (CATEGORIAS[detalle.categoria_id] ?? detalle.categoria_id) : '—'}
+                      {detalle?.categoria_id
+                        ? (CATEGORIAS[detalle.categoria_id] ?? detalle.categoria_id)
+                        : '—'}
                     </p>
                   </div>
                   <div className="bg-muted/50 rounded-xl p-3">
@@ -352,15 +379,19 @@ export default function NotificacionesPage() {
                       <Badge className={cn('text-xs border-0', PRIORIDAD_COLOR[detalle.prioridad] ?? 'bg-gray-100 text-gray-600')}>
                         {PRIORIDAD_LABEL[detalle.prioridad] ?? detalle.prioridad}
                       </Badge>
-                    ) : <p className="text-sm text-finca-dark">—</p>}
+                    ) : <p className="text-sm font-medium text-finca-dark">—</p>}
                   </div>
                 </div>
 
+                {/* Dónde */}
                 <div className="bg-muted/50 rounded-xl p-3">
                   <p className="text-xs text-muted-foreground mb-1">Dónde</p>
-                  <p className="text-sm font-medium text-finca-dark">{detalle?.ubicacion ?? '—'}</p>
+                  <p className="text-sm font-medium text-finca-dark">
+                    {detalle?.ubicacion ?? '—'}
+                  </p>
                 </div>
 
+                {/* Ir a incidencia completa solo si tenemos ID */}
                 {detalle && (
                   <Button
                     className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
