@@ -129,6 +129,38 @@
         { "fieldPath": "incidencia_id", "order": "ASCENDING" },
         { "fieldPath": "vecino_id", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "mediaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "estado",       "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mediador_id", "order": "ASCENDING" },
+        { "fieldPath": "updated_at",  "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id",   "order": "ASCENDING" },
+        { "fieldPath": "solicitado_por", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "perfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "rol",          "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -43,3 +43,29 @@ export async function notificarComunidad(comunidadId: string, tipo: Notification
 export async function notificarUsuario(userId: string, comunidadId: string, tipo: NotificationData['tipo'], titulo: string, mensaje: string, link?: string) {
   await crearNotificacion({ usuario_id: userId, comunidad_id: comunidadId, tipo, titulo, mensaje, link });
 }
+
+/** Notifica a todos los mediadores de la comunidad sobre una nueva solicitud */
+export async function notificarMediadores(
+  comunidadId: string,
+  mediacionId: string,
+  descripcion = 'Un vecino solicitó mediación profesional',
+) {
+  const snap = await getDocs(
+    query(
+      collection(db, 'perfiles'),
+      where('comunidad_id', '==', comunidadId),
+      where('rol', '==', 'mediador'),
+    ),
+  );
+  const promises = snap.docs.map((d) =>
+    crearNotificacion({
+      usuario_id:   d.id,
+      comunidad_id: comunidadId,
+      tipo:         'mediacion',
+      titulo:       'Nueva mediación disponible',
+      mensaje:      descripcion,
+      link:         `/mediaciones/${mediacionId}`,
+    }),
+  );
+  await Promise.all(promises);
+}

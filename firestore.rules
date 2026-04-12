@@ -32,6 +32,22 @@ service cloud.firestore {
         && p.comunidad_id == comunidadId;
     }
 
+    // Helper: user is mediador AND belongs to the given community
+    function isMediadorOfCommunity(comunidadId) {
+      let p = getUserProfile();
+      return isAuth()
+        && p.rol == 'mediador'
+        && p.comunidad_id == comunidadId;
+    }
+
+    // Helper: user can manage a mediation (admin, presidente, or mediador of community)
+    function canManageMediacion(comunidadId) {
+      let p = getUserProfile();
+      return isAuth()
+        && p.comunidad_id == comunidadId
+        && p.rol in ['admin', 'presidente', 'mediador'];
+    }
+
     // Comunidades (public read for invite page)
     match /comunidades/{comunidadId} {
       allow read: if true;
@@ -146,9 +162,16 @@ service cloud.firestore {
 
     // Mediaciones
     match /mediaciones/{mediacionId} {
-      allow read: if isAuth();
+      // Lectura: miembros de la comunidad (incluye mediadores, ya que pertenecen a ella)
+      allow read: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      // Crear: cualquier usuario autenticado (vecino inicia el flujo de IA)
       allow create: if isAuth();
-      allow update: if isAuth();
+      // Actualizar: el solicitante (para la fase IA), o admin/presidente/mediador de la comunidad
+      allow update: if isAuth() && (
+        request.auth.uid == resource.data.denunciante_id ||
+        request.auth.uid == resource.data.solicitado_por ||
+        canManageMediacion(resource.data.comunidad_id)
+      );
     }
 
     // Notificaciones
