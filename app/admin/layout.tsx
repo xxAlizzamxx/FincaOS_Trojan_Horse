@@ -42,7 +42,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const Sidebar = () => (
     <aside className="w-64 bg-finca-dark flex flex-col h-full">
       <div className="p-4 border-b border-white/10">
-        <Image src="/image.png" alt="FincaOS" width={130} height={50} className="object-contain brightness-0 invert" />
+        <Image src="/Logo sin bg.png" alt="FincaOS" width={130} height={50} className="object-contain brightness-0 invert" />
         <p className="text-xs text-white/40 mt-1">Panel Administrador</p>
       </div>
       <nav className="flex-1 p-3 space-y-1">

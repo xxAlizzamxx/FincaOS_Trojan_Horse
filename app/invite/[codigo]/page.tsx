@@ -63,7 +63,7 @@ export default function InvitePage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-finca-peach/30 via-background to-background flex flex-col items-center justify-center px-4">
         <div className="w-full max-w-sm text-center space-y-4">
-          <Image src="/image.png" alt="FincaOS" width={200} height={80} className="object-contain mx-auto" />
+          <Image src="/Logo sin bg.png" alt="FincaOS" width={200} height={80} className="object-contain mx-auto" />
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
             <Building2 className="w-8 h-8 text-red-400" />
           </div>
@@ -83,7 +83,7 @@ export default function InvitePage() {
     <div className="min-h-screen bg-gradient-to-br from-finca-peach/30 via-background to-background flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex justify-center">
-          <Image src="/image.png" alt="FincaOS" width={200} height={80} className="object-contain" priority />
+          <Image src="/Logo sin bg.png" alt="FincaOS" width={200} height={80} className="object-contain" priority />
         </div>
 
         <Card className="border-0 shadow-lg overflow-hidden">

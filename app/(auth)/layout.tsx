@@ -10,7 +10,7 @@ export default function AuthLayout({
       <div className="w-full max-w-sm">
         <div className="flex justify-center mb-8">
           <Image
-            src="/image.png"
+            src="/Logo sin bg.png"
             alt="FincaOS"
             width={200}
             height={80}

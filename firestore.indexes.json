@@ -50,6 +50,15 @@
       ]
     },
     {
+      "collectionGroup": "cuotas_vecinos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "vecino_id", "order": "ASCENDING" },
+        { "fieldPath": "mes_anio", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "documentos",
       "queryScope": "COLLECTION",
       "fields": [
@@ -87,6 +96,22 @@
       "fields": [
         { "fieldPath": "usuario_id", "order": "ASCENDING" },
         { "fieldPath": "leida", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "respuestas_votacion",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "votacion_id", "order": "ASCENDING" },
+        { "fieldPath": "vecino_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "incidencia_afectados",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "incidencia_id", "order": "ASCENDING" },
+        { "fieldPath": "vecino_id", "order": "ASCENDING" }
       ]
     }
   ],
