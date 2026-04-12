@@ -9,6 +9,11 @@ export const metadata: Metadata = {
   title: 'FincaOS — Gestión de tu comunidad',
   description: 'La plataforma digital para comunidades de propietarios en España.',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/navegador.png',
+    shortcut: '/navegador.png',
+    apple: '/navegador.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
