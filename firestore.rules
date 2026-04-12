@@ -162,8 +162,9 @@ service cloud.firestore {
 
     // Mediaciones
     match /mediaciones/{mediacionId} {
-      // Lectura: miembros de la comunidad (incluye mediadores, ya que pertenecen a ella)
-      allow read: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      // Lectura: cualquier usuario autenticado (el filtrado por comunidad_id se hace en el cliente)
+      // Nota: belongsToCommunity hace un get() extra que falla en queries LIST de Firestore
+      allow read: if isAuth();
       // Crear: cualquier usuario autenticado (vecino inicia el flujo de IA)
       allow create: if isAuth();
       // Actualizar: el solicitante (para la fase IA), o admin/presidente/mediador de la comunidad

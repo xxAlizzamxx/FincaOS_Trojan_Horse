@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Wallet, Plus, Check, Clock, Loader2,
-  CalendarDays, TrendingDown, Users,
+  CalendarDays, TrendingDown, Users, ArrowLeft,
 } from 'lucide-react';
 import { db } from '@/lib/firebase/client';
 import {
@@ -211,8 +211,14 @@ export default function CuotasPage() {
       <div className="px-4 py-5 space-y-4 pb-28">
 
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+          </button>
+          <div className="flex-1">
             <h1 className="text-2xl font-semibold text-finca-dark">Cuotas</h1>
             <p className="text-sm text-muted-foreground">Pagos de tu comunidad</p>
           </div>
@@ -220,7 +226,7 @@ export default function CuotasPage() {
             <Button
               size="sm"
               onClick={() => router.push('/cuotas/nueva')}
-              className="bg-finca-coral hover:bg-finca-coral/90 text-white rounded-xl gap-1.5"
+              className="bg-finca-coral hover:bg-finca-coral/90 text-white rounded-xl gap-1.5 shrink-0"
             >
               <Plus className="w-4 h-4" />
               Nueva
