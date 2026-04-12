@@ -4,9 +4,13 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Scale, Bot, UserCheck, FileText, ChevronRight, CircleCheck as CheckCircle2, Shield } from 'lucide-react';
 import { toast } from 'sonner';
-import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
+import {
+  addDoc, collection, doc, updateDoc,
+  getDoc, serverTimestamp, arrayUnion,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { notificarMediadores } from '@/lib/firebase/notifications';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -32,7 +36,7 @@ const tipos = [
   { value: 'otro', label: 'Otro', emoji: '📦' },
 ];
 
-type Fase = 'formulario' | 'procesando' | 'propuesta' | 'mediador' | 'resuelto';
+type Fase = 'formulario' | 'procesando' | 'propuesta' | 'mediador' | 'resuelto' | 'solicitado';
 
 export default function MediacionPage() {
   const router = useRouter();
@@ -43,6 +47,7 @@ export default function MediacionPage() {
   const [esRecurrente, setEsRecurrente] = useState(false);
   const [esAnonimo, setEsAnonimo] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [solicitando, setSolicitando] = useState(false);
   const [mediacionId, setMediacionId] = useState<string | null>(null);
   const [propuestaIA, setPropuestaIA] = useState('');
 
@@ -94,6 +99,80 @@ export default function MediacionPage() {
       await updateDoc(doc(db, 'mediaciones', mediacionId), { estado: 'mediador_requerido' });
     }
     setFase('mediador');
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     handleSolicitarMediador
+     - Previene duplicados comprobando el campo tipo en Firestore
+     - Actualiza la mediación con datos del mediador profesional
+     - Guarda historial append-only para auditoría / Stripe futuro
+  ───────────────────────────────────────────────────────────── */
+  async function handleSolicitarMediador() {
+    if (!perfil?.comunidad_id) {
+      toast.error('Debes iniciar sesión para continuar');
+      return;
+    }
+    if (!mediacionId) {
+      toast.error('No se encontró la mediación. Vuelve a empezar.');
+      return;
+    }
+
+    setSolicitando(true);
+    try {
+      const mediacionRef = doc(db, 'mediaciones', mediacionId);
+
+      /* 1 ─ Anti-duplicado: verificar que no es ya profesional */
+      const snap = await getDoc(mediacionRef);
+      if (snap.exists() && snap.data().tipo === 'profesional') {
+        toast.error('Ya existe una solicitud de mediador para este conflicto.');
+        setSolicitando(false);
+        return;
+      }
+
+      /* 2 ─ Actualizar mediación a profesional */
+      await updateDoc(mediacionRef, {
+        tipo:           'profesional',
+        estado:         'solicitada',
+        solicitado_por: perfil.id,   // alias explícito para queries
+        precio_min:     49,
+        precio_max:     79,
+        mediador_id:    null,
+        estado_pago:    'pendiente',
+        precio_acordado: null,
+        updated_at: serverTimestamp(),
+
+        /* Historial append-only (auditoría y Stripe futuro) */
+        historial: arrayUnion({
+          estado:     'solicitada',
+          fecha:      new Date().toISOString(),
+          usuario_id: perfil.id,
+          nota:       'Solicitud de mediador profesional',
+        }),
+
+        /* Estructura preparada para integración con Stripe */
+        pago: {
+          estado:            'pendiente',
+          precio_final:      null,
+          stripe_session_id: null,
+          paid_at:           null,
+        },
+      });
+
+      /* Notificar a todos los mediadores de la comunidad */
+      await notificarMediadores(
+        perfil.comunidad_id,
+        mediacionId,
+        `Nuevo conflicto de tipo "${tipo}" necesita mediación`,
+      );
+
+      toast.success('Solicitud enviada. Un mediador te contactará en las próximas 24h.');
+      setFase('solicitado');
+    } catch (err: any) {
+      console.error('Error solicitando mediador profesional:', err);
+      toast.error(err?.message ?? 'Error al enviar la solicitud. Inténtalo de nuevo.');
+    } finally {
+      setSolicitando(false);
+    }
   }
 
   async function marcarResuelto() {
@@ -255,10 +334,61 @@ export default function MediacionPage() {
 
           <p className="text-sm text-muted-foreground text-center">Un mediador certificado contactará contigo en las próximas 24h para iniciar el proceso.</p>
 
-          <Button className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-11">
-            Solicitar mediador (49-79€)
+          <Button
+            className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-11"
+            onClick={handleSolicitarMediador}
+            disabled={solicitando}
+          >
+            {solicitando ? (
+              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />Enviando solicitud...</>
+            ) : (
+              <><UserCheck className="w-4 h-4 mr-2" />Solicitar mediador (49-79€)</>
+            )}
           </Button>
-          <Button variant="ghost" className="w-full" onClick={() => router.push('/inicio')}>Volver al inicio</Button>
+          <Button variant="ghost" className="w-full" onClick={() => router.push('/inicio')}>
+            Volver al inicio
+          </Button>
+        </div>
+      )}
+
+      {/* ── Fase: mediador profesional solicitado ── */}
+      {fase === 'solicitado' && (
+        <div className="px-4 py-12 flex flex-col items-center text-center space-y-4">
+          <div className="w-20 h-20 rounded-full bg-orange-100 flex items-center justify-center">
+            <UserCheck className="w-10 h-10 text-orange-500" />
+          </div>
+          <h2 className="text-xl font-semibold text-finca-dark">Solicitud enviada</h2>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Un mediador certificado (Ley 5/2012) revisará tu caso y contactará contigo en las próximas <strong>24 horas</strong>.
+          </p>
+
+          <Card className="w-full border-0 shadow-sm bg-orange-50">
+            <CardContent className="p-4 space-y-2 text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Coste estimado</span>
+                <span className="font-semibold text-finca-dark">49€ – 79€</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Plazo de contacto</span>
+                <span className="font-semibold text-finca-dark">24h</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Certificación</span>
+                <span className="font-semibold text-finca-dark">Ley 5/2012</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <p className="text-xs text-muted-foreground max-w-xs">
+            El pago se realizará únicamente tras confirmar la asignación del mediador.
+          </p>
+
+          <Button
+            className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white mt-2"
+            onClick={() => router.push('/inicio')}
+          >
+            Volver al inicio
+          </Button>
         </div>
       )}
 

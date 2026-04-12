@@ -1,4 +1,4 @@
-export type Rol = 'vecino' | 'presidente' | 'admin';
+export type Rol = 'vecino' | 'presidente' | 'admin' | 'mediador';
 export type EstadoIncidencia =
   | 'pendiente'      // inicial / "Reportada" en UI
   | 'en_revision'
@@ -157,4 +157,42 @@ export interface PagoCuota {
   usuario_id: string;
   estado: EstadoPago;
   fecha_pago: string | null;
+}
+
+/* ─── Mediaciones ─── */
+
+export type EstadoMediacion = 'solicitada' | 'asignada' | 'en_proceso' | 'finalizada';
+export type EstadoPagoMediacion = 'pendiente' | 'pagado';
+
+export interface EntradaHistorialMediacion {
+  estado: EstadoMediacion;
+  fecha: string;       // ISO string
+  usuario_id: string;
+  nota?: string;
+}
+
+export interface Mediacion {
+  id: string;
+  comunidad_id: string;
+  solicitado_por: string;      // uid vecino (alias de denunciante_id)
+  denunciante_id?: string;     // campo legacy
+  tipo: 'ia' | 'profesional';
+  estado: EstadoMediacion;
+  mediador_id: string | null;
+  precio_min: number;
+  precio_max: number;
+  precio_acordado: number | null;
+  estado_pago: EstadoPagoMediacion;
+  descripcion?: string;
+  propuesta_ia?: string;
+  es_anonimo?: boolean;
+  historial?: EntradaHistorialMediacion[];
+  pago?: {
+    estado: string;
+    precio_final: number | null;
+    stripe_session_id: string | null;
+    paid_at: string | null;
+  };
+  created_at: string;
+  updated_at: string;
 }
