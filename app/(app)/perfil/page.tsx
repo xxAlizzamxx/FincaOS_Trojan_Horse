@@ -74,34 +74,55 @@ export default function PerfilPage() {
     .map((n) => n[0])
     .join('') || '?';
 
+  const fotoGoogle = user?.photoURL;
+  const torre    = (perfil as any)?.torre  || null;
+  const piso     = (perfil as any)?.piso   || null;
+  const apartamento = (perfil as any)?.puerta || null;
+
   return (
     <div className="px-4 py-5 space-y-5">
       <h1 className="text-2xl font-semibold text-finca-dark">Mi perfil</h1>
 
       <Card className="border-0 shadow-sm overflow-hidden">
-        <div className="h-20 bg-gradient-to-r from-finca-coral to-finca-salmon" />
-        <CardContent className="px-4 pb-4 -mt-10">
-          <div className="flex items-end gap-3">
-            <div className="w-20 h-20 rounded-2xl bg-white border-4 border-white shadow-md flex items-center justify-center">
-              <span className="text-2xl font-bold text-finca-coral">{iniciales}</span>
-            </div>
-            <div className="pb-1 flex-1 min-w-0">
-              <p className="font-semibold text-finca-dark truncate">{perfil?.nombre_completo || 'Sin nombre'}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-            </div>
-            <Badge className={cn('text-[10px] border mb-1 shrink-0', rolColor[perfil?.rol || 'vecino'])}>
-              {rolLabel[perfil?.rol || 'vecino']}
-            </Badge>
+        {/* Banner: avatar + nombre en blanco lado a lado */}
+        <div className="bg-gradient-to-r from-finca-coral to-finca-salmon px-4 py-5 flex items-center gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-white/20 border-2 border-white/50 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
+            {fotoGoogle ? (
+              <img
+                src={fotoGoogle}
+                alt="Foto de perfil"
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="text-2xl font-bold text-white">{iniciales}</span>
+            )}
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-bold text-xl truncate">
+              {perfil?.nombre_completo || 'Sin nombre'}
+            </p>
+            <p className="text-white/80 text-xs truncate mt-0.5">{user?.email}</p>
+          </div>
+          <Badge className={cn('text-[10px] border shrink-0 bg-white/20 text-white border-white/40')}>
+            {rolLabel[perfil?.rol || 'vecino']}
+          </Badge>
+        </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
+        <CardContent className="px-4 pb-4 pt-3">
+
+          <div className="mt-4 grid grid-cols-3 gap-2">
             <div className="bg-muted/50 rounded-xl p-3 text-center">
-              <p className="font-semibold text-finca-dark">{perfil?.numero_piso || '—'}</p>
-              <p className="text-xs text-muted-foreground">Piso / Puerta</p>
+              <p className="font-semibold text-finca-dark text-sm">{torre || '—'}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Torre</p>
             </div>
             <div className="bg-muted/50 rounded-xl p-3 text-center">
-              <p className="font-semibold text-finca-dark">{(perfil?.comunidad as any)?.nombre ? 'Activo' : 'Sin comunidad'}</p>
-              <p className="text-xs text-muted-foreground">Estado</p>
+              <p className="font-semibold text-finca-dark text-sm">{piso || '—'}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Piso</p>
+            </div>
+            <div className="bg-muted/50 rounded-xl p-3 text-center">
+              <p className="font-semibold text-finca-dark text-sm">{apartamento || '—'}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Apartamento</p>
             </div>
           </div>
         </CardContent>
@@ -158,13 +179,16 @@ export default function PerfilPage() {
       <Card className="border-0 shadow-sm">
         <CardContent className="p-0">
           {[
-            { icon: User, label: 'Editar perfil', sub: 'Nombre, teléfono, piso' },
-            { icon: Bell, label: 'Notificaciones', sub: 'Gestionar alertas' },
-            { icon: Shield, label: 'Privacidad', sub: 'Datos y permisos' },
+            { icon: User, label: 'Editar perfil', sub: 'Nombre, teléfono, piso', href: '/perfil/editar' },
+            { icon: Bell, label: 'Notificaciones', sub: 'Gestionar alertas', href: '/perfil/notificaciones' },
+            { icon: Shield, label: 'Privacidad', sub: 'Datos y permisos', href: '/perfil/privacidad' },
           ].map((item, idx) => (
             <div key={item.label}>
               {idx > 0 && <Separator />}
-              <button className="w-full flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors text-left">
+              <button
+                className="w-full flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors text-left"
+                onClick={() => router.push(item.href)}
+              >
                 <div className="w-9 h-9 rounded-xl bg-finca-peach/40 flex items-center justify-center shrink-0">
                   <item.icon className="w-4.5 h-4.5 text-finca-coral" />
                 </div>
