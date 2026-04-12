@@ -14,6 +14,15 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
+/** Elimina formato markdown que la IA incluye en sus respuestas */
+function limpiarMarkdown(texto: string): string {
+  return texto
+    .replace(/\*\*(.+?)\*\*/g, '$1')  // **negrita** → negrita
+    .replace(/\*(.+?)\*/g, '$1')       // *cursiva*   → cursiva
+    .replace(/^#{1,6}\s+/gm, '')       // ## Título   → Título
+    .replace(/`(.+?)`/g, '$1');        // `código`    → código
+}
+
 const tipos = [
   { value: 'ruido', label: 'Ruidos', emoji: '🔊' },
   { value: 'parking', label: 'Parking', emoji: '🚗' },
@@ -192,7 +201,7 @@ export default function MediacionPage() {
           <Card className="border-finca-coral/30 bg-finca-peach/10">
             <CardContent className="p-4">
               <p className="text-sm text-finca-dark leading-relaxed whitespace-pre-line">
-                {propuestaIA}
+                {limpiarMarkdown(propuestaIA)}
               </p>
             </CardContent>
           </Card>

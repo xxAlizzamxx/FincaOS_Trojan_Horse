@@ -17,6 +17,15 @@ interface Consulta {
   util?: boolean | null;
 }
 
+/** Elimina formato markdown que la IA incluye en sus respuestas */
+function limpiarMarkdown(texto: string): string {
+  return texto
+    .replace(/\*\*(.+?)\*\*/g, '$1')  // **negrita** → negrita
+    .replace(/\*(.+?)\*/g, '$1')       // *cursiva*   → cursiva
+    .replace(/^#{1,6}\s+/gm, '')       // ## Título   → Título
+    .replace(/`(.+?)`/g, '$1');        // `código`    → código
+}
+
 const preguntas_frecuentes = [
   '¿Puedo cerrar mi terraza?',
   '¿Pueden prohibir las mascotas?',
@@ -139,7 +148,7 @@ export default function NormativaPage() {
                       <BookOpen className="w-3.5 h-3.5 text-finca-coral" />
                       <span className="text-[10px] font-semibold text-finca-coral uppercase tracking-wide">Basado en LPH</span>
                     </div>
-                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">{c.respuesta}</p>
+                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">{limpiarMarkdown(c.respuesta)}</p>
                   </div>
                   {c.util === undefined || c.util === null ? (
                     <div className="flex items-center gap-2 mt-2 ml-1">

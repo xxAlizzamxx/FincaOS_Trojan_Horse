@@ -16,22 +16,28 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 const CATEGORIAS = [
-  { id: 'filtraciones', nombre: 'Filtraciones' },
-  { id: 'altavoces',   nombre: 'Altavoces'    },
-  { id: 'mascotas',    nombre: 'Mascotas'      },
-  { id: 'parking',     nombre: 'Parking'       },
-  { id: 'obras',       nombre: 'Obras'         },
-  { id: 'otros',       nombre: 'Otros'         },
+  { id: 'filtraciones', nombre: 'Filtraciones', emoji: '💧' },
+  { id: 'altavoces',   nombre: 'Altavoces',    emoji: '🔊' },
+  { id: 'mascotas',    nombre: 'Mascotas',      emoji: '🐾' },
+  { id: 'parking',     nombre: 'Parking',       emoji: '🚗' },
+  { id: 'obras',       nombre: 'Obras',         emoji: '🏗️' },
+  { id: 'otros',       nombre: 'Otros',         emoji: '📦' },
 ];
 
 const prioridades = [
-  { value: 'baja', label: 'Baja', color: 'border-green-300 bg-green-50 text-green-700' },
-  { value: 'normal', label: 'Normal', color: 'border-blue-300 bg-blue-50 text-blue-700' },
-  { value: 'alta', label: 'Alta', color: 'border-orange-300 bg-orange-50 text-orange-700' },
-  { value: 'urgente', label: 'Urgente', color: 'border-red-300 bg-red-50 text-red-700' },
+  { value: 'baja',    label: 'Baja',    emoji: '🟢', color: 'border-green-300 bg-green-50 text-green-700'   },
+  { value: 'normal',  label: 'Normal',  emoji: '🔵', color: 'border-blue-300 bg-blue-50 text-blue-700'     },
+  { value: 'alta',    label: 'Alta',    emoji: '⚠️', color: 'border-orange-300 bg-orange-50 text-orange-700' },
+  { value: 'urgente', label: 'Urgente', emoji: '🚨', color: 'border-red-300 bg-red-50 text-red-700'         },
 ];
 
-const ubicaciones = ['Mi vivienda', 'Zona común', 'Garaje', 'Jardín', 'Otro'];
+const ubicaciones = [
+  { label: 'Mi vivienda', emoji: '🏠' },
+  { label: 'Zona común',  emoji: '🏢' },
+  { label: 'Garaje',      emoji: '🅿️' },
+  { label: 'Jardín',      emoji: '🌳' },
+  { label: 'Otro',        emoji: '📍' },
+];
 
 export default function NuevaIncidenciaPage() {
   const router = useRouter();
@@ -172,10 +178,11 @@ export default function NuevaIncidenciaPage() {
           <div className="grid grid-cols-3 gap-2">
             {CATEGORIAS.map((cat) => (
               <button key={cat.id} type="button" onClick={() => handleCategoriaChange(cat.id)}
-                className={cn('p-2.5 rounded-xl border text-center text-xs font-medium transition-all',
+                className={cn('p-2.5 rounded-xl border text-center transition-all',
                   categoriaId === cat.id ? 'border-finca-coral bg-finca-peach/30 text-finca-coral' : 'border-border bg-white text-muted-foreground hover:border-finca-salmon'
                 )}>
-                {cat.nombre}
+                <span className="text-xl block mb-1">{cat.emoji}</span>
+                <span className="text-xs font-medium">{cat.nombre}</span>
               </button>
             ))}
           </div>
@@ -201,11 +208,13 @@ export default function NuevaIncidenciaPage() {
           <Label>¿Dónde?</Label>
           <div className="grid grid-cols-2 gap-2">
             {ubicaciones.map((u) => (
-              <button key={u} type="button" onClick={() => setUbicacion(u)}
-                className={cn('p-2.5 rounded-xl border text-sm font-medium transition-all',
-                  ubicacion === u ? 'border-finca-coral bg-finca-peach/30 text-finca-coral' : 'border-border bg-white text-muted-foreground hover:border-finca-salmon'
+              <button key={u.label} type="button" onClick={() => setUbicacion(u.label)}
+                className={cn('p-2.5 rounded-xl border text-center transition-all',
+                  u.label === 'Otro' && 'col-span-2',
+                  ubicacion === u.label ? 'border-finca-coral bg-finca-peach/30 text-finca-coral' : 'border-border bg-white text-muted-foreground hover:border-finca-salmon'
                 )}>
-                {u}
+                <span className="text-xl block mb-1">{u.emoji}</span>
+                <span className="text-xs font-medium">{u.label}</span>
               </button>
             ))}
           </div>
@@ -216,10 +225,11 @@ export default function NuevaIncidenciaPage() {
           <div className="grid grid-cols-4 gap-2">
             {prioridades.map((p) => (
               <button key={p.value} type="button" onClick={() => setPrioridad(p.value)}
-                className={cn('p-2 rounded-xl border text-xs font-medium transition-all',
+                className={cn('p-2.5 rounded-xl border text-center transition-all',
                   prioridad === p.value ? p.color + ' border-current' : 'border-border bg-white text-muted-foreground hover:border-finca-salmon'
                 )}>
-                {p.label}
+                <span className="text-lg block mb-0.5">{p.emoji}</span>
+                <span className="text-xs font-medium">{p.label}</span>
               </button>
             ))}
           </div>
