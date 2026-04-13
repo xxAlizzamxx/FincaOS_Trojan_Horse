@@ -9,11 +9,28 @@
       ]
     },
     {
+      "collectionGroup": "incidencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "perfiles",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "comunidad_id", "order": "ASCENDING" },
         { "fieldPath": "nombre_completo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "perfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "rol", "order": "ASCENDING" }
       ]
     },
     {
@@ -31,6 +48,22 @@
       "fields": [
         { "fieldPath": "comunidad_id", "order": "ASCENDING" },
         { "fieldPath": "publicado_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cuotas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "fecha_limite", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cuotas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
     },
     {
@@ -56,22 +89,6 @@
         { "fieldPath": "comunidad_id", "order": "ASCENDING" },
         { "fieldPath": "vecino_id", "order": "ASCENDING" },
         { "fieldPath": "mes_anio", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "cuotas",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
-        { "fieldPath": "fecha_limite", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "cuotas",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
-        { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
     },
     {
@@ -111,7 +128,8 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "usuario_id", "order": "ASCENDING" },
-        { "fieldPath": "leida", "order": "ASCENDING" }
+        { "fieldPath": "leida", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
     },
     {
@@ -135,7 +153,15 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "comunidad_id", "order": "ASCENDING" },
-        { "fieldPath": "estado",       "order": "ASCENDING" }
+        { "fieldPath": "estado", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
     },
     {
@@ -143,23 +169,15 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "mediador_id", "order": "ASCENDING" },
-        { "fieldPath": "updated_at",  "order": "DESCENDING" }
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
       ]
     },
     {
       "collectionGroup": "mediaciones",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "comunidad_id",   "order": "ASCENDING" },
-        { "fieldPath": "solicitado_por", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "perfiles",
-      "queryScope": "COLLECTION",
-      "fields": [
         { "fieldPath": "comunidad_id", "order": "ASCENDING" },
-        { "fieldPath": "rol",          "order": "ASCENDING" }
+        { "fieldPath": "solicitado_por", "order": "ASCENDING" }
       ]
     },
     {

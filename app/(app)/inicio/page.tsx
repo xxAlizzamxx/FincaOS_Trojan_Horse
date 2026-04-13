@@ -54,67 +54,78 @@ export default function InicioPage() {
   }, [comunidadId, authLoading]);
 
   async function fetchData() {
-    const rol = perfil?.rol;
-    const canSeeMediaciones = rol === 'mediador' || rol === 'admin' || rol === 'presidente';
+    try {
+      const rol = perfil?.rol;
+      const canSeeMediaciones = rol === 'mediador' || rol === 'admin' || rol === 'presidente';
 
-    // Queries con tipos explícitos para evitar ambigüedad en el build
-    const incSnapPromise:    Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(5)));
-    const anuncSnapPromise:  Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'anuncios'),   where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3)));
-    const allIncSnapPromise: Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId)));
+      console.log('[Inicio] fetchData — comunidadId:', comunidadId, 'rol:', rol);
 
-    const [incSnap, anuncSnap, allIncSnap] = await Promise.all([
-      incSnapPromise,
-      anuncSnapPromise,
-      allIncSnapPromise,
-    ]);
+      const incSnapPromise:    Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(5)));
+      const anuncSnapPromise:  Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'anuncios'),   where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3)));
+      const allIncSnapPromise: Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId)));
 
-    const incs: Incidencia[] = incSnap.docs.map(
-      (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Incidencia),
-    );
-    const anuncs: Anuncio[] = anuncSnap.docs.map(
-      (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Anuncio),
-    );
-    const allIncs: DocumentData[] = allIncSnap.docs.map(
-      (d: QueryDocumentSnapshot<DocumentData>) => d.data(),
-    );
-
-    // Fetch autor y categoria para cada incidencia
-    for (const inc of incs) {
-      if (inc.autor_id) {
-        const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
-        if (autorSnap.exists()) {
-          inc.autor = { id: autorSnap.id, ...autorSnap.data() } as Incidencia['autor'];
-        }
-      }
-      if (inc.categoria_id) {
-        const catSnap = await getDoc(doc(db, 'categorias_incidencia', String(inc.categoria_id)));
-        if (catSnap.exists()) {
-          inc.categoria = { id: catSnap.id, ...catSnap.data() } as Incidencia['categoria'];
-        }
-      }
-    }
-
-    setIncidencias(incs);
-    setAnuncios(anuncs);
-
-    const abiertas = allIncs.filter(
-      (i: DocumentData) => !['resuelta', 'cerrada'].includes(i['estado'] as string),
-    ).length;
-    const resueltas = allIncs.filter(
-      (i: DocumentData) => i['estado'] === 'resuelta',
-    ).length;
-    setStats({ abiertas, resueltas, vecinos: 0 });
-
-    // Mediaciones (solo para mediador / admin / presidente)
-    if (canSeeMediaciones) {
-      const [dispSnap, totalSnap] = await Promise.all([
-        getDocs(query(collection(db, 'mediaciones'), where('comunidad_id', '==', comunidadId), where('estado', '==', 'solicitada'))) as Promise<QuerySnapshot<DocumentData>>,
-        getDocs(query(collection(db, 'mediaciones'), where('comunidad_id', '==', comunidadId))) as Promise<QuerySnapshot<DocumentData>>,
+      const [incSnap, anuncSnap, allIncSnap] = await Promise.all([
+        incSnapPromise,
+        anuncSnapPromise,
+        allIncSnapPromise,
       ]);
-      setMediacionesCount({ disponibles: dispSnap.size, total: totalSnap.size });
-    }
 
-    setDataLoading(false);
+      console.log('[Inicio] incidencias:', incSnap.size, '| anuncios:', anuncSnap.size, '| allIncs:', allIncSnap.size);
+
+      const incs: Incidencia[] = incSnap.docs.map(
+        (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Incidencia),
+      );
+      const anuncs: Anuncio[] = anuncSnap.docs.map(
+        (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Anuncio),
+      );
+      const allIncs: DocumentData[] = allIncSnap.docs.map(
+        (d: QueryDocumentSnapshot<DocumentData>) => d.data(),
+      );
+
+      // Fetch autor y categoria para cada incidencia
+      for (const inc of incs) {
+        if (inc.autor_id) {
+          const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
+          if (autorSnap.exists()) {
+            inc.autor = { id: autorSnap.id, ...autorSnap.data() } as Incidencia['autor'];
+          }
+        }
+        if (inc.categoria_id) {
+          const catSnap = await getDoc(doc(db, 'categorias_incidencia', String(inc.categoria_id)));
+          if (catSnap.exists()) {
+            inc.categoria = { id: catSnap.id, ...catSnap.data() } as Incidencia['categoria'];
+          }
+        }
+      }
+
+      setIncidencias(incs);
+      setAnuncios(anuncs);
+
+      const abiertas = allIncs.filter(
+        (i: DocumentData) => !['resuelta', 'cerrada'].includes(i['estado'] as string),
+      ).length;
+      const resueltas = allIncs.filter(
+        (i: DocumentData) => i['estado'] === 'resuelta',
+      ).length;
+      setStats({ abiertas, resueltas, vecinos: 0 });
+
+      // Mediaciones (solo para mediador / admin / presidente)
+      if (canSeeMediaciones) {
+        try {
+          const [dispSnap, totalSnap] = await Promise.all([
+            getDocs(query(collection(db, 'mediaciones'), where('comunidad_id', '==', comunidadId), where('estado', '==', 'solicitada'))) as Promise<QuerySnapshot<DocumentData>>,
+            getDocs(query(collection(db, 'mediaciones'), where('comunidad_id', '==', comunidadId))) as Promise<QuerySnapshot<DocumentData>>,
+          ]);
+          setMediacionesCount({ disponibles: dispSnap.size, total: totalSnap.size });
+        } catch (e) {
+          console.error('[Inicio] Error cargando mediaciones:', e);
+        }
+      }
+    } catch (err) {
+      console.error('[Inicio] Error en fetchData:', err);
+    } finally {
+      setDataLoading(false);
+    }
   }
 
   async function compartirLink() {
