@@ -33,6 +33,7 @@ export interface Perfil {
   piso: string | null;          // campo individual
   puerta: string | null;        // campo individual (también guardado como "apartamento")
   rol: Rol;
+  coeficiente: number | null;   // % de participación según LPH (ej: 5.2 = 5.2%)
   avatar_url: string | null;
   telefono: string | null;
   created_at: string;
@@ -76,6 +77,8 @@ export interface Incidencia {
   ubicacion: string | null;
   estimacion_min: number | null;
   estimacion_max: number | null;
+  presupuesto_proveedor: number | null;   // presupuesto real del proveedor
+  proveedor_nombre: string | null;        // nombre del proveedor
   created_at: string;
   updated_at: string;
   resuelta_at: string | null;
@@ -121,6 +124,7 @@ export interface OpcionVotacion {
   id: string;    // uuid generado en cliente
   texto: string;
   votos: number;
+  peso_total: number;  // suma de coeficientes de quienes votaron esta opción
 }
 
 export interface Votacion {
@@ -131,12 +135,15 @@ export interface Votacion {
   descripcion: string | null;
   opciones: OpcionVotacion[];
   activa: boolean;
+  usar_coeficientes: boolean;  // true = ponderado por LPH, false = 1 persona = 1 voto
+  quorum_requerido: number | null; // % mínimo de participación (ej: 50)
   created_at: string;
   cierre_at: string | null;    // fecha opcional de cierre
 }
 
 export interface VotoUsuario {
   opcion_id: string;
+  coeficiente: number; // coeficiente del votante en el momento del voto
   created_at: string;
 }
 

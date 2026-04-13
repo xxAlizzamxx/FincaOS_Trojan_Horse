@@ -74,6 +74,7 @@ export default function VotosPage() {
     try {
       const votacionRef = doc(db, 'votaciones', votacionId);
       const votoRef = doc(db, 'votaciones', votacionId, 'votos', perfil.id);
+      const coef = perfil.coeficiente ?? 1;
 
       await runTransaction(db, async (tx) => {
         const votoSnap = await tx.get(votoRef);
@@ -84,10 +85,10 @@ export default function VotosPage() {
         if (!votacionSnap.data().activa) throw new Error('Esta votación ya está cerrada');
 
         const opciones: OpcionVotacion[] = votacionSnap.data().opciones.map((o: OpcionVotacion) =>
-          o.id === opcionId ? { ...o, votos: o.votos + 1 } : o
+          o.id === opcionId ? { ...o, votos: o.votos + 1, peso_total: (o.peso_total || 0) + coef } : o
         );
         tx.update(votacionRef, { opciones });
-        tx.set(votoRef, { opcion_id: opcionId, created_at: new Date().toISOString() });
+        tx.set(votoRef, { opcion_id: opcionId, coeficiente: coef, created_at: new Date().toISOString() });
       });
 
       // Actualizar estado local
@@ -189,6 +190,9 @@ export default function VotosPage() {
           const yaVote = !!misVotos[votacion.id];
           const miOpcionId = misVotos[votacion.id];
           const totalVotos = votacion.opciones.reduce((s, o) => s + o.votos, 0);
+          const totalPeso = votacion.opciones.reduce((s, o) => s + (o.peso_total || 0), 0);
+          const usaCoef = (votacion as any).usar_coeficientes;
+          const quorumReq = (votacion as any).quorum_requerido;
           const isVotando = votando === votacion.id;
 
           return (
@@ -223,7 +227,9 @@ export default function VotosPage() {
                 {/* Opciones */}
                 <div className="space-y-2 pt-1">
                   {votacion.opciones.map((opcion) => {
-                    const pct = totalVotos > 0 ? Math.round((opcion.votos / totalVotos) * 100) : 0;
+                    const pct = usaCoef
+                      ? (totalPeso > 0 ? Math.round(((opcion.peso_total || 0) / totalPeso) * 100) : 0)
+                      : (totalVotos > 0 ? Math.round((opcion.votos / totalVotos) * 100) : 0);
                     const esMiVoto = miOpcionId === opcion.id;
                     const puedeVotar = votacion.activa && !yaVote;
 
@@ -269,10 +275,19 @@ export default function VotosPage() {
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between pt-1">
-                  <p className="text-xs text-muted-foreground">
-                    {totalVotos} {totalVotos === 1 ? 'voto total' : 'votos totales'}
-                  </p>
+                <div className="flex items-center justify-between pt-1 flex-wrap gap-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{totalVotos} {totalVotos === 1 ? 'voto' : 'votos'}</span>
+                    {usaCoef && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px] font-medium">LPH</span>}
+                    {quorumReq != null && (
+                      <span className={cn(
+                        'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                        totalPeso >= quorumReq ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'
+                      )}>
+                        Quórum: {Math.round(totalPeso)}% / {quorumReq}%
+                      </span>
+                    )}
+                  </div>
                   {yaVote && (
                     <div className="flex items-center gap-1 text-xs text-green-600">
                       <CheckCircle2 className="w-3.5 h-3.5" />

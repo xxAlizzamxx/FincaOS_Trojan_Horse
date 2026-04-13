@@ -161,6 +161,39 @@
         { "fieldPath": "comunidad_id", "order": "ASCENDING" },
         { "fieldPath": "rol",          "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "incidencias_fotos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "incidencia_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at",    "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notificaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "usuario_id", "order": "ASCENDING" },
+        { "fieldPath": "leida",      "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "incidencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "estado",       "order": "ASCENDING" },
+        { "fieldPath": "created_at",   "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "perfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "stripe_subscription_id", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
