@@ -2,6 +2,7 @@ import './globals.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
+import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -14,10 +15,8 @@ export const metadata: Metadata = {
     shortcut: '/navegador.png',
     apple: '/navegador.png',
   },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'FincaOS',
+  other: {
+    'mobile-web-app-capable': 'yes',
   },
   viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
 };
@@ -36,6 +35,7 @@ export default function RootLayout({
       <body className={inter.className}>
         {children}
         <Toaster richColors position="top-center" toastOptions={{ className: 'max-w-lg mx-auto' }} />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

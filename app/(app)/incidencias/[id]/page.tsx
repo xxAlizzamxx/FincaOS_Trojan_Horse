@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
   ArrowLeft, ArrowRight, MessageSquare, Send,
-  UserPlus, UserMinus, Users, Star,
+  UserPlus, UserMinus, Users, Star, ImageIcon,
   CircleCheck as CheckCircle2, Loader2, History,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -42,6 +43,7 @@ export default function IncidenciaDetailPage() {
   const [enviando, setEnviando]         = useState(false);
   const [loading, setLoading]           = useState(true);
   const [afectados, setAfectados]       = useState<{ id: string; vecino_id: string }[]>([]);
+  const [fotos, setFotos]               = useState<{ id: string; url: string }[]>([]);
   const [sumandome, setSumandome]       = useState(false);
 
   /* Valoración (autor cuando estado = en_ejecucion) */
@@ -73,7 +75,7 @@ export default function IncidenciaDetailPage() {
     baja: '🟢', normal: '🔵', alta: '⚠️', urgente: '🚨',
   };
 
-  useEffect(() => { fetchIncidencia(); fetchAfectados(); }, [incidenciaId]);
+  useEffect(() => { fetchIncidencia(); fetchAfectados(); fetchFotos(); }, [incidenciaId]);
 
   async function fetchIncidencia() {
     const incSnap = await getDoc(doc(db, 'incidencias', incidenciaId));
@@ -129,6 +131,16 @@ export default function IncidenciaDetailPage() {
 
     setComentarios(enrichedComs as Comentario[]);
     setLoading(false);
+  }
+
+  async function fetchFotos() {
+    const q = query(collection(db, 'incidencias_fotos'), where('incidencia_id', '==', incidenciaId), orderBy('created_at', 'asc'));
+    try {
+      const snap = await getDocs(q);
+      setFotos(snap.docs.map((d) => ({ id: d.id, url: d.data().url })));
+    } catch {
+      // Index may not exist yet — ignore
+    }
   }
 
   async function fetchAfectados() {
@@ -368,6 +380,29 @@ export default function IncidenciaDetailPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ── Fotos ── */}
+        {fotos.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <ImageIcon className="w-4 h-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold text-finca-dark">Fotos ({fotos.length})</h2>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {fotos.map((foto) => (
+                <a
+                  key={foto.id}
+                  href={foto.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative w-28 h-28 rounded-lg overflow-hidden border border-border shrink-0"
+                >
+                  <Image src={foto.url} alt="Foto incidencia" fill className="object-cover" sizes="112px" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ─────────────────────────────────────────────────────
             PANEL DE WORKFLOW — solo admin / presidente
