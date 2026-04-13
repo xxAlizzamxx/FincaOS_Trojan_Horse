@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
-import { collection, query, where, orderBy, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, updateDoc, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Perfil } from '@/types/database';
 import { Input } from '@/components/ui/input';
@@ -38,7 +38,7 @@ export default function AdminVecinosPage() {
       orderBy('nombre_completo')
     );
     const snap = await getDocs(q);
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Perfil);
+    const list = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }) as Perfil);
     setVecinos(list);
     setLoading(false);
   }

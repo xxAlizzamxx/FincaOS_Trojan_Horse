@@ -13,6 +13,7 @@ import { es } from 'date-fns/locale';
 import {
   collection, query, where, orderBy, getDocs,
   getDoc, addDoc, deleteDoc, updateDoc, doc,
+  QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -111,7 +112,7 @@ export default function IncidenciaDetailPage() {
       orderBy('created_at', 'asc'),
     );
     const comSnap = await getDocs(comQ);
-    const comItems = comSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
+    const comItems = comSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() })) as any[];
 
     const enrichedComs = await Promise.all(
       comItems.map(async (com) => {
@@ -133,7 +134,7 @@ export default function IncidenciaDetailPage() {
   async function fetchAfectados() {
     const q = query(collection(db, 'incidencia_afectados'), where('incidencia_id', '==', incidenciaId));
     const snap = await getDocs(q);
-    setAfectados(snap.docs.map((d) => ({ id: d.id, vecino_id: d.data().vecino_id })));
+    setAfectados(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, vecino_id: d.data().vecino_id })));
   }
 
   /* ── Flags derivados ── */
@@ -188,7 +189,7 @@ export default function IncidenciaDetailPage() {
         where('vecino_id', '==', perfil.id),
       );
       const snap = await getDocs(q);
-      await Promise.all(snap.docs.map((d) => deleteDoc(doc(db, 'incidencia_afectados', d.id))));
+      await Promise.all(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => deleteDoc(doc(db, 'incidencia_afectados', d.id))));
       toast.success('Ya no apareces como afectado');
     } else {
       try {

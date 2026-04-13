@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { db } from '@/lib/firebase/client';
-import { collection, query, where, orderBy, getDocs, doc, getDoc, addDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, getDoc, addDoc, updateDoc, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Perfil } from '@/types/database';
 import { Input } from '@/components/ui/input';
@@ -90,7 +90,7 @@ export default function AdminCobrosPage() {
       orderBy('nombre_completo')
     );
     const vecSnap = await getDocs(vecQuery);
-    const vecList = vecSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Perfil);
+    const vecList = vecSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }) as Perfil);
 
     setCuotas(cuotaList);
     setVecinos(vecList);

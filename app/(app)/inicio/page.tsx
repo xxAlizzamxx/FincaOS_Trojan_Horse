@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Clock, TrendingUp, ChevronRight, Plus, Share2, Copy, Scale } from 'lucide-react';
 import { toast } from 'sonner';
-import { collection, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
+import {
+  collection, query, where, orderBy, limit, getDocs, doc, getDoc,
+  QuerySnapshot, DocumentData, QueryDocumentSnapshot,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia, Anuncio, Mediacion } from '@/types/database';
@@ -55,7 +58,7 @@ export default function InicioPage() {
     const uid = user?.uid;
     const canSeeMediaciones = rol === 'mediador' || rol === 'admin' || rol === 'presidente';
 
-    const baseQueries: Promise<any>[] = [
+    const baseQueries: Promise<QuerySnapshot<DocumentData>>[] = [
       getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(5))),
       getDocs(query(collection(db, 'anuncios'), where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3))),
       getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId))),
@@ -70,27 +73,41 @@ export default function InicioPage() {
 
     const [incSnap, anuncSnap, allIncSnap, ...mediSnaps] = await Promise.all(baseQueries);
 
-    const incs = incSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Incidencia));
-    const anuncs = anuncSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Anuncio));
-    const allIncs = allIncSnap.docs.map((d) => d.data());
+    const incs = incSnap.docs.map(
+      (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Incidencia),
+    );
+    const anuncs = anuncSnap.docs.map(
+      (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Anuncio),
+    );
+    const allIncs = allIncSnap.docs.map(
+      (d: QueryDocumentSnapshot<DocumentData>) => d.data(),
+    );
 
     // Fetch autor names for incidencias
     for (const inc of incs) {
       if (inc.autor_id) {
         const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
-        if (autorSnap.exists()) inc.autor = { id: autorSnap.id, ...autorSnap.data() } as any;
+        if (autorSnap.exists()) {
+          inc.autor = { id: autorSnap.id, ...autorSnap.data() } as Incidencia['autor'];
+        }
       }
       if (inc.categoria_id) {
         const catSnap = await getDoc(doc(db, 'categorias_incidencia', String(inc.categoria_id)));
-        if (catSnap.exists()) inc.categoria = { id: catSnap.id, ...catSnap.data() } as any;
+        if (catSnap.exists()) {
+          inc.categoria = { id: catSnap.id, ...catSnap.data() } as Incidencia['categoria'];
+        }
       }
     }
 
     setIncidencias(incs);
     setAnuncios(anuncs);
 
-    const abiertas = allIncs.filter((i: any) => !['resuelta', 'cerrada'].includes(i.estado)).length;
-    const resueltas = allIncs.filter((i: any) => i.estado === 'resuelta').length;
+    const abiertas = allIncs.filter(
+      (i: DocumentData) => !['resuelta', 'cerrada'].includes(i.estado as string),
+    ).length;
+    const resueltas = allIncs.filter(
+      (i: DocumentData) => i.estado === 'resuelta',
+    ).length;
     setStats({ abiertas, resueltas, vecinos: 0 });
 
     if (mediSnaps.length >= 2) {

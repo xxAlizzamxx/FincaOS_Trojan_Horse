@@ -9,6 +9,7 @@ import {
 import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, getDocs, addDoc,
+  QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -118,7 +119,7 @@ export default function DocsPage() {
         orderBy('created_at', 'desc'),
       );
       const snap = await getDocs(q);
-      setDocumentos(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Documento)));
+      setDocumentos(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Documento)));
     } catch {
       toast.error('Error al cargar los documentos');
     } finally {

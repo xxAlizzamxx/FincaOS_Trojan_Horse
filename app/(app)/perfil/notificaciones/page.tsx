@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, getDocs, getDoc,
   updateDoc, doc, writeBatch,
+  QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -140,7 +141,7 @@ export default function NotificacionesPerfilPage() {
         orderBy('created_at', 'desc')
       );
       const snap = await getDocs(q);
-      setNotificaciones(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Notificacion)));
+      setNotificaciones(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Notificacion)));
     } catch {
       toast.error('Error al cargar las notificaciones');
     } finally {
