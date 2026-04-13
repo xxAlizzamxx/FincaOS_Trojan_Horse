@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
@@ -9,7 +8,7 @@ import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithRedirect,
-  getRedirectResult,
+  onAuthStateChanged,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
@@ -21,46 +20,47 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 const googleProvider = new GoogleAuthProvider();
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Manejar el resultado del redirect de Google al volver a la app
+  // Detectar autenticación (tanto email/password como redirect de Google)
   useEffect(() => {
-    setLoading(true);
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (!result) { setLoading(false); return; }
-        const user = result.user;
-        const perfilSnap = await getDoc(doc(db, 'perfiles', user.uid));
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        setLoading(false);
+        return;
+      }
+
+      // Usuario autenticado — verificar/crear perfil y redirigir
+      try {
+        const perfilSnap = await getDoc(doc(db, 'perfiles', firebaseUser.uid));
+
         if (!perfilSnap.exists()) {
-          await setDoc(doc(db, 'perfiles', user.uid), {
+          // Primer login con Google — crear perfil
+          await setDoc(doc(db, 'perfiles', firebaseUser.uid), {
             comunidad_id: null,
-            nombre_completo: user.displayName || 'Sin nombre',
+            nombre_completo: firebaseUser.displayName || 'Sin nombre',
             numero_piso: null,
             rol: 'vecino',
-            avatar_url: user.photoURL || null,
+            avatar_url: firebaseUser.photoURL || null,
             telefono: null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
-          // Recarga completa para que useAuth detecte el perfil recién creado
           window.location.href = '/onboarding';
         } else {
           const data = perfilSnap.data();
-          // Recarga completa para que useAuth cargue el perfil correctamente
           window.location.href = data?.comunidad_id ? '/inicio' : '/onboarding';
         }
-      })
-      .catch((err: any) => {
-        console.error('[Firebase Auth] getRedirectResult error:', err.code, err.message);
-        if (err.code !== 'auth/popup-closed-by-user') {
-          toast.error('Error al iniciar sesión con Google: ' + (err.message ?? err.code));
-        }
+      } catch (err: any) {
+        console.error('[Auth] Error al cargar perfil:', err);
         setLoading(false);
-      });
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   async function handleLogin(e: React.FormEvent) {
@@ -72,22 +72,32 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.replace('/inicio');
+      // onAuthStateChanged se encarga de la redirección
     } catch {
       toast.error('Credenciales incorrectas. Inténtalo de nuevo.');
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleGoogleLogin() {
     setLoading(true);
     try {
       await signInWithRedirect(auth, googleProvider);
-      // La página se recargará automáticamente — el resultado se procesa en el useEffect
+      // La página se recarga — onAuthStateChanged se encarga de la redirección
     } catch (err: any) {
+      console.error('[Auth] Error al iniciar redirect:', err);
       toast.error('Error al iniciar con Google');
       setLoading(false);
     }
+  }
+
+  // Mostrar spinner mientras se verifica el estado de auth
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-4 border-finca-coral border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (
@@ -162,14 +172,8 @@ export default function LoginPage() {
             className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white font-medium h-11"
             disabled={loading}
           >
-            {loading ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <>
-                <LogIn className="w-4 h-4 mr-2" />
-                Entrar
-              </>
-            )}
+            <LogIn className="w-4 h-4 mr-2" />
+            Entrar
           </Button>
         </form>
       </CardContent>
