@@ -57,4 +57,38 @@ export async function uploadBuffer(
   });
 }
 
+/**
+ * Sube una imagen a Cloudinary con transformaciones automáticas.
+ */
+export async function uploadImage(
+  buffer: Buffer,
+  folder: string,
+  filename: string,
+): Promise<CloudinaryUploadResult> {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        public_id:       filename,
+        resource_type:   'image',
+        overwrite:       false,
+        unique_filename: true,
+        transformation:  [{ quality: 'auto', fetch_format: 'auto', width: 1600, crop: 'limit' }],
+      },
+      (error, result) => {
+        if (error || !result) {
+          reject(error ?? new Error('Cloudinary: resultado vacío'));
+          return;
+        }
+        resolve({
+          url:       result.secure_url,
+          public_id: result.public_id,
+        });
+      },
+    );
+
+    uploadStream.end(buffer);
+  });
+}
+
 export default cloudinary;
