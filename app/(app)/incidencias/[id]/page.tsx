@@ -6,7 +6,7 @@ import Image from 'next/image';
 import {
   ArrowLeft, ArrowRight, MessageSquare, Send,
   UserPlus, UserMinus, Users, Star, ImageIcon,
-  CircleCheck as CheckCircle2, Loader2, History,
+  CircleCheck as CheckCircle2, Loader2, History, CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -64,6 +64,9 @@ export default function IncidenciaDetailPage() {
 
   /* Historial expandido */
   const [historialAbierto, setHistorialAbierto] = useState(false);
+
+  /* Stripe */
+  const [pagandoStripe, setPagandoStripe] = useState(false);
 
   const incidenciaId = params.id as string;
 
@@ -275,6 +278,37 @@ export default function IncidenciaDetailPage() {
     setMostrarResolver(false);
     fetchIncidencia();
     setResolviendo(false);
+  }
+
+  /* ── Stripe payment (autor / vecino) ── */
+  async function pagarIncidenciaConStripe() {
+    if (!incidencia || !perfil) return;
+    const monto = (incidencia as any).presupuesto_proveedor;
+    if (!monto) return;
+    setPagandoStripe(true);
+    try {
+      const res = await fetch('/api/stripe/create-checkout-session', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          monto,
+          tipo:         'incidencia',
+          referencia_id: incidencia.id,
+          usuario_id:   perfil.id,
+          comunidad_id: perfil.comunidad_id,
+          descripcion:  `Reparación: ${incidencia.titulo}`,
+          email:        (perfil as any).email ?? undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido');
+      if (data.url) window.location.href = data.url;
+    } catch (err: any) {
+      console.error('[Stripe Incidencia]', err);
+      toast.error(err.message ?? 'No se pudo iniciar el pago');
+    } finally {
+      setPagandoStripe(false);
+    }
   }
 
   /* ── Loading ── */
@@ -627,6 +661,45 @@ export default function IncidenciaDetailPage() {
                   </Button>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Pago de presupuesto (autor / vecino) ── */}
+        {esAutor && (incidencia as any).presupuesto_proveedor != null &&
+          (incidencia as any).estado_pago_proveedor !== 'pagado' && (
+          <Card className="border-0 shadow-sm border-l-4 border-l-finca-coral bg-finca-peach/10">
+            <CardContent className="p-4 space-y-3">
+              <p className="text-xs font-semibold text-finca-coral uppercase tracking-wide">
+                Pago de reparación
+              </p>
+              <p className="text-sm text-muted-foreground">
+                El presupuesto de{' '}
+                <span className="font-semibold text-finca-dark">
+                  {(incidencia as any).presupuesto_proveedor}€
+                  {(incidencia as any).proveedor_nombre ? ` · ${(incidencia as any).proveedor_nombre}` : ''}
+                </span>{' '}
+                está pendiente de pago.
+              </p>
+              <Button
+                className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-11"
+                onClick={pagarIncidenciaConStripe}
+                disabled={pagandoStripe}
+              >
+                {pagandoStripe
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <><CreditCard className="w-4 h-4 mr-2" />Pagar {(incidencia as any).presupuesto_proveedor}€</>}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Pago completado banner ── */}
+        {(incidencia as any).estado_pago_proveedor === 'pagado' && (
+          <Card className="border-0 shadow-sm bg-green-50 border-l-4 border-l-green-500">
+            <CardContent className="p-4 flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+              <p className="text-sm font-medium text-green-800">Pago al proveedor completado ✓</p>
             </CardContent>
           </Card>
         )}
