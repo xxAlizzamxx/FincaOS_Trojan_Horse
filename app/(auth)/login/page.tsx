@@ -46,19 +46,22 @@ export default function LoginPage() {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
-          router.replace('/onboarding');
+          // Recarga completa para que useAuth detecte el perfil recién creado
+          window.location.href = '/onboarding';
         } else {
           const data = perfilSnap.data();
-          router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
+          // Recarga completa para que useAuth cargue el perfil correctamente
+          window.location.href = data?.comunidad_id ? '/inicio' : '/onboarding';
         }
       })
       .catch((err: any) => {
+        console.error('[Firebase Auth] getRedirectResult error:', err.code, err.message);
         if (err.code !== 'auth/popup-closed-by-user') {
           toast.error('Error al iniciar sesión con Google: ' + (err.message ?? err.code));
         }
         setLoading(false);
       });
-  }, [router]);
+  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();

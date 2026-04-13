@@ -65,7 +65,8 @@ export default function RegistroPage() {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
-          router.replace(comunidadId ? '/inicio' : '/onboarding');
+          // Recarga completa para que useAuth detecte el perfil recién creado
+          window.location.href = comunidadId ? '/inicio' : '/onboarding';
         } else {
           const data = perfilSnap.data();
           if (!data?.comunidad_id && comunidadId) {
@@ -73,9 +74,9 @@ export default function RegistroPage() {
               comunidad_id: comunidadId,
               updated_at: new Date().toISOString(),
             });
-            router.replace('/inicio');
+            window.location.href = '/inicio';
           } else {
-            router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
+            window.location.href = data?.comunidad_id ? '/inicio' : '/onboarding';
           }
         }
       })
