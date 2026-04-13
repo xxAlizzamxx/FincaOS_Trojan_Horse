@@ -24,6 +24,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import type { Perfil, Rol } from '@/types/database';
 
 /* ─── Configuración visual de roles ────────────────────────────────────────── */
@@ -103,58 +104,6 @@ function lineaVivienda(p: Perfil): string | null {
   if (p.puerta) partes.push(`Puerta ${p.puerta}`);
   if (partes.length) return partes.join(' · ');
   return p.numero_piso ?? null;
-}
-
-/* ─── Avatar ─────────────────────────────────────────────────────────────────
- * Muestra la foto de Google si está disponible; si no, muestra las iniciales
- * con el color del rol. El ring exterior indica siempre el rol actual.
- * ─────────────────────────────────────────────────────────────────────────── */
-function AvatarVecino({
-  perfil,
-  size = 'md',
-}: {
-  perfil: Perfil;
-  size?: 'sm' | 'md' | 'lg';
-}) {
-  const [imgError, setImgError] = useState(false);
-  const cfg = ROL_CONFIG[perfil.rol] ?? ROL_CONFIG.vecino;
-  const ini = iniciales(perfil.nombre_completo);
-
-  const sizeClasses = {
-    sm: 'w-10 h-10 text-sm',
-    md: 'w-11 h-11 text-sm',
-    lg: 'w-14 h-14 text-base',
-  }[size];
-
-  const hasPhoto = !!perfil.avatar_url && !imgError;
-
-  return (
-    <div
-      className={cn(
-        'rounded-full shrink-0 ring-2 overflow-hidden flex items-center justify-center font-bold',
-        sizeClasses,
-        cfg.ring,
-        // fondo solo si no hay foto
-        !hasPhoto && perfil.rol === 'admin'      && 'bg-finca-coral text-white',
-        !hasPhoto && perfil.rol === 'presidente' && 'bg-finca-peach/60 text-finca-coral',
-        !hasPhoto && perfil.rol === 'mediador'   && 'bg-violet-100 text-violet-700',
-        !hasPhoto && perfil.rol === 'vecino'     && 'bg-muted text-muted-foreground',
-      )}
-    >
-      {hasPhoto ? (
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
-          src={perfil.avatar_url!}
-          alt={perfil.nombre_completo}
-          referrerPolicy="no-referrer"   // necesario para URLs de Google
-          className="w-full h-full object-cover"
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <span>{ini}</span>
-      )}
-    </div>
-  );
 }
 
 /* ─── Componente principal ──────────────────────────────────────────────────── */
@@ -399,7 +348,11 @@ export default function VecinosPage() {
             const cfg         = ROL_CONFIG[vecino.rol] ?? ROL_CONFIG.vecino;
             const soyYo       = vecino.id === yo?.id;
             const vivienda    = lineaVivienda(vecino);
-            const puedeEditar = esPresidente && !soyYo && vecino.rol !== 'presidente';
+            // El presidente/admin puede cambiar el rol de cualquier otro vecino,
+            // incluso de otro "presidente" (útil para corregir asignaciones erróneas).
+            // ROLES_ASIGNABLES no incluye 'presidente', así que nadie puede
+            // crear otro presidente desde esta UI.
+            const puedeEditar = esPresidente && !soyYo;
 
             return (
               <Card

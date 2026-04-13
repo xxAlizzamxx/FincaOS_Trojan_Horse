@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Users, Megaphone, Building2, Share2, Vote, ChevronRight, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check } from 'lucide-react';
+import { FileText, Users, Megaphone, Building2, Share2, Vote, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import {
@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { format, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -149,11 +150,17 @@ export default function ComunidadPage() {
   }
 
   const esAdmin = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
-  const rolLabel: Record<string, string> = { vecino: 'Vecino', presidente: 'Presidente', admin: 'Administrador' };
+  const rolLabel: Record<string, string> = {
+    vecino:     'Vecino',
+    presidente: 'Presidente',
+    admin:      'Admin',
+    mediador:   'Mediador',
+  };
   const rolColor: Record<string, string> = {
-    vecino: 'bg-gray-100 text-gray-600',
+    vecino:     'bg-gray-100 text-gray-600',
     presidente: 'bg-finca-peach/50 text-finca-coral',
-    admin: 'bg-finca-coral text-white',
+    admin:      'bg-finca-coral text-white',
+    mediador:   'bg-violet-100 text-violet-700',
   };
 
   if (loading) {
@@ -402,25 +409,31 @@ export default function ComunidadPage() {
         </TabsContent>
 
         <TabsContent value="vecinos" className="mt-4 space-y-3">
-          {/* Vista previa: primeros 3 vecinos */}
+          {/* Vista previa: primeros 3 vecinos con foto de Google */}
           {vecinos.slice(0, 3).map((v) => (
             <Card key={v.id} className="border-0 shadow-sm">
               <CardContent className="p-3 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center shrink-0">
-                  <span className="font-semibold text-finca-coral text-sm">
-                    {v.nombre_completo.charAt(0).toUpperCase()}
-                  </span>
-                </div>
+                <AvatarVecino perfil={v} size="sm" />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm text-finca-dark truncate">{v.nombre_completo}</p>
                   {v.numero_piso && (
                     <p className="text-xs text-muted-foreground">{v.numero_piso}</p>
                   )}
                 </div>
-                <Badge className={cn('text-[10px] border-0', rolColor[v.rol])}>{rolLabel[v.rol]}</Badge>
+                <Badge className={cn('text-[10px] border-0 shrink-0', rolColor[v.rol] ?? 'bg-gray-100 text-gray-600')}>
+                  {rolLabel[v.rol] ?? v.rol}
+                </Badge>
               </CardContent>
             </Card>
           ))}
+
+          {vecinos.length === 0 && (
+            <div className="py-8 text-center space-y-2">
+              <Users className="w-10 h-10 text-muted-foreground/30 mx-auto" />
+              <p className="text-sm font-medium text-finca-dark">Sin vecinos registrados</p>
+              <p className="text-xs text-muted-foreground">Comparte el link de invitación</p>
+            </div>
+          )}
 
           <Button
             className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
