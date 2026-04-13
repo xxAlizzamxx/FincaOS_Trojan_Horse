@@ -63,7 +63,12 @@ export default function IncidenciasPage() {
             const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
             if (autorSnap.exists()) {
               const data = autorSnap.data();
-              autor = { nombre_completo: data.nombre_completo, numero_piso: data.numero_piso };
+              autor = {
+                nombre_completo: data.nombre_completo,
+                avatar_url:      data.avatar_url ?? null,
+                rol:             data.rol        ?? 'vecino',
+                numero_piso:     data.numero_piso ?? null,
+              };
             }
           }
           let categoria = null;

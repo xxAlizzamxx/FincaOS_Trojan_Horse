@@ -33,6 +33,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AvatarVecino } from '@/components/ui/avatar-vecino';
 
 export default function IncidenciaDetailPage() {
   const params = useParams();
@@ -94,12 +95,14 @@ export default function IncidenciaDetailPage() {
         if (autorSnap.exists()) {
           const a = autorSnap.data();
           incData.autor = {
-            id: autorSnap.id,
+            id:              autorSnap.id,
             nombre_completo: a.nombre_completo,
-            torre: a.torre ?? null,
-            piso:  a.piso  ?? null,
-            puerta: a.puerta ?? null,
-            numero_piso: a.numero_piso ?? null,  // fallback legacy
+            avatar_url:      a.avatar_url ?? null,
+            rol:             a.rol ?? 'vecino',
+            torre:           a.torre       ?? null,
+            piso:            a.piso        ?? null,
+            puerta:          a.puerta      ?? null,
+            numero_piso:     a.numero_piso ?? null,
           };
         }
       }
@@ -129,7 +132,13 @@ export default function IncidenciaDetailPage() {
           const autorSnap = await getDoc(doc(db, 'perfiles', com.autor_id));
           if (autorSnap.exists()) {
             const a = autorSnap.data();
-            com.autor = { id: autorSnap.id, nombre_completo: a.nombre_completo, numero_piso: a.numero_piso };
+            com.autor = {
+              id:              autorSnap.id,
+              nombre_completo: a.nombre_completo,
+              avatar_url:      a.avatar_url ?? null,
+              rol:             a.rol        ?? 'vecino',
+              numero_piso:     a.numero_piso ?? null,
+            };
           }
         }
         return com;
@@ -347,11 +356,14 @@ export default function IncidenciaDetailPage() {
         <Card className="border-0 shadow-sm">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center shrink-0">
-                <span className="text-sm font-semibold text-finca-coral">
-                  {(incidencia.autor as any)?.nombre_completo?.charAt(0) || '?'}
-                </span>
-              </div>
+              <AvatarVecino
+                perfil={{
+                  nombre_completo: (incidencia.autor as any)?.nombre_completo ?? '?',
+                  avatar_url:      (incidencia.autor as any)?.avatar_url ?? null,
+                  rol:             (incidencia.autor as any)?.rol ?? 'vecino',
+                }}
+                size="md"
+              />
               <div>
                 <p className="font-medium text-sm text-finca-dark">{(incidencia.autor as any)?.nombre_completo}</p>
                 <p className="text-xs text-muted-foreground">
@@ -678,11 +690,14 @@ export default function IncidenciaDetailPage() {
                 const esPropio = (com.autor as any)?.id === perfil?.id;
                 return (
                   <div key={com.id} className={cn('flex gap-2.5', esPropio && 'flex-row-reverse')}>
-                    <div className="w-8 h-8 rounded-full bg-finca-peach flex items-center justify-center shrink-0">
-                      <span className="text-xs font-semibold text-finca-coral">
-                        {(com.autor as any)?.nombre_completo?.charAt(0) || '?'}
-                      </span>
-                    </div>
+                    <AvatarVecino
+                      perfil={{
+                        nombre_completo: (com.autor as any)?.nombre_completo ?? '?',
+                        avatar_url:      (com.autor as any)?.avatar_url ?? null,
+                        rol:             (com.autor as any)?.rol ?? 'vecino',
+                      }}
+                      size="sm"
+                    />
                     <div className={cn(
                       'max-w-[80%] rounded-2xl px-3 py-2',
                       esPropio
