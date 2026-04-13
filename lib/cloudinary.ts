@@ -3,13 +3,13 @@
  * Nunca importar desde componentes cliente ('use client').
  * Las credenciales CLOUDINARY_API_SECRET jamás llegan al bundle del navegador.
  *
- * ⚠️  NO usar base64 / data URIs: inflan el payload un 33 % y provocan 413 en
- *     la API de Cloudinary para archivos medianos/grandes.
- *     Usamos upload_stream + Readable.from(buffer) para enviar binario puro.
- *     Readable.from() opera en memoria → 100 % compatible con Vercel serverless.
+ * Se usa upload_stream + Readable.from(buffer) para enviar binario puro,
+ * evitando la inflación del 33 % que produce la codificación base64 y que
+ * provocaba errores 413 en la API de Cloudinary para archivos medianos/grandes.
+ * Readable.from() opera completamente en memoria → compatible con Vercel serverless.
  */
 import { v2 as cloudinary } from 'cloudinary';
-import { Readable }         from 'stream';
+import { Readable }          from 'stream';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -23,18 +23,33 @@ export interface CloudinaryUploadResult {
   public_id: string;  // ID para gestionar el asset en Cloudinary
 }
 
+/**
+ * Opciones aceptadas por upload_stream.
+ * Se definen aquí para no depender de tipos internos de cloudinary v2
+ * que cambian entre versiones (evita errores de compilación en Next.js 13).
+ */
+interface UploadStreamOptions {
+  folder?:          string;
+  public_id?:       string;
+  resource_type?:   'image' | 'video' | 'raw' | 'auto';
+  overwrite?:       boolean;
+  unique_filename?: boolean;
+  transformation?:  Array<Record<string, unknown>>;
+  [key: string]:    unknown;   // permite pasar cualquier opción adicional
+}
+
 /* ─── Helper interno ────────────────────────────────────────────────────────
  * Envuelve cloudinary.uploader.upload_stream en una Promise.
- * Usa Readable.from(buffer) para crear un stream Node.js desde un Buffer
- * en memoria y lo pipea al writable stream de Cloudinary.
+ * Convierte el Buffer a un Readable Node.js en memoria y lo pipea
+ * al writable stream de Cloudinary (sin acceso a disco → serverless OK).
  * ─────────────────────────────────────────────────────────────────────────── */
 function uploadStreamPromise(
-  buffer: Buffer,
-  options: Parameters<typeof cloudinary.uploader.upload_stream>[0],
+  buffer:  Buffer,
+  options: UploadStreamOptions,
 ): Promise<CloudinaryUploadResult> {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
-      options ?? {},
+      options,
       (error, result) => {
         if (error)   return reject(error);
         if (!result) return reject(new Error('Cloudinary no devolvió resultado'));
@@ -43,19 +58,19 @@ function uploadStreamPromise(
     );
 
     // Readable.from(buffer) crea un stream de lectura completamente en memoria.
-    // No requiere acceso al sistema de ficheros → seguro en Vercel serverless.
+    // No requiere sistema de ficheros → seguro en entornos serverless (Vercel).
     Readable.from(buffer).pipe(uploadStream);
   });
 }
 
 /* ─── uploadImage ────────────────────────────────────────────────────────────
- * Sube una imagen a Cloudinary con optimización automática.
+ * Sube una imagen a Cloudinary con optimización automática vía streaming.
  * ─────────────────────────────────────────────────────────────────────────── */
 export async function uploadImage(
-  buffer:   Buffer,
-  folder:   string,
-  filename: string,
-  _mimeType = 'image/jpeg',   // no se usa: Cloudinary detecta el formato
+  buffer:    Buffer,
+  folder:    string,
+  filename:  string,
+  _mimeType = 'image/jpeg',   // Cloudinary detecta el formato automáticamente
 ): Promise<CloudinaryUploadResult> {
   console.log('[Cloudinary] uploadImage →', { folder, filename, bytes: buffer.length });
 
@@ -73,14 +88,14 @@ export async function uploadImage(
 }
 
 /* ─── uploadBuffer ───────────────────────────────────────────────────────────
- * Sube un archivo binario (PDF, Word, Excel…) a Cloudinary.
+ * Sube un archivo binario (PDF, Word, Excel…) a Cloudinary vía streaming.
  * resource_type "raw" es OBLIGATORIO para documentos no-imagen.
  * ─────────────────────────────────────────────────────────────────────────── */
 export async function uploadBuffer(
-  buffer:   Buffer,
-  folder:   string,
-  filename: string,
-  _mimeType = 'application/octet-stream',   // no se usa: Cloudinary lo infiere
+  buffer:    Buffer,
+  folder:    string,
+  filename:  string,
+  _mimeType = 'application/octet-stream',   // Cloudinary lo infiere del contenido
 ): Promise<CloudinaryUploadResult> {
   console.log('[Cloudinary] uploadBuffer →', { folder, filename, bytes: buffer.length });
 

@@ -9,16 +9,12 @@ const nextConfig = {
       { protocol: 'https', hostname: 'res.cloudinary.com' },
       // Fotos de perfil de Google (registro con Google)
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
-      { protocol: 'https', hostname: '*.googleusercontent.com' },
     ],
   },
-  // Aumentar el límite del body parser para Route Handlers y Server Actions.
-  // Sin esto, multipart/form-data de archivos grandes es rechazado por Next.js
-  // antes de llegar al handler (error 413 desde el propio servidor de Next.js).
+  // En Next.js 13 serverActions se habilita con `true`.
+  // La forma objeto { bodySizeLimit } solo existe en Next.js 14+.
   experimental: {
-    serverActions: {
-      bodySizeLimit: '50mb',
-    },
+    serverActions: true,
   },
 };
 
