@@ -16,6 +16,8 @@ import {
   getDoc, addDoc, deleteDoc, updateDoc, doc,
   QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia, Comentario } from '@/types/database';
@@ -53,6 +55,11 @@ export default function IncidenciaDetailPage() {
 
   /* Workflow (admin / presidente) */
   const [avanzando, setAvanzando] = useState(false);
+
+  /* Presupuesto proveedor */
+  const [presupuestoInput, setPresupuestoInput] = useState('');
+  const [proveedorInput, setProveedorInput] = useState('');
+  const [guardandoPresupuesto, setGuardandoPresupuesto] = useState(false);
 
   /* Historial expandido */
   const [historialAbierto, setHistorialAbierto] = useState(false);
@@ -553,6 +560,61 @@ export default function IncidenciaDetailPage() {
                 {incidencia.estimacion_min ?? 0}€ – {incidencia.estimacion_max ?? 0}€
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">Rango estimado de coste de reparación</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Presupuesto proveedor (admin) ── */}
+        {esAdmin && (incidencia.estimacion_min != null) && (
+          <Card className="border-0 shadow-sm border-l-4 border-l-blue-400">
+            <CardContent className="p-4 space-y-3">
+              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Presupuesto proveedor</p>
+              {(incidencia as any).presupuesto_proveedor ? (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-lg font-bold text-finca-dark">{(incidencia as any).presupuesto_proveedor}€</p>
+                    {(incidencia as any).presupuesto_proveedor > (incidencia.estimacion_max ?? 0) * 1.2 ? (
+                      <Badge className="text-[10px] bg-red-100 text-red-700 border-0">+20% sobre IA</Badge>
+                    ) : (
+                      <Badge className="text-[10px] bg-green-100 text-green-700 border-0">Dentro del rango</Badge>
+                    )}
+                  </div>
+                  {(incidencia as any).proveedor_nombre && (
+                    <p className="text-xs text-muted-foreground">{(incidencia as any).proveedor_nombre}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Proveedor</Label>
+                      <Input placeholder="Nombre" value={proveedorInput} onChange={(e) => setProveedorInput(e.target.value)} className="h-9 text-sm" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Importe (€)</Label>
+                      <Input type="number" placeholder="0" value={presupuestoInput} onChange={(e) => setPresupuestoInput(e.target.value)} className="h-9 text-sm" />
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="w-full bg-blue-500 hover:bg-blue-600 text-white h-9"
+                    disabled={!presupuestoInput || guardandoPresupuesto}
+                    onClick={async () => {
+                      setGuardandoPresupuesto(true);
+                      await updateDoc(doc(db, 'incidencias', incidencia.id), {
+                        presupuesto_proveedor: parseFloat(presupuestoInput),
+                        proveedor_nombre: proveedorInput.trim() || null,
+                        updated_at: new Date().toISOString(),
+                      });
+                      toast.success('Presupuesto guardado');
+                      fetchIncidencia();
+                      setGuardandoPresupuesto(false);
+                    }}
+                  >
+                    {guardandoPresupuesto ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar presupuesto'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

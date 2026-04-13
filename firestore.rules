@@ -188,5 +188,17 @@ service cloud.firestore {
       allow create: if isAuth();
       allow update: if isAuth();
     }
+
+    // Fotos de incidencias
+    match /incidencias_fotos/{fotoId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // Push subscriptions
+    match /push_subscriptions/{userId} {
+      allow read, write: if isAuth() && request.auth.uid == userId;
+    }
   }
 }
