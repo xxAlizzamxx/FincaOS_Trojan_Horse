@@ -108,8 +108,14 @@ service cloud.firestore {
     // Votaciones + votos (subcollection)
     match /votaciones/{votacionId} {
       allow read: if isAuth();
+      // Solo admin/presidente puede CREAR o CERRAR una votación
       allow create: if isAdmin();
-      allow update: if isAdmin();
+      // Admin puede hacer cualquier update (cerrar, editar, etc.)
+      // Vecino puede actualizar SOLO si la votación está activa (para registrar su voto
+      // a través de la transaction que incrementa opciones[].votos).
+      // La transaction del cliente valida además que no haya votado ya y que esté activa.
+      allow update: if isAdmin()
+                 || (isAuth() && resource.data.activa == true);
 
       match /votos/{uid} {
         allow read: if isAuth();
