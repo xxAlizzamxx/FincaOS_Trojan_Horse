@@ -6,7 +6,8 @@ import Image from 'next/image';
 import { Building2, Users, ChevronRight, Copy, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase/client';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, db } from '@/lib/firebase/client';
 import { Comunidad } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,9 +21,13 @@ export default function InvitePage() {
   const [vecinos, setVecinos] = useState(0);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     fetchComunidad();
+    // Detectar si el usuario ya está autenticado para ofrecerle unirse directamente
+    const unsub = onAuthStateChanged(auth, (u) => setIsLoggedIn(!!u));
+    return () => unsub();
   }, [codigo]);
 
   async function fetchComunidad() {
@@ -114,20 +119,34 @@ export default function InvitePage() {
           </CardContent>
         </Card>
 
-        <Button
-          onClick={() => router.push(`/registro?codigo=${codigo}`)}
-          className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 text-base font-medium shadow-md shadow-finca-coral/20"
-        >
-          Unirme a esta comunidad
-          <ChevronRight className="w-5 h-5 ml-1" />
-        </Button>
+        {isLoggedIn ? (
+          /* Usuario ya autenticado → unirse directamente desde onboarding */
+          <Button
+            onClick={() => router.push(`/onboarding?codigo=${codigo}`)}
+            className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 text-base font-medium shadow-md shadow-finca-coral/20"
+          >
+            Unirme a esta comunidad
+            <ChevronRight className="w-5 h-5 ml-1" />
+          </Button>
+        ) : (
+          /* Usuario no autenticado → flujo normal de registro */
+          <>
+            <Button
+              onClick={() => router.push(`/registro?codigo=${codigo}`)}
+              className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 text-base font-medium shadow-md shadow-finca-coral/20"
+            >
+              Unirme a esta comunidad
+              <ChevronRight className="w-5 h-5 ml-1" />
+            </Button>
 
-        <p className="text-center text-xs text-muted-foreground">
-          ¿Ya tienes cuenta?{' '}
-          <button onClick={() => router.push('/login')} className="text-finca-coral font-medium hover:underline">
-            Inicia sesión
-          </button>
-        </p>
+            <p className="text-center text-xs text-muted-foreground">
+              ¿Ya tienes cuenta?{' '}
+              <button onClick={() => router.push(`/login?redirect=/invite/${codigo}`)} className="text-finca-coral font-medium hover:underline">
+                Inicia sesión
+              </button>
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

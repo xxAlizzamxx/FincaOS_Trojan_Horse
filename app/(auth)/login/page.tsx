@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 import {
@@ -20,6 +21,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 const googleProvider = new GoogleAuthProvider();
 
 export default function LoginPage() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -27,6 +29,8 @@ export default function LoginPage() {
 
   // Detectar autenticación (tanto email/password como redirect de Google)
   useEffect(() => {
+    const redirectTo = searchParams.get('redirect');
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
         setLoading(false);
@@ -49,10 +53,16 @@ export default function LoginPage() {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
-          window.location.href = '/onboarding';
+          // Si viene de un invite link, volver a él para que pueda unirse
+          window.location.href = redirectTo ?? '/onboarding';
         } else {
           const data = perfilSnap.data();
-          window.location.href = data?.comunidad_id ? '/inicio' : '/onboarding';
+          if (redirectTo) {
+            // Volver al destino original (ej. página de invitación)
+            window.location.href = redirectTo;
+          } else {
+            window.location.href = data?.comunidad_id ? '/inicio' : '/onboarding';
+          }
         }
       } catch (err: any) {
         console.error('[Auth] Error al cargar perfil:', err);
@@ -61,7 +71,7 @@ export default function LoginPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [searchParams]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();

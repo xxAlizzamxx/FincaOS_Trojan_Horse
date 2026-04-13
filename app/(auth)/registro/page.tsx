@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -22,6 +22,9 @@ export default function RegistroPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Flag to prevent onAuthStateChanged from redirecting mid-registration
+  const isRegistering = useRef(false);
+
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,10 +38,10 @@ export default function RegistroPage() {
     if (code) setCodigoComunidad(code.toUpperCase());
   }, [searchParams]);
 
-  // Redirigir si el usuario ya está autenticado
+  // Redirigir si el usuario ya está autenticado (pero NO durante el proceso de registro)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
+      if (firebaseUser && !isRegistering.current) {
         window.location.href = '/inicio';
       }
     });
@@ -49,6 +52,7 @@ export default function RegistroPage() {
   const [numViviendas, setNumViviendas] = useState('');
 
   async function handleGoogleRegistro() {
+    isRegistering.current = true;  // bloquear el redirect automático de onAuthStateChanged
     setLoading(true);
     try {
       const result = await signInWithPopup(auth, googleProvider);
@@ -93,6 +97,7 @@ export default function RegistroPage() {
       if (err.code !== 'auth/popup-closed-by-user') {
         toast.error('Error al registrarse con Google');
       }
+      isRegistering.current = false;  // solo resetear en error; en éxito la página ya navega
       setLoading(false);
     }
   }

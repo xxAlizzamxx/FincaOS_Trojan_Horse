@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Perfil } from '@/types/database';
 
@@ -50,6 +50,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
       setPerfil(perfilData);
+    } else {
+      // Perfil no encontrado — puede ocurrir si el registro con Google fue interrumpido.
+      // Creamos un perfil mínimo para que el flujo de onboarding funcione correctamente.
+      const firebaseUser = auth.currentUser;
+      if (firebaseUser) {
+        const nuevoPerfil = {
+          nombre_completo: firebaseUser.displayName || 'Usuario',
+          avatar_url:      firebaseUser.photoURL || null,
+          telefono:        null,
+          comunidad_id:    null,
+          numero_piso:     null,
+          rol:             'vecino' as const,
+          created_at:      new Date().toISOString(),
+          updated_at:      new Date().toISOString(),
+        };
+        try {
+          await setDoc(doc(db, 'perfiles', userId), nuevoPerfil);
+          setPerfil({ id: userId, ...nuevoPerfil } as Perfil);
+        } catch (err) {
+          console.error('[useAuth] No se pudo crear el perfil de recuperación:', err);
+        }
+      }
     }
     setLoading(false);
   }
