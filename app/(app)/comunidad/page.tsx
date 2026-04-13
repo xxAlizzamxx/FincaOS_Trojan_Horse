@@ -63,98 +63,78 @@ export default function ComunidadPage() {
 
   async function fetchData() {
     const cid = perfil!.comunidad_id!;
+    console.log('[Comunidad] fetchData — cid:', cid);
 
-    // 1. Fetch comunidad by document id
-    const comSnap = await getDoc(firestoreDoc(db, 'comunidades', cid));
-    if (comSnap.exists()) {
-      setComunidad({ id: comSnap.id, ...comSnap.data() } as Comunidad);
-    }
+    try {
+      // 1. Fetch comunidad
+      const comSnap = await getDoc(firestoreDoc(db, 'comunidades', cid));
+      if (comSnap.exists()) {
+        setComunidad({ id: comSnap.id, ...comSnap.data() } as Comunidad);
+      }
 
-    // 2. Fetch vecinos
-    const vecSnap = await getDocs(
-      query(
-        collection(db, 'perfiles'),
-        where('comunidad_id', '==', cid),
-        orderBy('nombre_completo')
-      )
-    );
-    setVecinos(vecSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Perfil)));
+      // 2. Fetch vecinos
+      const vecSnap = await getDocs(
+        query(collection(db, 'perfiles'), where('comunidad_id', '==', cid), orderBy('nombre_completo'))
+      );
+      console.log('[Comunidad] vecinos:', vecSnap.size);
+      setVecinos(vecSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Perfil)));
 
-    // 3. Fetch anuncios, then resolve autor names
-    const anuncSnap = await getDocs(
-      query(
-        collection(db, 'anuncios'),
-        where('comunidad_id', '==', cid),
-        orderBy('fijado', 'desc'),
-        orderBy('publicado_at', 'desc')
-      )
-    );
-    const anunciosRaw = anuncSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }));
-
-    // Collect unique autor_id values and batch-fetch their profiles
-    const autorIds = Array.from(new Set(anunciosRaw.map((a: any) => a.autor_id).filter(Boolean))) as string[];
-    const autorMap: Record<string, string> = {};
-    await Promise.all(
-      autorIds.map(async (autorId) => {
+      // 3. Fetch anuncios + autores
+      const anuncSnap = await getDocs(
+        query(collection(db, 'anuncios'), where('comunidad_id', '==', cid), orderBy('fijado', 'desc'), orderBy('publicado_at', 'desc'))
+      );
+      console.log('[Comunidad] anuncios:', anuncSnap.size);
+      const anunciosRaw = anuncSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }));
+      const autorIds = Array.from(new Set(anunciosRaw.map((a: any) => a.autor_id).filter(Boolean))) as string[];
+      const autorMap: Record<string, string> = {};
+      await Promise.all(autorIds.map(async (autorId) => {
         const autorSnap = await getDoc(firestoreDoc(db, 'perfiles', autorId));
-        if (autorSnap.exists()) {
-          autorMap[autorId] = (autorSnap.data() as any).nombre_completo;
-        }
-      })
-    );
-    const anunciosConAutor = anunciosRaw.map((a: any) => ({
-      ...a,
-      autor: a.autor_id ? { nombre_completo: autorMap[a.autor_id] || '' } : null,
-    }));
-    setAnuncios(anunciosConAutor as Anuncio[]);
+        if (autorSnap.exists()) autorMap[autorId] = (autorSnap.data() as any).nombre_completo;
+      }));
+      setAnuncios(anunciosRaw.map((a: any) => ({
+        ...a,
+        autor: a.autor_id ? { nombre_completo: autorMap[a.autor_id] || '' } : null,
+      })) as Anuncio[]);
 
-    // 4. Fetch documentos
-    const docSnap = await getDocs(
-      query(
-        collection(db, 'documentos'),
-        where('comunidad_id', '==', cid),
-        orderBy('created_at', 'desc')
-      )
-    );
-    setDocumentos(docSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Documento)));
+      // 4. Fetch documentos
+      const docSnap = await getDocs(
+        query(collection(db, 'documentos'), where('comunidad_id', '==', cid), orderBy('created_at', 'desc'))
+      );
+      setDocumentos(docSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Documento)));
 
-    // 5. Fetch votaciones (new structure: opciones embedded, activa boolean)
-    const votSnap = await getDocs(
-      query(
-        collection(db, 'votaciones'),
-        where('comunidad_id', '==', cid),
-        orderBy('created_at', 'desc')
-      )
-    );
-    setVotaciones(votSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Votacion)));
+      // 5. Fetch votaciones
+      const votSnap = await getDocs(
+        query(collection(db, 'votaciones'), where('comunidad_id', '==', cid), orderBy('created_at', 'desc'))
+      );
+      setVotaciones(votSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Votacion)));
 
-    // 6. Fetch cuotas de la comunidad + pago del vecino actual
-    const cuotaSnap = await getDocs(
-      query(
-        collection(db, 'cuotas'),
-        where('comunidad_id', '==', cid),
-        orderBy('fecha_limite', 'desc'),
-        limit(6)
-      )
-    );
-    const cuotasItems: CuotaItem[] = await Promise.all(
-      cuotaSnap.docs.map(async (cuotaDoc) => {
-        const data = cuotaDoc.data();
-        const pagoSnap = await getDoc(firestoreDoc(db, 'cuotas', cuotaDoc.id, 'pagos', perfil!.id));
-        const pagado = pagoSnap.exists() && pagoSnap.data()?.estado === 'pagado';
-        return {
-          id: cuotaDoc.id,
-          nombre: data.nombre ?? '',
-          monto: data.monto ?? 0,
-          fecha_limite: data.fecha_limite ?? '',
-          pagado,
-          fecha_pago: pagoSnap.data()?.fecha_pago ?? null,
-        };
-      })
-    );
-    setCuotas(cuotasItems);
-
-    setLoading(false);
+      // 6. Fetch cuotas + estado de pago del vecino
+      const cuotaSnap = await getDocs(
+        query(collection(db, 'cuotas'), where('comunidad_id', '==', cid), orderBy('fecha_limite', 'desc'), limit(6))
+      );
+      console.log('[Comunidad] cuotas:', cuotaSnap.size);
+      const cuotasItems: CuotaItem[] = await Promise.all(
+        cuotaSnap.docs.map(async (cuotaDoc) => {
+          const data = cuotaDoc.data();
+          const pagoSnap = await getDoc(firestoreDoc(db, 'cuotas', cuotaDoc.id, 'pagos', perfil!.id));
+          const pagado = pagoSnap.exists() && pagoSnap.data()?.estado === 'pagado';
+          return {
+            id: cuotaDoc.id,
+            nombre: data.nombre ?? '',
+            monto: data.monto ?? 0,
+            fecha_limite: data.fecha_limite ?? '',
+            pagado,
+            fecha_pago: pagoSnap.data()?.fecha_pago ?? null,
+          };
+        })
+      );
+      setCuotas(cuotasItems);
+    } catch (err) {
+      console.error('[Comunidad] Error en fetchData:', err);
+      toast.error('Error al cargar los datos de la comunidad');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function compartirLink() {

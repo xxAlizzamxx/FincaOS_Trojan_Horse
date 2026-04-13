@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, CircleCheck as CheckCircle2 } from 'lucide-react';
+import Image from 'next/image';
+import { ArrowLeft, CircleCheck as CheckCircle2, Camera, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import { collection, addDoc } from 'firebase/firestore';
@@ -46,6 +47,10 @@ export default function NuevaIncidenciaPage() {
   const [enviado, setEnviado] = useState(false);
   const [estimacion, setEstimacion] = useState<{ min: number; max: number } | null>(null);
   const [estimando, setEstimando] = useState(false);
+  const [prioridadIA, setPrioridadIA] = useState<string | null>(null);
+  const [fotos, setFotos] = useState<File[]>([]);
+  const [fotoPreviews, setFotoPreviews] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -63,10 +68,59 @@ export default function NuevaIncidenciaPage() {
       });
       const data = await res.json();
       setEstimacion({ min: data.min, max: data.max });
+      if (data.prioridad) {
+        setPrioridad(data.prioridad);
+        setPrioridadIA(data.prioridad);
+      }
     } catch {
       setEstimacion({ min: 100, max: 600 });
     } finally {
       setEstimando(false);
+    }
+  }
+
+  function handleFotoAdd(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    const maxFotos = 5;
+    const remaining = maxFotos - fotos.length;
+    const newFiles = files.slice(0, remaining);
+    if (files.length > remaining) {
+      toast.error(`Máximo ${maxFotos} fotos`);
+    }
+    setFotos((prev) => [...prev, ...newFiles]);
+    newFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => setFotoPreviews((prev) => [...prev, ev.target?.result as string]);
+      reader.readAsDataURL(file);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function handleFotoRemove(index: number) {
+    setFotos((prev) => prev.filter((_, i) => i !== index));
+    setFotoPreviews((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function uploadFotos(incidenciaId: string, comunidadId: string): Promise<void> {
+    for (const file of fotos) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('comunidad_id', comunidadId);
+      formData.append('incidencia_id', incidenciaId);
+      try {
+        const res = await fetch('/api/upload-photo', { method: 'POST', body: formData });
+        if (!res.ok) continue;
+        const { url, public_id } = await res.json();
+        await addDoc(collection(db, 'incidencias_fotos'), {
+          incidencia_id: incidenciaId,
+          url,
+          storage_path: public_id,
+          uploaded_by: perfil?.id || null,
+          created_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error('Error subiendo foto:', err);
+      }
     }
   }
 
@@ -110,7 +164,9 @@ export default function NuevaIncidenciaPage() {
         updated_at: new Date().toISOString(),
         resuelta_at: null,
       });
-      // Notificar con título real y link con ID
+      if (fotos.length > 0) {
+        await uploadFotos(ref.id, perfil.comunidad_id);
+      }
       notificarAdmins(
         perfil.comunidad_id,
         'incidencia',
@@ -174,6 +230,42 @@ export default function NuevaIncidenciaPage() {
         </div>
 
         <div className="space-y-2">
+          <Label>Fotos <span className="text-muted-foreground text-xs font-normal">(opcional, máx. 5)</span></Label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic"
+            multiple
+            className="hidden"
+            onChange={handleFotoAdd}
+          />
+          <div className="flex gap-2 flex-wrap">
+            {fotoPreviews.map((src, i) => (
+              <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-border">
+                <Image src={src} alt={`Foto ${i + 1}`} fill className="object-cover" />
+                <button
+                  type="button"
+                  onClick={() => handleFotoRemove(i)}
+                  className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center"
+                >
+                  <X className="w-3 h-3 text-white" />
+                </button>
+              </div>
+            ))}
+            {fotos.length < 5 && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center text-muted-foreground hover:border-finca-coral hover:text-finca-coral transition-colors"
+              >
+                <Camera className="w-5 h-5" />
+                <span className="text-[10px] mt-1">Añadir</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
           <Label>Categoría</Label>
           <div className="grid grid-cols-3 gap-2">
             {CATEGORIAS.map((cat) => (
@@ -221,7 +313,14 @@ export default function NuevaIncidenciaPage() {
         </div>
 
         <div className="space-y-2">
-          <Label>Urgencia</Label>
+          <div className="flex items-center gap-2">
+            <Label>Urgencia</Label>
+            {prioridadIA && (
+              <span className="text-[10px] font-medium text-finca-coral bg-finca-peach/30 px-1.5 py-0.5 rounded-full">
+                Sugerida por IA
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-4 gap-2">
             {prioridades.map((p) => (
               <button key={p.value} type="button" onClick={() => setPrioridad(p.value)}

@@ -7,7 +7,7 @@ import { Eye, EyeOff, LogIn } from 'lucide-react';
 import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
-  signInWithRedirect,
+  signInWithPopup,
   onAuthStateChanged,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -82,11 +82,13 @@ export default function LoginPage() {
   async function handleGoogleLogin() {
     setLoading(true);
     try {
-      await signInWithRedirect(auth, googleProvider);
-      // La página se recarga — onAuthStateChanged se encarga de la redirección
+      await signInWithPopup(auth, googleProvider);
+      // onAuthStateChanged se encarga de la redirección
     } catch (err: any) {
-      console.error('[Auth] Error al iniciar redirect:', err);
-      toast.error('Error al iniciar con Google');
+      console.error('[Auth] Error en login con Google:', err.code, err.message);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        toast.error('Error al iniciar con Google');
+      }
       setLoading(false);
     }
   }
