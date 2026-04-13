@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { BottomTabBar } from '@/components/layout/BottomTabBar';
+import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -48,6 +49,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <AppHeader />
+      <PushNotificationPrompt />
       <main className="flex-1 overflow-y-auto pb-safe max-w-lg mx-auto w-full">
         {children}
       </main>
