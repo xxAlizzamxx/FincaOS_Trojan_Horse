@@ -6,6 +6,7 @@ import { ArrowLeft, Search, Users, X, ArrowUpDown, ChevronRight, Check, Loader2 
 import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, getDocs, doc, updateDoc,
+  QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -83,7 +84,7 @@ export default function VecinosPage() {
           orderBy('nombre_completo', 'asc'),
         ),
       );
-      setVecinos(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Perfil)));
+      setVecinos(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Perfil)));
     } catch {
       toast.error('Error al cargar los vecinos');
     } finally {

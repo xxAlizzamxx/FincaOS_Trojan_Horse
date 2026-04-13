@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, getDocs,
   doc, getDoc, runTransaction,
+  QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -45,7 +46,7 @@ export default function VotosPage() {
         orderBy('created_at', 'desc')
       );
       const snap = await getDocs(q);
-      const lista = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Votacion));
+      const lista = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Votacion));
       setVotaciones(lista);
 
       // Cargar los votos del usuario actual

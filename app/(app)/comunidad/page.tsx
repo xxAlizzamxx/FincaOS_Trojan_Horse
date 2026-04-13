@@ -14,6 +14,8 @@ import {
   getDocs,
   getDoc,
   doc as firestoreDoc,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Perfil, Anuncio, Documento, Comunidad } from '@/types/database';
@@ -76,7 +78,7 @@ export default function ComunidadPage() {
         orderBy('nombre_completo')
       )
     );
-    setVecinos(vecSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Perfil)));
+    setVecinos(vecSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Perfil)));
 
     // 3. Fetch anuncios, then resolve autor names
     const anuncSnap = await getDocs(
@@ -87,7 +89,7 @@ export default function ComunidadPage() {
         orderBy('publicado_at', 'desc')
       )
     );
-    const anunciosRaw = anuncSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const anunciosRaw = anuncSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }));
 
     // Collect unique autor_id values and batch-fetch their profiles
     const autorIds = Array.from(new Set(anunciosRaw.map((a: any) => a.autor_id).filter(Boolean))) as string[];
@@ -114,7 +116,7 @@ export default function ComunidadPage() {
         orderBy('created_at', 'desc')
       )
     );
-    setDocumentos(docSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Documento)));
+    setDocumentos(docSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Documento)));
 
     // 5. Fetch votaciones (new structure: opciones embedded, activa boolean)
     const votSnap = await getDocs(
@@ -124,7 +126,7 @@ export default function ComunidadPage() {
         orderBy('created_at', 'desc')
       )
     );
-    setVotaciones(votSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Votacion)));
+    setVotaciones(votSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Votacion)));
 
     // 6. Fetch cuotas de la comunidad + pago del vecino actual
     const cuotaSnap = await getDocs(
