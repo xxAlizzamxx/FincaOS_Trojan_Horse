@@ -28,6 +28,21 @@ const ESTADO_CFG: Record<string, { label: string; badge: string; dot: string }> 
   resuelto:          { label: 'Resuelta',       badge: 'bg-green-100 text-green-700 border-green-200',    dot: 'bg-green-500'   },
 };
 
+/* Convierte cualquier formato de fecha/Timestamp a milisegundos */
+function toMs(val: unknown): number {
+  if (!val) return 0;
+  if (typeof val === 'string') return new Date(val).getTime();
+  if (typeof val === 'object' && val !== null) {
+    if (typeof (val as { toMillis?: () => number }).toMillis === 'function') {
+      return (val as { toMillis: () => number }).toMillis();
+    }
+    if (typeof (val as { seconds?: number }).seconds === 'number') {
+      return (val as { seconds: number }).seconds * 1000;
+    }
+  }
+  return 0;
+}
+
 export default function MediacionesPage() {
   const router = useRouter();
   const { perfil, user } = useAuth();
@@ -59,7 +74,7 @@ export default function MediacionesPage() {
         query(collection(db, 'mediaciones'), where('comunidad_id', '==', cid))
       );
 
-      const todas = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }));
+      const todas = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Record<string, unknown> & { id: string }));
       setFetchInfo(`cid=${cid} uid=${uid} rol=${rol} → ${todas.length} docs`);
 
       // Filtrado client-side según rol
@@ -75,15 +90,6 @@ export default function MediacionesPage() {
         resultado = todas.filter(
           (m) => m.denunciante_id === uid || m.solicitado_por === uid
         );
-      }
-
-      // Convertir Timestamp de Firestore a número para ordenar
-      function toMs(val: any): number {
-        if (!val) return 0;
-        if (typeof val === 'string') return new Date(val).getTime();
-        if (typeof val.toMillis === 'function') return val.toMillis(); // Firestore Timestamp
-        if (typeof val.seconds === 'number') return val.seconds * 1000; // Timestamp plano
-        return 0;
       }
 
       resultado.sort((a, b) =>

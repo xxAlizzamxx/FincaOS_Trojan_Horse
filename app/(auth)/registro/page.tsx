@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Eye, EyeOff, UserPlus, Building2 } from 'lucide-react';
-import { createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,9 @@ export default function RegistroPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Flag to prevent onAuthStateChanged from redirecting mid-registration
+  const isRegistering = useRef(false);
+
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,17 +37,28 @@ export default function RegistroPage() {
     const code = searchParams.get('codigo');
     if (code) setCodigoComunidad(code.toUpperCase());
   }, [searchParams]);
+
+  // Redirigir si el usuario ya está autenticado (pero NO durante el proceso de registro)
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser && !isRegistering.current) {
+        window.location.href = '/inicio';
+      }
+    });
+    return () => unsubscribe();
+  }, []);
   const [nombreComunidad, setNombreComunidad] = useState('');
   const [direccion, setDireccion] = useState('');
   const [numViviendas, setNumViviendas] = useState('');
 
   async function handleGoogleRegistro() {
+    isRegistering.current = true;  // bloquear el redirect automático de onAuthStateChanged
     setLoading(true);
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
+      const firebaseUser = result.user;
 
-      // Find community if invite code present
+      // Buscar comunidad por código si se proporcionó
       let comunidadId: string | null = null;
       if (codigoComunidad) {
         const q = query(collection(db, 'comunidades'), where('codigo', '==', codigoComunidad.toUpperCase()));
@@ -52,35 +66,40 @@ export default function RegistroPage() {
         if (!snap.empty) comunidadId = snap.docs[0].id;
       }
 
-      // Check if profile already exists
-      const perfilSnap = await getDoc(doc(db, 'perfiles', user.uid));
+      // Crear o actualizar perfil
+      const perfilSnap = await getDoc(doc(db, 'perfiles', firebaseUser.uid));
       if (!perfilSnap.exists()) {
-        await setDoc(doc(db, 'perfiles', user.uid), {
+        await setDoc(doc(db, 'perfiles', firebaseUser.uid), {
           comunidad_id: comunidadId,
-          nombre_completo: user.displayName || 'Sin nombre',
+          nombre_completo: firebaseUser.displayName || 'Sin nombre',
           numero_piso: null,
           rol: 'vecino',
-          avatar_url: user.photoURL || null,
+          avatar_url: firebaseUser.photoURL || null,
           telefono: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
-        router.replace(comunidadId ? '/inicio' : '/onboarding');
+        window.location.href = comunidadId ? '/inicio' : '/onboarding';
       } else {
         const data = perfilSnap.data();
         if (!data?.comunidad_id && comunidadId) {
-          await updateDoc(doc(db, 'perfiles', user.uid), { comunidad_id: comunidadId, updated_at: new Date().toISOString() });
-          router.replace('/inicio');
+          await updateDoc(doc(db, 'perfiles', firebaseUser.uid), {
+            comunidad_id: comunidadId,
+            updated_at: new Date().toISOString(),
+          });
+          window.location.href = '/inicio';
         } else {
-          router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
+          window.location.href = data?.comunidad_id ? '/inicio' : '/onboarding';
         }
       }
     } catch (err: any) {
+      console.error('[Auth] Error en registro Google:', err.code, err.message);
       if (err.code !== 'auth/popup-closed-by-user') {
         toast.error('Error al registrarse con Google');
       }
+      isRegistering.current = false;  // solo resetear en error; en éxito la página ya navega
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleRegistroUnirse(e: React.FormEvent) {

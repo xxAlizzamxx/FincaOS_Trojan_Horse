@@ -1,11 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import {
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+  onAuthStateChanged,
+} from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
@@ -16,11 +21,57 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 const googleProvider = new GoogleAuthProvider();
 
 export default function LoginPage() {
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Detectar autenticación (tanto email/password como redirect de Google)
+  useEffect(() => {
+    const redirectTo = searchParams.get('redirect');
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        setLoading(false);
+        return;
+      }
+
+      // Usuario autenticado — verificar/crear perfil y redirigir
+      try {
+        const perfilSnap = await getDoc(doc(db, 'perfiles', firebaseUser.uid));
+
+        if (!perfilSnap.exists()) {
+          // Primer login con Google — crear perfil
+          await setDoc(doc(db, 'perfiles', firebaseUser.uid), {
+            comunidad_id: null,
+            nombre_completo: firebaseUser.displayName || 'Sin nombre',
+            numero_piso: null,
+            rol: 'vecino',
+            avatar_url: firebaseUser.photoURL || null,
+            telefono: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          // Si viene de un invite link, volver a él para que pueda unirse
+          window.location.href = redirectTo ?? '/onboarding';
+        } else {
+          const data = perfilSnap.data();
+          if (redirectTo) {
+            // Volver al destino original (ej. página de invitación)
+            window.location.href = redirectTo;
+          } else {
+            window.location.href = data?.comunidad_id ? '/inicio' : '/onboarding';
+          }
+        }
+      } catch (err: any) {
+        console.error('[Auth] Error al cargar perfil:', err);
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [searchParams]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -31,43 +82,34 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.replace('/inicio');
+      // onAuthStateChanged se encarga de la redirección
     } catch {
       toast.error('Credenciales incorrectas. Inténtalo de nuevo.');
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleGoogleLogin() {
     setLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-
-      // Check if profile exists, create if not
-      const perfilSnap = await getDoc(doc(db, 'perfiles', user.uid));
-      if (!perfilSnap.exists()) {
-        await setDoc(doc(db, 'perfiles', user.uid), {
-          comunidad_id: null,
-          nombre_completo: user.displayName || 'Sin nombre',
-          numero_piso: null,
-          rol: 'vecino',
-          avatar_url: user.photoURL || null,
-          telefono: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-        router.replace('/onboarding');
-      } else {
-        const data = perfilSnap.data();
-        router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
-      }
+      await signInWithPopup(auth, googleProvider);
+      // onAuthStateChanged se encarga de la redirección
     } catch (err: any) {
+      console.error('[Auth] Error en login con Google:', err.code, err.message);
       if (err.code !== 'auth/popup-closed-by-user') {
-        toast.error('Error al iniciar sesión con Google');
+        toast.error('Error al iniciar con Google');
       }
+      setLoading(false);
     }
-    setLoading(false);
+  }
+
+  // Mostrar spinner mientras se verifica el estado de auth
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-4 border-finca-coral border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (
@@ -142,14 +184,8 @@ export default function LoginPage() {
             className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white font-medium h-11"
             disabled={loading}
           >
-            {loading ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <>
-                <LogIn className="w-4 h-4 mr-2" />
-                Entrar
-              </>
-            )}
+            <LogIn className="w-4 h-4 mr-2" />
+            Entrar
           </Button>
         </form>
       </CardContent>

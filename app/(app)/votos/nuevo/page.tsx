@@ -25,6 +25,8 @@ export default function NuevaVotacionPage() {
 
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
+  const [usarCoeficientes, setUsarCoeficientes] = useState(false);
+  const [quorumRequerido, setQuorumRequerido] = useState('');
   const [opciones, setOpciones] = useState([
     { id: uuid(), texto: '' },
     { id: uuid(), texto: '' },
@@ -60,8 +62,10 @@ export default function NuevaVotacionPage() {
         created_by: perfil.id,
         titulo: titulo.trim(),
         descripcion: descripcion.trim() || null,
-        opciones: opcionesValidas.map((o) => ({ id: o.id, texto: o.texto.trim(), votos: 0 })),
+        opciones: opcionesValidas.map((o) => ({ id: o.id, texto: o.texto.trim(), votos: 0, peso_total: 0 })),
         activa: true,
+        usar_coeficientes: usarCoeficientes,
+        quorum_requerido: quorumRequerido ? parseFloat(quorumRequerido) : null,
         created_at: new Date().toISOString(),
         cierre_at: null,
       });
@@ -190,13 +194,52 @@ export default function NuevaVotacionPage() {
           )}
         </div>
 
+        {/* Opciones avanzadas */}
+        <div className="space-y-4 border-t pt-4">
+          <p className="text-sm font-medium text-finca-dark">Opciones avanzadas</p>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={usarCoeficientes}
+              onChange={(e) => setUsarCoeficientes(e.target.checked)}
+              className="w-4 h-4 rounded border-border text-finca-coral focus:ring-finca-coral"
+            />
+            <div>
+              <p className="text-sm font-medium text-finca-dark">Ponderar por coeficiente (LPH)</p>
+              <p className="text-xs text-muted-foreground">El voto vale según el % de participación de cada propietario</p>
+            </div>
+          </label>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="quorum">Quórum mínimo (%)</Label>
+            <Input
+              id="quorum"
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              placeholder="Ej: 50 (dejar vacío = sin mínimo)"
+              value={quorumRequerido}
+              onChange={(e) => setQuorumRequerido(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {usarCoeficientes
+                ? 'Porcentaje mínimo de coeficientes que deben votar'
+                : 'Porcentaje mínimo de vecinos que deben votar'}
+            </p>
+          </div>
+        </div>
+
         {/* Info */}
         <Card className="bg-finca-peach/20 border-finca-peach/50">
           <CardContent className="p-3">
             <p className="text-xs text-finca-dark font-medium mb-0.5">Sobre las votaciones</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Cada vecino puede votar una sola vez. Los resultados son visibles en tiempo real
-              una vez emitido el voto. Solo presidentes y administradores pueden crear votaciones.
+              {usarCoeficientes
+                ? 'Cada voto se pondera por el coeficiente de participación del propietario según la LPH.'
+                : 'Cada vecino puede votar una sola vez. Un vecino = un voto.'}
+              {' '}Los resultados son visibles en tiempo real.
             </p>
           </CardContent>
         </Card>

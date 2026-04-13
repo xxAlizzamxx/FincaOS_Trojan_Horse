@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Building2, UserPlus } from 'lucide-react';
-import { doc, updateDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -15,11 +15,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { perfil, user } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const [piso, setPiso] = useState('');
   const [codigoComunidad, setCodigoComunidad] = useState('');
+
+  // Pre-rellenar el código si viene de un link de invitación (?codigo=XXXXX)
+  useEffect(() => {
+    const code = searchParams.get('codigo');
+    if (code) setCodigoComunidad(code.toUpperCase());
+  }, [searchParams]);
 
   const [nombreComunidad, setNombreComunidad] = useState('');
   const [direccion, setDireccion] = useState('');
@@ -27,30 +34,41 @@ export default function OnboardingPage() {
 
   async function handleUnirse(e: React.FormEvent) {
     e.preventDefault();
-    if (!codigoComunidad || !perfil) return;
+    if (!codigoComunidad || !user) return;
     setLoading(true);
 
-    const q = query(collection(db, 'comunidades'), where('codigo', '==', codigoComunidad.toUpperCase()));
-    const snap = await getDocs(q);
+    try {
+      const q = query(collection(db, 'comunidades'), where('codigo', '==', codigoComunidad.toUpperCase()));
+      const snap = await getDocs(q);
 
-    if (snap.empty) {
-      toast.error('Código de comunidad no encontrado');
+      if (snap.empty) {
+        toast.error('Código de comunidad no encontrado');
+        setLoading(false);
+        return;
+      }
+
+      const comunidadDoc = snap.docs[0];
+
+      // Usamos setDoc con merge para que funcione tanto si el perfil ya existe
+      // como si fue creado de forma incompleta (race condition en registro Google)
+      await setDoc(doc(db, 'perfiles', user.uid), {
+        comunidad_id:  comunidadDoc.id,
+        numero_piso:   piso || null,
+        rol:           perfil?.rol ?? 'vecino',   // preservar rol si ya existe
+        nombre_completo: perfil?.nombre_completo ?? user.displayName ?? 'Usuario',
+        avatar_url:    perfil?.avatar_url ?? user.photoURL ?? null,
+        telefono:      perfil?.telefono ?? null,
+        updated_at:    new Date().toISOString(),
+        created_at:    perfil?.created_at ?? new Date().toISOString(),
+      }, { merge: true });
+
+      toast.success('¡Te has unido a la comunidad!');
+      window.location.href = '/inicio';
+    } catch (err: any) {
+      console.error('[Onboarding] Error al unirse:', err);
+      toast.error('Error al unirse a la comunidad. Inténtalo de nuevo.');
       setLoading(false);
-      return;
     }
-
-    const comunidadDoc = snap.docs[0];
-
-    await updateDoc(doc(db, 'perfiles', perfil.id), {
-      comunidad_id: comunidadDoc.id,
-      numero_piso: piso || null,
-      updated_at: new Date().toISOString(),
-    });
-
-    toast.success('Te has unido a la comunidad');
-    router.replace('/inicio');
-    // Force reload to refresh perfil
-    window.location.href = '/inicio';
   }
 
   async function handleCrear(e: React.FormEvent) {
