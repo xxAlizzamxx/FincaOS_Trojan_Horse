@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Clock, TrendingUp, ChevronRight, Plus, Share2, Copy, Scale } from 'lucide-react';
+import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, TrendingUp, ChevronRight, Plus, Share2, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, limit, getDocs, doc, getDoc,
-  QuerySnapshot, DocumentData, QueryDocumentSnapshot,
+  DocumentData, QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Incidencia, Anuncio, Mediacion } from '@/types/database';
+import { Incidencia, Anuncio } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -324,7 +324,7 @@ export default function InicioPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm text-finca-dark truncate">{inc.titulo}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {(inc.categoria as any)?.nombre} • {formatDistanceToNow(new Date(inc.created_at), { addSuffix: true, locale: es })}
+                          {inc.categoria?.nombre} • {formatDistanceToNow(new Date(inc.created_at), { addSuffix: true, locale: es })}
                         </p>
                       </div>
                       <Badge className={cn('text-[10px] border shrink-0', estado.color)}>{estado.label}</Badge>
