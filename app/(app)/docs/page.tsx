@@ -21,7 +21,6 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -458,7 +457,9 @@ export default function DocsPage() {
                   </span>
                   <span>{progreso}%</span>
                 </div>
-                <Progress value={progreso} className="h-2" />
+                <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-finca-coral transition-all duration-300 rounded-full" style={{ width: `${progreso}%` }} />
+                </div>
               </div>
             )}
 

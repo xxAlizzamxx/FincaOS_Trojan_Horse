@@ -16,7 +16,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -255,10 +254,9 @@ export default function VotosPage() {
                           </div>
                         </div>
                         {(yaVote || !votacion.activa) && (
-                          <Progress
-                            value={pct}
-                            className="h-1.5"
-                          />
+                          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                            <div className="h-full bg-finca-coral rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                          </div>
                         )}
                         {(yaVote || !votacion.activa) && (
                           <p className="text-[10px] text-muted-foreground mt-1">
