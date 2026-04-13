@@ -4,8 +4,9 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Wallet, Plus, Check, Clock, Loader2,
-  CalendarDays, TrendingDown, Users, ArrowLeft,
+  CalendarDays, TrendingDown, Users, ArrowLeft, CreditCard,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import {
   collection, query, where, getDocs, getDoc, doc,
@@ -73,6 +74,7 @@ export default function CuotasPage() {
   const [vecinosConPago, setVecinosConPago] = useState<VecinoConPago[]>([]);
   const [sheetLoading, setSheetLoading] = useState(false);
   const [marcando, setMarcando] = useState<string | null>(null); // userId being updated
+  const [pagandoStripe, setPagandoStripe] = useState<string | null>(null); // cuotaId being paid
 
   /* ── Fetch cuotas + current user's pago for each ── */
   useEffect(() => {
@@ -196,6 +198,34 @@ export default function CuotasPage() {
       console.error('Error marking as paid:', err);
     } finally {
       setMarcando(null);
+    }
+  }
+
+  /* ── Stripe payment (vecino) ── */
+  async function pagarCuotaConStripe(cuota: Cuota) {
+    setPagandoStripe(cuota.id);
+    try {
+      const res = await fetch('/api/stripe/create-checkout-session', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          monto:        cuota.monto,
+          tipo:         'cuota',
+          referencia_id: cuota.id,
+          usuario_id:   user!.uid,
+          comunidad_id: perfil!.comunidad_id,
+          descripcion:  `Cuota: ${cuota.nombre}`,
+          email:        user?.email ?? undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido');
+      if (data.url) window.location.href = data.url;
+    } catch (err: any) {
+      console.error('[Stripe] Error:', err);
+      toast.error(err.message ?? 'No se pudo iniciar el pago');
+    } finally {
+      setPagandoStripe(null);
     }
   }
 
@@ -375,6 +405,21 @@ export default function CuotasPage() {
                           >
                             <Users className="w-3 h-3 mr-1" />
                             Gestionar
+                          </Button>
+                        )}
+
+                        {!esAdmin && !pagado && (
+                          <Button
+                            size="sm"
+                            disabled={pagandoStripe === cuota.id}
+                            onClick={() => pagarCuotaConStripe(cuota)}
+                            className="h-7 text-xs px-2.5 rounded-lg bg-finca-coral hover:bg-finca-coral/90 text-white"
+                          >
+                            {pagandoStripe === cuota.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <><CreditCard className="w-3 h-3 mr-1" />Pagar</>
+                            )}
                           </Button>
                         )}
                       </div>

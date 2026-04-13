@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Loader2, History, CheckCircle2,
-  Euro, CircleCheck, ClipboardList,
+  Euro, CircleCheck, ClipboardList, CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -53,17 +53,19 @@ export default function MediacionDetailPage() {
   const [accionando, setAccionando] = useState(false);
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [precioInput, setPrecioInput] = useState('');
+  const [pagandoStripe, setPagandoStripe] = useState(false);
 
   /* ── Roles derivados ── */
-  const esMediador  = perfil?.rol === 'mediador';
-  const esAdmin     = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
-  const uid         = user?.uid ?? '';
+  const esMediador     = perfil?.rol === 'mediador';
+  const esAdmin        = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
+  const uid            = user?.uid ?? '';
 
   /* ── Estado derivado (actualizado en tiempo real vía local state) ── */
-  const estado      = mediacion?.estado ?? 'solicitada';
-  const estadoCfg   = ESTADO_CFG[estado] ?? ESTADO_CFG.solicitada;
-  const soyAsignado = mediacion?.mediador_id === uid;
-  const sinAsignar  = !mediacion?.mediador_id;
+  const estado         = mediacion?.estado ?? 'solicitada';
+  const estadoCfg      = ESTADO_CFG[estado] ?? ESTADO_CFG.solicitada;
+  const soyAsignado    = mediacion?.mediador_id === uid;
+  const sinAsignar     = !mediacion?.mediador_id;
+  const soySolicitante = uid === ((mediacion as any)?.solicitado_por ?? (mediacion as any)?.denunciante_id);
   const historial   = mediacion?.historial ?? [];
 
   /* ── Fetch ── */
@@ -181,6 +183,36 @@ export default function MediacionDetailPage() {
       fetchMediacion();
     } catch { toast.error('Error al registrar el pago'); }
     finally { setAccionando(false); }
+  }
+
+  /* ─── Stripe payment (solicitante) ─── */
+  async function pagarMediacionConStripe() {
+    if (!mediacion || !perfil) return;
+    setPagandoStripe(true);
+    try {
+      const monto = mediacion.precio_acordado ?? mediacion.precio_min ?? 0;
+      const res = await fetch('/api/stripe/create-checkout-session', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          monto,
+          tipo:         'mediacion',
+          referencia_id: id,
+          usuario_id:   uid,
+          comunidad_id: perfil.comunidad_id,
+          descripcion:  'Servicio de mediación profesional',
+          email:        user?.email ?? undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido');
+      if (data.url) window.location.href = data.url;
+    } catch (err: any) {
+      console.error('[Stripe Mediacion]', err);
+      toast.error(err.message ?? 'No se pudo iniciar el pago');
+    } finally {
+      setPagandoStripe(false);
+    }
   }
 
   /* ─── Loading ─── */
@@ -401,6 +433,31 @@ export default function MediacionDetailPage() {
                 {accionando
                   ? <Loader2 className="w-4 h-4 animate-spin" />
                   : <><CheckCircle2 className="w-4 h-4 mr-2" />Marcar como pagado</>}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* [Solicitante] Pagar con Stripe — estado: finalizada + pago pendiente */}
+        {soySolicitante && estado === 'finalizada' && !pagado && mediacion.precio_acordado != null && (
+          <Card className="border-0 shadow-sm border-l-4 border-l-finca-coral bg-finca-peach/10">
+            <CardContent className="p-4 space-y-3">
+              <p className="text-xs font-semibold text-finca-coral uppercase tracking-wide">
+                Pago pendiente
+              </p>
+              <p className="text-sm text-muted-foreground">
+                La mediación ha concluido. Realiza el pago de{' '}
+                <span className="font-semibold text-finca-dark">{formatMonto(mediacion.precio_acordado)}</span>{' '}
+                para cerrar el proceso.
+              </p>
+              <Button
+                className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-11"
+                onClick={pagarMediacionConStripe}
+                disabled={pagandoStripe}
+              >
+                {pagandoStripe
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <><CreditCard className="w-4 h-4 mr-2" />Pagar {formatMonto(mediacion.precio_acordado)}</>}
               </Button>
             </CardContent>
           </Card>
