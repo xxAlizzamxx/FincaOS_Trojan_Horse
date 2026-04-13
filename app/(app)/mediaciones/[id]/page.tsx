@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -244,11 +245,14 @@ export default function MediacionDetailPage() {
           <CardContent className="p-4 space-y-3">
             {solicitante && (
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center shrink-0">
-                  <span className="text-sm font-bold text-finca-coral">
-                    {solicitante.nombre_completo.charAt(0)}
-                  </span>
-                </div>
+                {/* Si es anónimo y el que ve no es mediador/admin, ocultamos la foto */}
+                {mediacion.es_anonimo && !esMediador && !esAdmin ? (
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0 ring-2 ring-gray-300">
+                    <span className="text-sm font-bold text-muted-foreground">?</span>
+                  </div>
+                ) : (
+                  <AvatarVecino perfil={solicitante} size="md" />
+                )}
                 <div>
                   <p className="text-sm font-medium text-finca-dark">
                     {mediacion.es_anonimo && !esMediador && !esAdmin
