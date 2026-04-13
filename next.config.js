@@ -7,6 +7,9 @@ const nextConfig = {
     unoptimized: true,
     remotePatterns: [
       { protocol: 'https', hostname: 'res.cloudinary.com' },
+      // Fotos de perfil de Google (registro con Google)
+      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
+      { protocol: 'https', hostname: '*.googleusercontent.com' },
     ],
   },
   // Aumentar el límite del body parser para Route Handlers y Server Actions.
