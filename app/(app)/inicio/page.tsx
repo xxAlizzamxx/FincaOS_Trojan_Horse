@@ -6,7 +6,7 @@ import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, TrendingUp, Ch
 import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, limit, getDocs, doc, getDoc,
-  DocumentData, QueryDocumentSnapshot,
+  QuerySnapshot, DocumentData, QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -55,35 +55,30 @@ export default function InicioPage() {
 
   async function fetchData() {
     const rol = perfil?.rol;
-    const uid = user?.uid;
     const canSeeMediaciones = rol === 'mediador' || rol === 'admin' || rol === 'presidente';
 
-    const baseQueries: Promise<QuerySnapshot<DocumentData>>[] = [
-      getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(5))),
-      getDocs(query(collection(db, 'anuncios'), where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3))),
-      getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId))),
-    ];
+    // Queries con tipos explícitos para evitar ambigüedad en el build
+    const incSnapPromise:    Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(5)));
+    const anuncSnapPromise:  Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'anuncios'),   where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3)));
+    const allIncSnapPromise: Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId)));
 
-    if (canSeeMediaciones) {
-      baseQueries.push(
-        getDocs(query(collection(db, 'mediaciones'), where('comunidad_id', '==', comunidadId), where('estado', '==', 'solicitada'))),
-        getDocs(query(collection(db, 'mediaciones'), where('comunidad_id', '==', comunidadId))),
-      );
-    }
+    const [incSnap, anuncSnap, allIncSnap] = await Promise.all([
+      incSnapPromise,
+      anuncSnapPromise,
+      allIncSnapPromise,
+    ]);
 
-    const [incSnap, anuncSnap, allIncSnap, ...mediSnaps] = await Promise.all(baseQueries);
-
-    const incs = incSnap.docs.map(
+    const incs: Incidencia[] = incSnap.docs.map(
       (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Incidencia),
     );
-    const anuncs = anuncSnap.docs.map(
+    const anuncs: Anuncio[] = anuncSnap.docs.map(
       (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Anuncio),
     );
-    const allIncs = allIncSnap.docs.map(
+    const allIncs: DocumentData[] = allIncSnap.docs.map(
       (d: QueryDocumentSnapshot<DocumentData>) => d.data(),
     );
 
-    // Fetch autor names for incidencias
+    // Fetch autor y categoria para cada incidencia
     for (const inc of incs) {
       if (inc.autor_id) {
         const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
@@ -103,18 +98,20 @@ export default function InicioPage() {
     setAnuncios(anuncs);
 
     const abiertas = allIncs.filter(
-      (i: DocumentData) => !['resuelta', 'cerrada'].includes(i.estado as string),
+      (i: DocumentData) => !['resuelta', 'cerrada'].includes(i['estado'] as string),
     ).length;
     const resueltas = allIncs.filter(
-      (i: DocumentData) => i.estado === 'resuelta',
+      (i: DocumentData) => i['estado'] === 'resuelta',
     ).length;
     setStats({ abiertas, resueltas, vecinos: 0 });
 
-    if (mediSnaps.length >= 2) {
-      setMediacionesCount({
-        disponibles: mediSnaps[0].size,
-        total: mediSnaps[1].size,
-      });
+    // Mediaciones (solo para mediador / admin / presidente)
+    if (canSeeMediaciones) {
+      const [dispSnap, totalSnap] = await Promise.all([
+        getDocs(query(collection(db, 'mediaciones'), where('comunidad_id', '==', comunidadId), where('estado', '==', 'solicitada'))) as Promise<QuerySnapshot<DocumentData>>,
+        getDocs(query(collection(db, 'mediaciones'), where('comunidad_id', '==', comunidadId))) as Promise<QuerySnapshot<DocumentData>>,
+      ]);
+      setMediacionesCount({ disponibles: dispSnap.size, total: totalSnap.size });
     }
 
     setDataLoading(false);
