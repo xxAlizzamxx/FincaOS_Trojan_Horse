@@ -2,18 +2,31 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, User } from 'lucide-react';
+import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users } from 'lucide-react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 export function BottomTabBar() {
   const pathname = usePathname();
+  const { perfil, user } = useAuth();
+  const [imgError, setImgError] = useState(false);
+
+  const fotoUrl  = perfil?.avatar_url || user?.photoURL || null;
+  const hasPhoto = !!fotoUrl && !imgError;
+  const iniciales = perfil?.nombre_completo
+    ?.split(' ')
+    .slice(0, 2)
+    .map((n: string) => n[0]?.toUpperCase() ?? '')
+    .join('') || '?';
+
+  const isPerfilActive = pathname.startsWith('/perfil');
 
   const tabs = [
     { href: '/inicio',      icon: Home,        label: 'Inicio'      },
     { href: '/incidencias', icon: AlertCircle, label: 'Incidencias' },
     { href: '/nueva',       icon: Plus,        label: 'Nuevo', isFab: true },
     { href: '/comunidad',   icon: Users,       label: 'Comunidad'   },
-    { href: '/perfil',      icon: User,        label: 'Perfil'      },
   ];
 
   return (
@@ -61,6 +74,43 @@ export function BottomTabBar() {
             </Link>
           );
         })}
+
+        {/* Tab Perfil — muestra foto real en vez del icono genérico */}
+        <Link
+          href="/perfil"
+          className="flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-xl transition-colors"
+        >
+          <div
+            className={cn(
+              'w-6 h-6 rounded-full overflow-hidden flex items-center justify-center font-bold text-[10px] ring-2 transition-all',
+              isPerfilActive
+                ? 'ring-finca-coral'
+                : 'ring-gray-300',
+              !hasPhoto && 'bg-finca-peach text-finca-coral',
+            )}
+          >
+            {hasPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={fotoUrl!}
+                alt="Mi perfil"
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover"
+                onError={() => setImgError(true)}
+              />
+            ) : (
+              <span>{iniciales}</span>
+            )}
+          </div>
+          <span
+            className={cn(
+              'text-[10px] font-medium transition-colors',
+              isPerfilActive ? 'text-finca-coral' : 'text-finca-gray'
+            )}
+          >
+            Perfil
+          </span>
+        </Link>
       </div>
     </nav>
   );

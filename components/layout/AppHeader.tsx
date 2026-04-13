@@ -8,10 +8,20 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@/lib/utils';
 
 export function AppHeader() {
-  const { perfil } = useAuth();
+  const { perfil, user } = useAuth();
   const [unread, setUnread] = useState(0);
+  const [imgError, setImgError] = useState(false);
+
+  const fotoUrl  = perfil?.avatar_url || user?.photoURL || null;
+  const hasPhoto = !!fotoUrl && !imgError;
+  const iniciales = perfil?.nombre_completo
+    ?.split(' ')
+    .slice(0, 2)
+    .map((n: string) => n[0]?.toUpperCase() ?? '')
+    .join('') || '?';
 
   useEffect(() => {
     if (!perfil?.id) return;
@@ -40,12 +50,15 @@ export function AppHeader() {
           className="object-contain"
           priority
         />
+
         <div className="flex items-center gap-2">
           {perfil?.comunidad && (
-            <span className="text-xs text-muted-foreground bg-finca-peach/50 px-2 py-1 rounded-full max-w-[140px] truncate">
+            <span className="text-xs text-muted-foreground bg-finca-peach/50 px-2 py-1 rounded-full max-w-[120px] truncate">
               {(perfil.comunidad as any).nombre}
             </span>
           )}
+
+          {/* Notificaciones */}
           <Link href="/notificaciones">
             <Button variant="ghost" size="icon" className="relative w-9 h-9">
               <Bell className="w-5 h-5 text-finca-dark" />
@@ -55,6 +68,29 @@ export function AppHeader() {
                 </span>
               )}
             </Button>
+          </Link>
+
+          {/* Avatar del usuario → acceso directo al perfil */}
+          <Link href="/perfil">
+            <div
+              className={cn(
+                'w-8 h-8 rounded-full overflow-hidden flex items-center justify-center font-bold text-xs ring-2 ring-finca-coral/40 transition-all hover:ring-finca-coral active:scale-95',
+                !hasPhoto && 'bg-finca-peach text-finca-coral',
+              )}
+            >
+              {hasPhoto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={fotoUrl!}
+                  alt="Mi perfil"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                  onError={() => setImgError(true)}
+                />
+              ) : (
+                <span>{iniciales}</span>
+              )}
+            </div>
           </Link>
         </div>
       </div>
