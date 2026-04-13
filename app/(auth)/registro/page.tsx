@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Eye, EyeOff, UserPlus, Building2 } from 'lucide-react';
-import { createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithRedirect, onAuthStateChanged } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
@@ -35,54 +35,13 @@ export default function RegistroPage() {
     if (code) setCodigoComunidad(code.toUpperCase());
   }, [searchParams]);
 
-  // Detectar autenticación por redirect de Google
+  // Redirigir si el usuario ya está autenticado
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!firebaseUser) return;
-
-      // Recuperar código de comunidad guardado antes del redirect
-      const savedCode = sessionStorage.getItem('registro_codigo_comunidad') ?? '';
-      if (savedCode) sessionStorage.removeItem('registro_codigo_comunidad');
-
-      try {
-        let comunidadId: string | null = null;
-        if (savedCode) {
-          const q = query(collection(db, 'comunidades'), where('codigo', '==', savedCode.toUpperCase()));
-          const snap = await getDocs(q);
-          if (!snap.empty) comunidadId = snap.docs[0].id;
-        }
-
-        const perfilSnap = await getDoc(doc(db, 'perfiles', firebaseUser.uid));
-        if (!perfilSnap.exists()) {
-          await setDoc(doc(db, 'perfiles', firebaseUser.uid), {
-            comunidad_id: comunidadId,
-            nombre_completo: firebaseUser.displayName || 'Sin nombre',
-            numero_piso: null,
-            rol: 'vecino',
-            avatar_url: firebaseUser.photoURL || null,
-            telefono: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-          window.location.href = comunidadId ? '/inicio' : '/onboarding';
-        } else {
-          const data = perfilSnap.data();
-          if (!data?.comunidad_id && comunidadId) {
-            await updateDoc(doc(db, 'perfiles', firebaseUser.uid), {
-              comunidad_id: comunidadId,
-              updated_at: new Date().toISOString(),
-            });
-            window.location.href = '/inicio';
-          } else {
-            window.location.href = data?.comunidad_id ? '/inicio' : '/onboarding';
-          }
-        }
-      } catch (err: any) {
-        console.error('[Auth] Error en registro Google:', err.code, err.message);
-        toast.error('Error al registrarse con Google');
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        window.location.href = '/inicio';
       }
     });
-
     return () => unsubscribe();
   }, []);
   const [nombreComunidad, setNombreComunidad] = useState('');
@@ -92,13 +51,48 @@ export default function RegistroPage() {
   async function handleGoogleRegistro() {
     setLoading(true);
     try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const firebaseUser = result.user;
+
+      // Buscar comunidad por código si se proporcionó
+      let comunidadId: string | null = null;
       if (codigoComunidad) {
-        sessionStorage.setItem('registro_codigo_comunidad', codigoComunidad.toUpperCase());
+        const q = query(collection(db, 'comunidades'), where('codigo', '==', codigoComunidad.toUpperCase()));
+        const snap = await getDocs(q);
+        if (!snap.empty) comunidadId = snap.docs[0].id;
       }
-      await signInWithRedirect(auth, googleProvider);
+
+      // Crear o actualizar perfil
+      const perfilSnap = await getDoc(doc(db, 'perfiles', firebaseUser.uid));
+      if (!perfilSnap.exists()) {
+        await setDoc(doc(db, 'perfiles', firebaseUser.uid), {
+          comunidad_id: comunidadId,
+          nombre_completo: firebaseUser.displayName || 'Sin nombre',
+          numero_piso: null,
+          rol: 'vecino',
+          avatar_url: firebaseUser.photoURL || null,
+          telefono: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        window.location.href = comunidadId ? '/inicio' : '/onboarding';
+      } else {
+        const data = perfilSnap.data();
+        if (!data?.comunidad_id && comunidadId) {
+          await updateDoc(doc(db, 'perfiles', firebaseUser.uid), {
+            comunidad_id: comunidadId,
+            updated_at: new Date().toISOString(),
+          });
+          window.location.href = '/inicio';
+        } else {
+          window.location.href = data?.comunidad_id ? '/inicio' : '/onboarding';
+        }
+      }
     } catch (err: any) {
-      console.error('[Firebase Auth] Error al iniciar redirect:', err.code, err.message);
-      toast.error('Error al iniciar con Google');
+      console.error('[Auth] Error en registro Google:', err.code, err.message);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        toast.error('Error al registrarse con Google');
+      }
       setLoading(false);
     }
   }
