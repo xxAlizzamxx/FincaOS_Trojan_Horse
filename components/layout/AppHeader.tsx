@@ -1,44 +1,41 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Bell } from 'lucide-react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
 import { SoundToggle } from '@/components/ui/sound-toggle';
+import { NotificationsPanel } from '@/components/layout/NotificationsPanel';
 import { useAuth } from '@/hooks/useAuth';
+import { useNotifications } from '@/hooks/useNotifications';
 import { cn } from '@/lib/utils';
 
 export function AppHeader() {
   const { perfil, user } = useAuth();
-  const [unread, setUnread] = useState(0);
-  const [imgError, setImgError] = useState(false);
+  const { notifications, unreadCount, markAllRead } = useNotifications(20);
 
-  const fotoUrl  = perfil?.avatar_url || user?.photoURL || null;
-  const hasPhoto = !!fotoUrl && !imgError;
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [imgError, setImgError]   = useState(false);
+
+  const fotoUrl   = perfil?.avatar_url || user?.photoURL || null;
+  const hasPhoto  = !!fotoUrl && !imgError;
   const iniciales = perfil?.nombre_completo
     ?.split(' ')
     .slice(0, 2)
     .map((n: string) => n[0]?.toUpperCase() ?? '')
     .join('') || '?';
 
-  useEffect(() => {
-    if (!perfil?.id) return;
+  const lastRead = perfil?.notificaciones_last_read ?? '1970-01-01T00:00:00.000Z';
 
-    const q = query(
-      collection(db, 'notificaciones'),
-      where('usuario_id', '==', perfil.id),
-      where('leida', '==', false)
-    );
-
-    const unsubscribe = onSnapshot(q, (snap) => {
-      setUnread(snap.size);
-    });
-
-    return () => unsubscribe();
-  }, [perfil?.id]);
+  function handleBellClick() {
+    const opening = !panelOpen;
+    setPanelOpen(opening);
+    /* Marcar como leídas al abrir el panel */
+    if (opening && unreadCount > 0) {
+      markAllRead();
+    }
+  }
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-border safe-top">
@@ -62,19 +59,38 @@ export function AppHeader() {
           {/* Sonido */}
           <SoundToggle size="sm" />
 
-          {/* Notificaciones */}
-          <Link href="/notificaciones">
-            <Button variant="ghost" size="icon" className="relative w-9 h-9">
-              <Bell className="w-5 h-5 text-finca-dark" />
-              {unread > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-finca-coral text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                  {unread > 9 ? '9+' : unread}
+          {/* Campana — posición relativa para el panel flotante */}
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative w-9 h-9"
+              onClick={handleBellClick}
+              aria-label="Notificaciones"
+              aria-expanded={panelOpen}
+            >
+              <Bell className={cn('w-5 h-5', unreadCount > 0 ? 'text-finca-coral' : 'text-finca-dark')} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-finca-coral text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 pointer-events-none">
+                  {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
             </Button>
-          </Link>
 
-          {/* Avatar del usuario → acceso directo al perfil */}
+            {/* Panel flotante de notificaciones */}
+            {panelOpen && perfil && (
+              <NotificationsPanel
+                notifications={notifications}
+                unreadCount={unreadCount}
+                onMarkAllRead={markAllRead}
+                onClose={() => setPanelOpen(false)}
+                lastRead={lastRead}
+                currentUserId={perfil.id}
+              />
+            )}
+          </div>
+
+          {/* Avatar → perfil */}
           <Link href="/perfil">
             <div
               className={cn(

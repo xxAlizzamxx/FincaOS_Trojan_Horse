@@ -9,6 +9,7 @@ import { collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
 import { FX } from '@/lib/sound/gsapEffects';
+import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,13 +37,21 @@ export default function NuevoAnuncioPage() {
     setLoading(true);
 
     try {
-      await addDoc(collection(db, 'anuncios'), {
+      const ref = await addDoc(collection(db, 'anuncios'), {
         comunidad_id: perfil.comunidad_id,
         autor_id: perfil.id,
         titulo: titulo.trim(),
         contenido: contenido.trim(),
         fijado,
         publicado_at: new Date().toISOString(),
+      });
+      void crearNotificacionComunidad(perfil.comunidad_id, {
+        tipo:       'anuncio',
+        titulo:     titulo.trim(),
+        mensaje:    `Publicado por ${perfil.nombre_completo}`,
+        created_by: perfil.id,
+        related_id: ref.id,
+        link:       '/comunidad',
       });
       playWithEffect('publicacion_tablon', FX.tablon, submitBtnRef.current);
       setEnviado(true);
