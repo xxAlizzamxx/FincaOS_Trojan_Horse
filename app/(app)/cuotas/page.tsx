@@ -25,6 +25,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { cn } from '@/lib/utils';
 import { format, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -408,7 +409,7 @@ export default function CuotasPage() {
                           </Button>
                         )}
 
-                        {!esAdmin && !pagado && (
+                        {!pagado && (
                           <Button
                             size="sm"
                             disabled={pagandoStripe === cuota.id}
@@ -418,7 +419,7 @@ export default function CuotasPage() {
                             {pagandoStripe === cuota.id ? (
                               <Loader2 className="w-3 h-3 animate-spin" />
                             ) : (
-                              <><CreditCard className="w-3 h-3 mr-1" />Pagar</>
+                              <><CreditCard className="w-3 h-3 mr-1" />Pagar cuota</>
                             )}
                           </Button>
                         )}
@@ -482,26 +483,11 @@ export default function CuotasPage() {
               <div className="divide-y divide-border/40">
                 {vecinosConPago.map(({ perfil: v, pago }) => {
                   const pagado = pago?.estado === 'pagado';
-                  const initials = v.nombre_completo
-                    .split(' ')
-                    .slice(0, 2)
-                    .map((n) => n[0])
-                    .join('')
-                    .toUpperCase();
 
                   return (
                     <div key={v.id} className="px-5 py-3 flex items-center gap-3">
-                      {/* Avatar with initials */}
-                      <div
-                        className={cn(
-                          'w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
-                          pagado
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-muted text-muted-foreground',
-                        )}
-                      >
-                        {initials}
-                      </div>
+                      {/* Google photo / initials avatar */}
+                      <AvatarVecino perfil={v} size="sm" />
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
@@ -518,22 +504,38 @@ export default function CuotasPage() {
                         )}
                       </div>
 
-                      {/* Action */}
+                      {/* Actions */}
                       {pagado ? (
                         <Check className="w-5 h-5 text-green-500 shrink-0" />
                       ) : (
-                        <Button
-                          size="sm"
-                          disabled={marcando === v.id}
-                          onClick={() => sheetCuota && marcarPagado(sheetCuota.id, v.id)}
-                          className="h-8 text-xs px-3 rounded-lg bg-green-500 hover:bg-green-600 text-white shrink-0"
-                        >
-                          {marcando === v.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            'Marcar pagado'
-                          )}
-                        </Button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* Stripe pay button */}
+                          <Button
+                            size="sm"
+                            disabled={pagandoStripe === sheetCuota?.id}
+                            onClick={() => sheetCuota && pagarCuotaConStripe(sheetCuota)}
+                            className="h-8 text-xs px-2.5 rounded-lg bg-finca-coral hover:bg-finca-coral/90 text-white"
+                          >
+                            {pagandoStripe === sheetCuota?.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <><CreditCard className="w-3 h-3 mr-1" />Pagar</>
+                            )}
+                          </Button>
+                          {/* Manual mark paid */}
+                          <Button
+                            size="sm"
+                            disabled={marcando === v.id}
+                            onClick={() => sheetCuota && marcarPagado(sheetCuota.id, v.id)}
+                            className="h-8 text-xs px-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white"
+                          >
+                            {marcando === v.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <><Check className="w-3 h-3 mr-1" />Marcar</>
+                            )}
+                          </Button>
+                        </div>
                       )}
                     </div>
                   );

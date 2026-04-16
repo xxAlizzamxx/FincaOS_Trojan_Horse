@@ -1,67 +1,89 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getStripe } from '@/lib/stripe';
-import { getAdminDb } from '@/lib/firebase/admin';
+import Stripe from 'stripe';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+
+  /* ── 1. Validate env ── */
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.error('STRIPE ERROR: Missing STRIPE_SECRET_KEY');
+    return NextResponse.json({ error: 'Missing STRIPE_SECRET_KEY' }, { status: 500 });
+  }
+
+  /* ── 2. Init Stripe ── */
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+  /* ── 3. Parse & validate body ── */
+  let body: any;
   try {
-    const {
-      monto,        // euros (number, e.g. 50.00)
-      tipo,         // 'cuota' | 'mediacion' | 'incidencia'
-      referencia_id,// cuota_id / mediacion_id / incidencia_id
-      usuario_id,
-      comunidad_id,
-      descripcion,  // optional label shown in Stripe
-      email,        // optional — pre-fills Stripe form
-    } = await req.json();
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
 
-    if (!monto || !tipo || !referencia_id || !usuario_id) {
-      return NextResponse.json({ error: 'Faltan parámetros obligatorios' }, { status: 400 });
-    }
+  console.log('BODY:', JSON.stringify(body));
 
-    const origin = req.headers.get('origin') || 'http://localhost:3000';
+  const { monto, tipo, referencia_id, usuario_id, comunidad_id, descripcion, email } = body;
 
-    /* ── 1. Persist pago document in Firestore ── */
+  if (!monto)         return NextResponse.json({ error: 'Falta: monto' },        { status: 400 });
+  if (!tipo)          return NextResponse.json({ error: 'Falta: tipo' },         { status: 400 });
+  if (!referencia_id) return NextResponse.json({ error: 'Falta: referencia_id' },{ status: 400 });
+  if (!usuario_id)    return NextResponse.json({ error: 'Falta: usuario_id' },   { status: 400 });
+
+  /* ── 4. Generate pago ID (independent of Firestore) ── */
+  const pagoId = crypto.randomUUID();
+
+  /* ── 5. Firebase Admin write — NON-FATAL ── */
+  console.log('Intentando guardar en Firestore...');
+  try {
+    const { getAdminDb } = await import('@/lib/firebase/admin');
     const db = getAdminDb();
-    const pagoRef = db.collection('pagos').doc();
-    const pagoId  = pagoRef.id;
-
-    await pagoRef.set({
+    await db.collection('pagos').doc(pagoId).set({
       id:           pagoId,
       usuario_id,
       comunidad_id: comunidad_id ?? null,
       tipo,
       referencia_id,
-      monto,
+      monto:        Number(monto),
       estado:       'pendiente',
       created_at:   new Date().toISOString(),
     });
+    console.log('Firestore pago guardado:', pagoId);
+  } catch (e: any) {
+    console.error('Error Firebase:', e.message);
+    // NOT fatal — Stripe checkout continues regardless
+  }
 
-    /* ── 2. Create Stripe Checkout session ── */
-    const labelMap: Record<string, string> = {
-      cuota:      'Cuota de comunidad',
-      mediacion:  'Servicio de mediación',
-      incidencia: 'Presupuesto de reparación',
-    };
+  /* ── 6. Create Stripe Checkout session — ALWAYS runs ── */
+  console.log('Creando sesión Stripe...');
 
-    const session = await getStripe().checkout.sessions.create({
+  const origin = req.headers.get('origin') || 'https://finca-os-trojan-horse.vercel.app';
+
+  const labelMap: Record<string, string> = {
+    cuota:      'Cuota de comunidad',
+    mediacion:  'Servicio de mediación',
+    incidencia: 'Presupuesto de reparación',
+  };
+
+  try {
+    const session = await stripe.checkout.sessions.create({
       mode:                 'payment',
       payment_method_types: ['card'],
       customer_email:       email ?? undefined,
       metadata: {
-        pago_id:       pagoId,
+        pago_id:      pagoId,
         tipo,
         referencia_id,
         usuario_id,
-        comunidad_id:  comunidad_id ?? '',
+        comunidad_id: comunidad_id ?? '',
       },
       line_items: [
         {
           quantity: 1,
           price_data: {
-            currency:     'eur',
-            unit_amount:  Math.round(monto * 100),  // cents
+            currency:    'eur',
+            unit_amount: Math.round(Number(monto) * 100),
             product_data: {
               name:        descripcion ?? labelMap[tipo] ?? 'Pago FincaOS',
               description: `Referencia: ${referencia_id}`,
@@ -73,9 +95,11 @@ export async function POST(req: NextRequest) {
       cancel_url:  `${origin}/pago/cancelado?tipo=${tipo}&ref=${referencia_id}`,
     });
 
+    console.log('Stripe session creada:', session.id);
     return NextResponse.json({ url: session.url, pago_id: pagoId });
+
   } catch (error: any) {
-    console.error('[create-checkout-session] Error:', error);
-    return NextResponse.json({ error: 'Error al crear la sesión de pago' }, { status: 500 });
+    console.error('STRIPE ERROR:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

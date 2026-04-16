@@ -8,12 +8,22 @@ const PRECACHE_URLS = [
   '/manifest.json',
 ];
 
-// Install: precache shell
+// Install: precache shell — usa fetch individual para que un fallo no bloquee el resto
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.allSettled(
+        PRECACHE_URLS.map((url) =>
+          fetch(url)
+            .then((res) => {
+              // Solo cachear respuestas 2xx; ignorar 401/404/etc.
+              if (res.ok) return cache.put(url, res);
+            })
+            .catch(() => { /* red no disponible — ignorar */ })
+        )
+      )
+    ).then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 // Activate: clean old caches
