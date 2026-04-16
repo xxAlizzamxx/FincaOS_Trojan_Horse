@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useSound } from '@/hooks/useSound';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -88,6 +89,7 @@ function useFakeProgress(active: boolean) {
 export default function DocsPage() {
   const router   = useRouter();
   const { perfil } = useAuth();
+  const { play } = useSound();
 
   const puedeSubir = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
 
@@ -203,6 +205,7 @@ export default function DocsPage() {
         created_at:   new Date().toISOString(),
       });
 
+      play('documento_publicado');
       toast.success('Documento subido correctamente');
       setSheetOpen(false);
       resetSheet();

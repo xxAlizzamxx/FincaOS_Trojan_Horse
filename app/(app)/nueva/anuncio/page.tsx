@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, CircleCheck as CheckCircle2, Pin } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import { collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
+import { useSound } from '@/hooks/useSound';
+import { FX } from '@/lib/sound/gsapEffects';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +19,8 @@ import { Card, CardContent } from '@/components/ui/card';
 export default function NuevoAnuncioPage() {
   const router = useRouter();
   const { perfil } = useAuth();
+  const { playWithEffect } = useSound();
+  const submitBtnRef = useRef<HTMLButtonElement>(null);
   const [titulo, setTitulo] = useState('');
   const [contenido, setContenido] = useState('');
   const [fijado, setFijado] = useState(false);
@@ -40,6 +44,7 @@ export default function NuevoAnuncioPage() {
         fijado,
         publicado_at: new Date().toISOString(),
       });
+      playWithEffect('publicacion_tablon', FX.tablon, submitBtnRef.current);
       setEnviado(true);
     } catch {
       toast.error('Error al publicar el anuncio');
@@ -109,7 +114,7 @@ export default function NuevoAnuncioPage() {
           </CardContent>
         </Card>
 
-        <Button type="submit" className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 font-medium" disabled={loading || !titulo.trim() || !contenido.trim()}>
+        <Button ref={submitBtnRef} type="submit" className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 font-medium" disabled={loading || !titulo.trim() || !contenido.trim()}>
           {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Publicar anuncio'}
         </Button>
       </form>

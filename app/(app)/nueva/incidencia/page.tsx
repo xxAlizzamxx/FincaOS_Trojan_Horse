@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import { collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
+import { useSound } from '@/hooks/useSound';
 import { notificarAdmins } from '@/lib/firebase/notifications';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,6 +44,7 @@ const ubicaciones = [
 export default function NuevaIncidenciaPage() {
   const router = useRouter();
   const { perfil } = useAuth();
+  const { play } = useSound();
   const [loading, setLoading] = useState(false);
   const [enviado, setEnviado] = useState(false);
   const [estimacion, setEstimacion] = useState<{ min: number; max: number } | null>(null);
@@ -174,6 +176,7 @@ export default function NuevaIncidenciaPage() {
         `Reportado por ${perfil.nombre_completo}`,
         `/incidencias/${ref.id}`
       );
+      play('incidencia_creada');
       setEnviado(true);
     } catch {
       toast.error('Error al crear la incidencia');
