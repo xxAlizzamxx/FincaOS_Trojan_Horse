@@ -110,3 +110,28 @@
   .sound-shake { animation: sound-shake 0.30s ease forwards; }
   .sound-glow  { animation: sound-glow  0.60s ease forwards; }
 }
+
+/* ── Micro-zoom global en botones e interactivos ─────────────────────
+   Colocado FUERA de @layer para tener prioridad sobre transition-colors
+   de shadcn/ui y cualquier utilidad de Tailwind.
+   Excluye botones deshabilitados y elementos aria-disabled.
+──────────────────────────────────────────────────────────────────── */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  transition-property: transform, color, background-color, border-color,
+                       box-shadow, opacity, text-decoration-color;
+  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition-duration: 130ms;
+}
+
+button:not(:disabled):hover,
+[role="button"]:not([aria-disabled="true"]):hover {
+  transform: scale(1.04);
+}
+
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(0.94);
+  transition-duration: 70ms;
+  transition-timing-function: ease;
+}

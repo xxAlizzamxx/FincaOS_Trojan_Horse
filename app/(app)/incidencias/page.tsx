@@ -133,7 +133,7 @@ export default function IncidenciasPage() {
       </div>
 
       {loading ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i} className="border-0 shadow-sm">
               <CardContent className="p-4">
@@ -163,7 +163,7 @@ export default function IncidenciasPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {incidenciasFiltradas.map((inc) => {
             const estado = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG['pendiente'];
             return (
