@@ -39,6 +39,29 @@ export interface Perfil {
   created_at: string;
   updated_at: string;
   comunidad?: Comunidad;
+  /** ISO timestamp — última vez que el usuario abrió el panel de notificaciones */
+  notificaciones_last_read?: string;
+}
+
+/* ─── Notificaciones de comunidad ────────────────────────────────────────────
+   Subcolección: comunidades/{comunidadId}/notificaciones/{notifId}
+   Un único documento por evento. La lectura se rastrea en perfil.notificaciones_last_read.
+──────────────────────────────────────────────────────────────────────────── */
+export type TipoNotificacion =
+  | 'incidencia'
+  | 'votacion'
+  | 'anuncio'
+  | 'documento';
+
+export interface NotificacionComunidad {
+  id: string;
+  tipo       : TipoNotificacion;
+  titulo     : string;
+  mensaje    : string;
+  created_at : string;   // ISO — comparar con notificaciones_last_read
+  created_by : string;   // uid del autor (excluido de su propio contador)
+  related_id : string;
+  link       : string;
 }
 
 export interface CategoriaIncidencia {
