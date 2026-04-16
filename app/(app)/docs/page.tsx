@@ -14,6 +14,7 @@ import {
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
+import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -206,6 +207,14 @@ export default function DocsPage() {
       });
 
       play('documento_publicado');
+      void crearNotificacionComunidad(perfil.comunidad_id, {
+        tipo:       'documento',
+        titulo:     nombre,
+        mensaje:    `Subido por ${perfil.nombre_completo}`,
+        created_by: perfil.id,
+        related_id: '',
+        link:       '/docs',
+      });
       toast.success('Documento subido correctamente');
       setSheetOpen(false);
       resetSheet();

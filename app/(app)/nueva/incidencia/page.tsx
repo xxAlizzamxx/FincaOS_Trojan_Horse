@@ -9,7 +9,7 @@ import { db } from '@/lib/firebase/client';
 import { collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
-import { notificarAdmins } from '@/lib/firebase/notifications';
+import { notificarAdmins, crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -176,6 +176,15 @@ export default function NuevaIncidenciaPage() {
         `Reportado por ${perfil.nombre_completo}`,
         `/incidencias/${ref.id}`
       );
+      // Notificación comunidad (tiempo real para todos los vecinos)
+      void crearNotificacionComunidad(perfil.comunidad_id, {
+        tipo:       'incidencia',
+        titulo:     titulo.trim(),
+        mensaje:    `Reportado por ${perfil.nombre_completo}`,
+        created_by: perfil.id,
+        related_id: ref.id,
+        link:       `/incidencias/${ref.id}`,
+      });
       play('incidencia_creada');
       setEnviado(true);
     } catch {

@@ -1,5 +1,6 @@
 import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { db } from './client';
+import type { TipoNotificacion } from '@/types/database';
 
 interface NotificationData {
   usuario_id: string;
@@ -42,6 +43,37 @@ export async function notificarComunidad(comunidadId: string, tipo: Notification
 
 export async function notificarUsuario(userId: string, comunidadId: string, tipo: NotificationData['tipo'], titulo: string, mensaje: string, link?: string) {
   await crearNotificacion({ usuario_id: userId, comunidad_id: comunidadId, tipo, titulo, mensaje, link });
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   NUEVO MODELO — Notificaciones de comunidad (1 doc por evento, no por usuario)
+   Colección: comunidades/{comunidadId}/notificaciones/{auto-id}
+   "No leída" se determina en cliente comparando created_at con
+   perfil.notificaciones_last_read. No hay campo "leida" por documento.
+───────────────────────────────────────────────────────────────────────────── */
+
+interface NotificacionComunidadData {
+  tipo:       TipoNotificacion;
+  titulo:     string;
+  mensaje:    string;
+  created_by: string;   // uid del autor (se excluye del badge de no leídas)
+  related_id: string;   // id del objeto original
+  link:       string;   // ruta de navegación
+}
+
+/**
+ * Crea UNA notificación en la subcolección de la comunidad.
+ * Todos los miembros la ven — la lectura se controla por timestamp en perfil.
+ * Es fire-and-forget: llámala sin await para no bloquear la acción del usuario.
+ */
+export async function crearNotificacionComunidad(
+  comunidadId: string,
+  data: NotificacionComunidadData,
+): Promise<void> {
+  await addDoc(
+    collection(db, 'comunidades', comunidadId, 'notificaciones'),
+    { ...data, created_at: new Date().toISOString() },
+  );
 }
 
 /** Notifica a todos los mediadores de la comunidad sobre una nueva solicitud */

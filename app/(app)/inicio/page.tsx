@@ -322,7 +322,7 @@ export default function InicioPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {incidencias.map((inc) => {
               const estado = estadoConfig[inc.estado] || estadoConfig.pendiente;
               return (

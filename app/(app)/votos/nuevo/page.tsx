@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,7 +58,7 @@ export default function NuevaVotacionPage() {
 
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'votaciones'), {
+      const ref = await addDoc(collection(db, 'votaciones'), {
         comunidad_id: perfil.comunidad_id,
         created_by: perfil.id,
         titulo: titulo.trim(),
@@ -68,6 +69,14 @@ export default function NuevaVotacionPage() {
         quorum_requerido: quorumRequerido ? parseFloat(quorumRequerido) : null,
         created_at: new Date().toISOString(),
         cierre_at: null,
+      });
+      void crearNotificacionComunidad(perfil.comunidad_id, {
+        tipo:       'votacion',
+        titulo:     titulo.trim(),
+        mensaje:    `Nueva votación abierta — participa ahora`,
+        created_by: perfil.id,
+        related_id: ref.id,
+        link:       `/votos`,
       });
       setEnviado(true);
     } catch {

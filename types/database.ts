@@ -39,13 +39,15 @@ export interface Perfil {
   created_at: string;
   updated_at: string;
   comunidad?: Comunidad;
-  /** ISO timestamp — última vez que el usuario abrió el panel de notificaciones */
+  /** ISO timestamp: última vez que el usuario leyó las notificaciones.
+   *  Notificación no leída = created_at > notificaciones_last_read */
   notificaciones_last_read?: string;
 }
 
 /* ─── Notificaciones de comunidad ────────────────────────────────────────────
    Subcolección: comunidades/{comunidadId}/notificaciones/{notifId}
-   Un único documento por evento. La lectura se rastrea en perfil.notificaciones_last_read.
+   Un único documento por evento — NO uno por vecino.
+   "No leída" se determina comparando created_at con perfil.notificaciones_last_read.
 ──────────────────────────────────────────────────────────────────────────── */
 export type TipoNotificacion =
   | 'incidencia'
@@ -54,14 +56,14 @@ export type TipoNotificacion =
   | 'documento';
 
 export interface NotificacionComunidad {
-  id: string;
+  id         : string;
   tipo       : TipoNotificacion;
   titulo     : string;
   mensaje    : string;
   created_at : string;   // ISO — comparar con notificaciones_last_read
   created_by : string;   // uid del autor (excluido de su propio contador)
-  related_id : string;
-  link       : string;
+  related_id : string;   // id del objeto original
+  link       : string;   // ruta de navegación al pulsar
 }
 
 export interface CategoriaIncidencia {
