@@ -1,19 +1,6 @@
 'use client';
 
-/**
- * useNotifications — hook central de notificaciones en tiempo real.
- *
- * Arquitectura:
- *   - Escucha onSnapshot sobre comunidades/{id}/notificaciones (subcolección)
- *   - 1 documento por evento → no se duplica por usuario
- *   - "No leída" = created_at > perfil.notificaciones_last_read
- *   - markAllRead() → actualiza perfil.notificaciones_last_read = ahora
- *
- * Uso:
- *   const { notifications, unreadCount, markAllRead, loading } = useNotifications();
- */
-
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   collection, query, orderBy, limit,
   onSnapshot, doc, updateDoc,
@@ -22,33 +9,38 @@ import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import type { NotificacionComunidad } from '@/types/database';
 
+/**
+ * useNotifications
+ *
+ * Escucha la subcolección comunidades/{id}/notificaciones en tiempo real.
+ * "No leída" = created_at > perfil.notificaciones_last_read AND created_by !== userId.
+ * markAllRead() actualiza el timestamp en Firestore de forma optimista.
+ */
 export function useNotifications(maxItems = 20) {
-  const { perfil } = useAuth();
+  const { perfil, user } = useAuth();
 
   const [notifications, setNotifications] = useState<NotificacionComunidad[]>([]);
   const [loading, setLoading]             = useState(true);
 
-  /* ── Timestamp de última lectura (local state para actualización optimista) ── */
+  /* lastRead arranca desde el valor persistido en perfil (o epoch 0 si no existe) */
   const [lastRead, setLastRead] = useState<string>(
-    perfil?.notificaciones_last_read ?? '1970-01-01T00:00:00.000Z',
+    () => perfil?.notificaciones_last_read ?? new Date(0).toISOString(),
   );
 
-  /* Sincronizar si el perfil llega con un valor más reciente */
+  /* Sincronizar lastRead cuando el perfil llega / cambia */
   useEffect(() => {
     if (perfil?.notificaciones_last_read) {
       setLastRead(perfil.notificaciones_last_read);
     }
   }, [perfil?.notificaciones_last_read]);
 
-  /* ── Listener en tiempo real ── */
+  /* Listener en tiempo real sobre la subcolección de la comunidad */
   useEffect(() => {
-    if (!perfil?.comunidad_id) {
-      setLoading(false);
-      return;
-    }
+    const comunidadId = perfil?.comunidad_id;
+    if (!comunidadId) { setLoading(false); return; }
 
     const q = query(
-      collection(db, 'comunidades', perfil.comunidad_id, 'notificaciones'),
+      collection(db, 'comunidades', comunidadId, 'notificaciones'),
       orderBy('created_at', 'desc'),
       limit(maxItems),
     );
@@ -61,40 +53,33 @@ export function useNotifications(maxItems = 20) {
         );
         setLoading(false);
       },
-      (err) => {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[useNotifications] onSnapshot error:', err.message);
-        }
-        setLoading(false);
-      },
+      () => setLoading(false),
     );
 
     return () => unsub();
   }, [perfil?.comunidad_id, maxItems]);
 
-  /* ── Contador de no leídas (reactivo a notifications + lastRead) ── */
+  /* Contador de no leídas: creadas después de lastRead y no por el propio usuario */
   const unreadCount = useMemo(() => {
-    if (!perfil?.id) return 0;
+    if (!user?.uid) return 0;
     return notifications.filter(
-      (n) => n.created_at > lastRead && n.created_by !== perfil.id,
+      (n) => n.created_at > lastRead && n.created_by !== user.uid,
     ).length;
-  }, [notifications, lastRead, perfil?.id]);
+  }, [notifications, lastRead, user?.uid]);
 
-  /* ── Marcar todas como leídas ── */
-  const markAllRead = useCallback(async () => {
+  /** Actualiza el timestamp en perfil → badge desaparece al instante */
+  async function markAllRead() {
     if (!perfil?.id) return;
     const now = new Date().toISOString();
-    setLastRead(now); // actualización optimista inmediata (badge desaparece al instante)
+    setLastRead(now); // actualización optimista — UI inmediata
     try {
       await updateDoc(doc(db, 'perfiles', perfil.id), {
         notificaciones_last_read: now,
       });
-    } catch (err) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[useNotifications] markAllRead error:', err);
-      }
+    } catch {
+      /* silent — el badge ya se limpió en local */
     }
-  }, [perfil?.id]);
+  }
 
-  return { notifications, unreadCount, markAllRead, loading } as const;
+  return { notifications, unreadCount, markAllRead, loading, lastRead };
 }
