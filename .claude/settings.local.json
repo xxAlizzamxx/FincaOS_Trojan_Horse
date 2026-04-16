@@ -28,7 +28,8 @@
       "Bash(git -C \"C:/Users/USER/Documents/Batch8-cooweb/Proyecto final cooweb/FincaOS_Trojan_Horse\" add \"app/api/stripe/create-checkout-session/route.ts\")",
       "Bash(git -C 'C:/Users/USER/Documents/Batch8-cooweb/Proyecto final cooweb/FincaOS_Trojan_Horse' commit -m 'fix: explicit logs + guaranteed Stripe execution regardless of Firebase state:*)",
       "Bash(git -C \"C:/Users/USER/Documents/Batch8-cooweb/Proyecto final cooweb/FincaOS_Trojan_Horse\" add \"app/\\(app\\)/cuotas/page.tsx\")",
-      "Bash(git -C 'C:/Users/USER/Documents/Batch8-cooweb/Proyecto final cooweb/FincaOS_Trojan_Horse' commit -m 'feat\\(cuotas\\): Google photo in admin sheet + Pagar cuota button for all users:*)"
+      "Bash(git -C 'C:/Users/USER/Documents/Batch8-cooweb/Proyecto final cooweb/FincaOS_Trojan_Horse' commit -m 'feat\\(cuotas\\): Google photo in admin sheet + Pagar cuota button for all users:*)",
+      "Bash(git -C \"C:/Users/USER/Documents/Batch8-cooweb/Proyecto final cooweb/FincaOS_Trojan_Horse\" remote -v)"
     ]
   }
 }
