@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { CheckCircle2, ArrowLeft } from 'lucide-react';
+import { useSound } from '@/hooks/useSound';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -17,6 +19,13 @@ export default function PagoExitoPage() {
   const tipo    = params.get('tipo') ?? 'cuota';
   const ref     = params.get('ref')  ?? '';
   const cfg     = TIPO_LABEL[tipo] ?? TIPO_LABEL.cuota;
+  const { play } = useSound();
+
+  useEffect(() => {
+    // Breve delay para que el AudioContext esté listo tras la navegación
+    const t = setTimeout(() => play('pago_realizado'), 400);
+    return () => clearTimeout(t);
+  }, [play]);
 
   function volverAlDetalle() {
     router.push(cfg.ruta(ref));
