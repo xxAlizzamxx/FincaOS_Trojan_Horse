@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Upload, FileText, FileSpreadsheet, File,
-  Download, ExternalLink, Loader2, X, CheckCircle2, AlertCircle,
+  Download, ExternalLink, Loader2, X, CheckCircle2, AlertCircle, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -14,6 +14,8 @@ import {
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
+import { useEliminar } from '@/hooks/useEliminar';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -93,6 +95,7 @@ export default function DocsPage() {
   const { play } = useSound();
 
   const puedeSubir = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
+  const { confirmar, dialogProps } = useEliminar();
 
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -352,30 +355,48 @@ export default function DocsPage() {
                   </div>
                 </div>
 
-                {documento.url ? (
-                  (() => {
-                    const { label, icono: Icono } = accionPorTipo(documento.tipo);
-                    return (
-                      <a
-                        href={proxyUrl(documento)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 h-8 px-3 rounded-md text-xs font-medium border border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white transition-colors shrink-0"
-                      >
-                        <Icono className="w-3.5 h-3.5" />
-                        {label}
-                      </a>
-                    );
-                  })()
-                ) : (
-                  <span className="text-xs text-muted-foreground shrink-0">Sin URL</span>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  {documento.url ? (
+                    (() => {
+                      const { label, icono: Icono } = accionPorTipo(documento.tipo);
+                      return (
+                        <a
+                          href={proxyUrl(documento)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 h-8 px-3 rounded-md text-xs font-medium border border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white transition-colors"
+                        >
+                          <Icono className="w-3.5 h-3.5" />
+                          {label}
+                        </a>
+                      );
+                    })()
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Sin URL</span>
+                  )}
+                  {puedeSubir && (
+                    <button
+                      onClick={() => confirmar({
+                        tipo: 'documento',
+                        id: documento.id,
+                        nombre: documento.nombre,
+                        onExito: () => setDocumentos((prev) => prev.filter((d) => d.id !== documento.id)),
+                      })}
+                      className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="Eliminar documento"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
 
               </CardContent>
             </Card>
           );
         })}
       </div>
+
+      <ConfirmDeleteDialog {...dialogProps} />
 
       {/* ── Sheet subida ── */}
       <Sheet open={sheetOpen} onOpenChange={(o) => { setSheetOpen(o); if (!o) resetSheet(); }}>

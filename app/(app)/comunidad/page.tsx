@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Users, Megaphone, Building2, Share2, Vote, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check } from 'lucide-react';
+import { FileText, Users, Megaphone, Building2, Share2, Vote, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import {
@@ -18,6 +18,8 @@ import {
   DocumentData,
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
+import { useEliminar } from '@/hooks/useEliminar';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import { Perfil, Anuncio, Documento, Comunidad } from '@/types/database';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -150,6 +152,7 @@ export default function ComunidadPage() {
   }
 
   const esAdmin = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
+  const { confirmar, dialogProps } = useEliminar();
   const rolLabel: Record<string, string> = {
     vecino:     'Vecino',
     presidente: 'Presidente',
@@ -253,6 +256,20 @@ export default function ComunidadPage() {
                       {anuncio.fijado && <span className="text-[10px] font-semibold text-finca-coral uppercase tracking-wide block mb-0.5">Fijado</span>}
                       <p className="font-semibold text-sm text-finca-dark">{anuncio.titulo}</p>
                     </div>
+                    {esAdmin && (
+                      <button
+                        onClick={() => confirmar({
+                          tipo: 'anuncio',
+                          id: anuncio.id,
+                          nombre: anuncio.titulo,
+                          onExito: () => setAnuncios((prev) => prev.filter((a) => a.id !== anuncio.id)),
+                        })}
+                        className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                        title="Eliminar anuncio"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground leading-relaxed">{anuncio.contenido}</p>
                   <div className="flex items-center justify-between pt-1">
@@ -479,6 +496,8 @@ export default function ComunidadPage() {
           </Button>
         </TabsContent>
       </Tabs>
+
+      <ConfirmDeleteDialog {...dialogProps} />
     </div>
   );
 }

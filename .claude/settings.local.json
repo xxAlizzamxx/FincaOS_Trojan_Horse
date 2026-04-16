@@ -34,7 +34,8 @@
       "Bash(touch \"/mnt/c/Users/USER/Documents/Batch8-cooweb/Proyecto final cooweb/FincaOS_Trojan_Horse/hooks/useNotifications.ts\")",
       "Bash(touch \"/mnt/c/Users/USER/Documents/Batch8-cooweb/Proyecto final cooweb/FincaOS_Trojan_Horse/components/layout/NotificationsPanel.tsx\")",
       "Bash(cmd.exe /c \"dir \\\\\"C:\\\\Users\\\\USER\\\\Documents\\\\Batch8-cooweb\\\\Proyecto final cooweb\\\\FincaOS_Trojan_Horse\\\\hooks\\\\\" 2>&1\")",
-      "Bash(cmd.exe /c \"dir \\\\\"C:\\\\\\\\Users\\\\\\\\USER\\\\\\\\Documents\\\\\\\\Batch8-cooweb\\\\\\\\Proyecto final cooweb\\\\\\\\FincaOS_Trojan_Horse\\\\\\\\hooks\\\\\"\")"
+      "Bash(cmd.exe /c \"dir \\\\\"C:\\\\\\\\Users\\\\\\\\USER\\\\\\\\Documents\\\\\\\\Batch8-cooweb\\\\\\\\Proyecto final cooweb\\\\\\\\FincaOS_Trojan_Horse\\\\\\\\hooks\\\\\"\")",
+      "Bash(cmd.exe /c \"findstr /s /i /l \\\\\"incidencia\\\\\" \\\\\"C:\\\\Users\\\\USER\\\\Documents\\\\Batch8-cooweb\\\\Proyecto final cooweb\\\\FincaOS_Trojan_Horse\\\\app\\\\\\(app\\)\\\\*.tsx\\\\\"\")"
     ]
   }
 }
