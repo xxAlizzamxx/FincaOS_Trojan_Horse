@@ -8,6 +8,7 @@ import { db } from '@/lib/firebase/client';
 import { collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
+import { FX } from '@/lib/sound/gsapEffects';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +19,7 @@ import { Card, CardContent } from '@/components/ui/card';
 export default function NuevoAnuncioPage() {
   const router = useRouter();
   const { perfil } = useAuth();
-  const { playWithCss } = useSound();
+  const { playWithEffect } = useSound();
   const submitBtnRef = useRef<HTMLButtonElement>(null);
   const [titulo, setTitulo] = useState('');
   const [contenido, setContenido] = useState('');
@@ -43,7 +44,7 @@ export default function NuevoAnuncioPage() {
         fijado,
         publicado_at: new Date().toISOString(),
       });
-      playWithCss('publicacion_tablon', submitBtnRef.current, 'sound-glow');
+      playWithEffect('publicacion_tablon', FX.tablon, submitBtnRef.current);
       setEnviado(true);
     } catch {
       toast.error('Error al publicar el anuncio');

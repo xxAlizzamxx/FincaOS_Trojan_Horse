@@ -13,6 +13,7 @@ import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { useSound } from '@/hooks/useSound';
+import { FX } from '@/lib/sound/gsapEffects';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +27,7 @@ export default function VotosPage() {
   const router = useRouter();
   const { perfil, loading: authLoading } = useAuthGuard();
 
-  const { playWithCss } = useSound();
+  const { playWithEffect } = useSound();
   const btnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const [votaciones, setVotaciones] = useState<Votacion[]>([]);
@@ -108,7 +109,7 @@ export default function VotosPage() {
         )
       );
       toast.success('¡Voto registrado!');
-      playWithCss('voto_emitido', btnRefs.current[opcionId], 'sound-pop');
+      playWithEffect('voto_emitido', FX.voto, btnRefs.current[opcionId]);
     } catch (err: any) {
       toast.error(err.message ?? 'Error al votar');
     } finally {

@@ -2,6 +2,9 @@ import type { Config } from 'tailwindcss';
 
 const config: Config = {
   darkMode: ['class'],
+  // Clases añadidas dinámicamente via JS (classList.add) — Tailwind no las
+  // detecta en los templates, así que las protegemos del purge aquí.
+  safelist: ['sound-pop', 'sound-shake', 'sound-glow'],
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
