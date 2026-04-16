@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Vote, CheckCircle2, Lock, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Plus, Vote, CheckCircle2, Lock, ChevronRight, ArrowLeft, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, getDocs,
@@ -14,6 +14,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { useSound } from '@/hooks/useSound';
 import { FX } from '@/lib/sound/gsapEffects';
+import { useEliminar } from '@/hooks/useEliminar';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +38,7 @@ export default function VotosPage() {
   const [votando, setVotando] = useState<string | null>(null); // votacion_id en curso
 
   const esPresidente = perfil?.rol === 'presidente' || perfil?.rol === 'admin';
+  const { confirmar, dialogProps } = useEliminar();
 
   useEffect(() => {
     if (perfil?.comunidad_id) fetchData();
@@ -207,7 +210,7 @@ export default function VotosPage() {
               className={cn('border-0 shadow-sm', !votacion.activa && 'opacity-75')}
             >
               <CardContent className="p-4 space-y-3">
-                {/* Estado + fecha */}
+                {/* Estado + fecha + eliminar */}
                 <div className="flex items-center justify-between gap-2">
                   <Badge
                     className={cn(
@@ -219,9 +222,25 @@ export default function VotosPage() {
                   >
                     {votacion.activa ? 'Activa' : 'Cerrada'}
                   </Badge>
-                  <span className="text-[11px] text-muted-foreground shrink-0">
-                    {formatDistanceToNow(new Date(votacion.created_at), { addSuffix: true, locale: es })}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] text-muted-foreground">
+                      {formatDistanceToNow(new Date(votacion.created_at), { addSuffix: true, locale: es })}
+                    </span>
+                    {esPresidente && (
+                      <button
+                        onClick={() => confirmar({
+                          tipo: 'votacion',
+                          id: votacion.id,
+                          nombre: votacion.titulo,
+                          onExito: () => setVotaciones((prev) => prev.filter((v) => v.id !== votacion.id)),
+                        })}
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                        title="Eliminar votación"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Título */}
@@ -313,6 +332,8 @@ export default function VotosPage() {
           );
         })}
       </div>
+
+      <ConfirmDeleteDialog {...dialogProps} />
     </div>
   );
 }

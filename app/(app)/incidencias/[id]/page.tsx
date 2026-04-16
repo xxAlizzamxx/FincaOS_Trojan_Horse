@@ -6,7 +6,7 @@ import Image from 'next/image';
 import {
   ArrowLeft, ArrowRight, MessageSquare, Send,
   UserPlus, UserMinus, Users, Star, ImageIcon,
-  CircleCheck as CheckCircle2, Loader2, History, CreditCard,
+  CircleCheck as CheckCircle2, Loader2, History, CreditCard, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -22,6 +22,8 @@ import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia, Comentario } from '@/types/database';
 import { notificarUsuario } from '@/lib/firebase/notifications';
+import { useEliminar } from '@/hooks/useEliminar';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import {
   ESTADO_CONFIG, ACCION_ESTADO, SIGUIENTE_ESTADO, WORKFLOW_STEPS,
   actualizarEstadoIncidencia, puedeGestionar,
@@ -67,6 +69,8 @@ export default function IncidenciaDetailPage() {
 
   /* Stripe */
   const [pagandoStripe, setPagandoStripe] = useState(false);
+
+  const { confirmar, dialogProps } = useEliminar();
 
   const incidenciaId = params.id as string;
 
@@ -354,6 +358,20 @@ export default function IncidenciaDetailPage() {
         </Button>
         <h1 className="font-semibold text-finca-dark truncate flex-1">{incidencia.titulo}</h1>
         <Badge className={cn('text-[10px] border shrink-0', estadoCfg.badge)}>{estadoCfg.label}</Badge>
+        {(esAdmin || esAutor) && (
+          <button
+            onClick={() => confirmar({
+              tipo: 'incidencia',
+              id: incidencia.id,
+              nombre: incidencia.titulo,
+              onExito: () => router.replace('/incidencias'),
+            })}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+            title="Eliminar incidencia"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <div className="px-4 py-4 space-y-4">
@@ -811,6 +829,8 @@ export default function IncidenciaDetailPage() {
         </section>
 
       </div>
+
+      <ConfirmDeleteDialog {...dialogProps} />
     </div>
   );
 }

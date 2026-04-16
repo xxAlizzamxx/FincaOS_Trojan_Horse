@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Wallet, Plus, Check, Clock, Loader2,
-  CalendarDays, TrendingDown, Users, ArrowLeft, CreditCard,
+  CalendarDays, TrendingDown, Users, ArrowLeft, CreditCard, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
@@ -13,6 +13,8 @@ import {
   updateDoc, orderBy,
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
+import { useEliminar } from '@/hooks/useEliminar';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
 import type { Cuota, PagoCuota, Perfil } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +67,7 @@ export default function CuotasPage() {
   const router = useRouter();
   const { user, perfil } = useAuth();
   const esAdmin = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
+  const { confirmar, dialogProps } = useEliminar();
 
   /* ── Main list ── */
   const [cuotasData, setCuotasData] = useState<CuotaConPago[]>([]);
@@ -408,6 +411,20 @@ export default function CuotasPage() {
                             Gestionar
                           </Button>
                         )}
+                        {esAdmin && (
+                          <button
+                            onClick={() => confirmar({
+                              tipo: 'cuota',
+                              id: cuota.id,
+                              nombre: cuota.nombre,
+                              onExito: () => setCuotasData((prev) => prev.filter((cd) => cd.cuota.id !== cuota.id)),
+                            })}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                            title="Eliminar cuota"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
 
                         {!pagado && (
                           <Button
@@ -432,6 +449,8 @@ export default function CuotasPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDeleteDialog {...dialogProps} />
 
       {/* ─── Admin Sheet: manage all members' payments ─── */}
       <Sheet open={!!sheetCuota} onOpenChange={(open) => !open && setSheetCuota(null)}>
