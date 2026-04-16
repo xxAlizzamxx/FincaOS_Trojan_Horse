@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { BottomTabBar } from '@/components/layout/BottomTabBar';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
+import { PageTransition } from '@/components/animation/PageTransition';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -51,7 +52,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <AppHeader />
       <PushNotificationPrompt />
       <main className="flex-1 overflow-y-auto pb-safe max-w-lg mx-auto w-full">
-        {children}
+        <PageTransition className="min-h-full">
+          {children}
+        </PageTransition>
       </main>
       <BottomTabBar />
     </div>

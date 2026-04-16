@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import { PageTransition } from '@/components/animation/PageTransition';
 
 export default function AuthLayout({
   children,
@@ -18,7 +19,10 @@ export default function AuthLayout({
             priority
           />
         </div>
-        {children}
+        {/* PageTransition anima el formulario en cada cambio de ruta auth */}
+        <PageTransition duration={0.3}>
+          {children}
+        </PageTransition>
       </div>
     </div>
   );

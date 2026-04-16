@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { LayoutDashboard, CircleAlert as AlertCircle, Users, Building2, Megaphone, Settings, LogOut, Menu, X, Wallet } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { PageTransition } from '@/components/animation/PageTransition';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -124,7 +125,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          {children}
+          <PageTransition duration={0.3}>
+            {children}
+          </PageTransition>
         </main>
       </div>
     </div>
