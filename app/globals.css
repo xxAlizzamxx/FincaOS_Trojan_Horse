@@ -79,3 +79,34 @@
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4rem);
   }
 }
+
+/* ── Sound feedback animations ──────────────────────────────────────
+   Úsalas vía playWithEffect() añadiendo/quitando la clase con JS:
+
+     playWithEffect('voto_emitido', (el) => {
+       el?.classList.add('sound-pop');
+       el?.addEventListener('animationend',
+         () => el.classList.remove('sound-pop'), { once: true });
+     }, btnRef.current);
+──────────────────────────────────────────────────────────────────── */
+@keyframes sound-pop {
+  0%   { transform: scale(1);    }
+  40%  { transform: scale(1.18); }
+  70%  { transform: scale(0.95); }
+  100% { transform: scale(1);    }
+}
+@keyframes sound-shake {
+  0%, 100% { transform: translateX(0);    }
+  25%       { transform: translateX(-4px); }
+  75%       { transform: translateX(4px);  }
+}
+@keyframes sound-glow {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(255,110,97,0);   }
+  50%       { box-shadow: 0 0 0 8px rgba(255,110,97,0.35); }
+}
+
+@layer utilities {
+  .sound-pop   { animation: sound-pop   0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+  .sound-shake { animation: sound-shake 0.30s ease forwards; }
+  .sound-glow  { animation: sound-glow  0.60s ease forwards; }
+}

@@ -7,6 +7,7 @@ import { Bell } from 'lucide-react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
+import { SoundToggle } from '@/components/ui/sound-toggle';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
@@ -57,6 +58,9 @@ export function AppHeader() {
               {(perfil.comunidad as any).nombre}
             </span>
           )}
+
+          {/* Sonido */}
+          <SoundToggle size="sm" />
 
           {/* Notificaciones */}
           <Link href="/notificaciones">
