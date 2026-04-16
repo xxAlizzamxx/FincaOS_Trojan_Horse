@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Building2, Users, ChevronRight, Copy, Share2 } from 'lucide-react';
+import { Building2, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase/client';
 import { Comunidad } from '@/types/database';
@@ -17,21 +17,58 @@ export default function InvitePage() {
   const params = useParams();
   const router = useRouter();
   const codigo = (params.codigo as string).toUpperCase();
-  const [comunidad, setComunidad] = useState<Comunidad | null>(null);
-  const [vecinos, setVecinos] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  const [comunidad, setComunidad] = useState<Comunidad | null>(null);
+  const [vecinos, setVecinos]     = useState(0);
+  const [loading, setLoading]     = useState(true);
+  const [notFound, setNotFound]   = useState(false);
+
+  /* Auth state */
+  const [authChecked, setAuthChecked]     = useState(false);
+  const [isLoggedIn, setIsLoggedIn]       = useState(false);
+  const [yaEnComunidad, setYaEnComunidad] = useState(false);
+  const [redirecting, setRedirecting]     = useState(false);
+
+  /* ── 1. Verificar auth + si ya pertenece a una comunidad ── */
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        setIsLoggedIn(false);
+        setYaEnComunidad(false);
+        setAuthChecked(true);
+        return;
+      }
+
+      setIsLoggedIn(true);
+
+      try {
+        const perfilSnap = await getDoc(doc(db, 'perfiles', u.uid));
+        if (perfilSnap.exists() && perfilSnap.data().comunidad_id) {
+          /* ✋ Usuario ya está en una comunidad → redirigir a /inicio */
+          setYaEnComunidad(true);
+          setRedirecting(true);
+          toast.info('Ya perteneces a una comunidad');
+          router.replace('/inicio');
+          return;
+        }
+      } catch (err) {
+        console.error('[InvitePage] Error leyendo perfil:', err);
+      }
+
+      setYaEnComunidad(false);
+      setAuthChecked(true);
+    });
+
+    return () => unsub();
+  }, []);
+
+  /* ── 2. Cargar datos de la comunidad ── */
   useEffect(() => {
     fetchComunidad();
-    // Detectar si el usuario ya está autenticado para ofrecerle unirse directamente
-    const unsub = onAuthStateChanged(auth, (u) => setIsLoggedIn(!!u));
-    return () => unsub();
   }, [codigo]);
 
   async function fetchComunidad() {
-    const q = query(collection(db, 'comunidades'), where('codigo', '==', codigo));
+    const q    = query(collection(db, 'comunidades'), where('codigo', '==', codigo));
     const snap = await getDocs(q);
 
     if (snap.empty) {
@@ -40,30 +77,42 @@ export default function InvitePage() {
       return;
     }
 
-    const comDoc = snap.docs[0];
+    const comDoc  = snap.docs[0];
     const comData = { id: comDoc.id, ...comDoc.data() } as Comunidad;
     setComunidad(comData);
 
-    // Count vecinos
-    const vecSnap = await getDocs(query(collection(db, 'perfiles'), where('comunidad_id', '==', comDoc.id)));
+    const vecSnap = await getDocs(
+      query(collection(db, 'perfiles'), where('comunidad_id', '==', comDoc.id)),
+    );
     setVecinos(vecSnap.size);
     setLoading(false);
   }
 
-  if (loading) {
+  /* ── Skeleton / redirigiendo ── */
+  if (loading || redirecting) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-finca-peach/30 via-background to-background flex flex-col items-center justify-center px-4">
         <div className="w-full max-w-sm space-y-6">
-          <div className="flex justify-center">
-            <Skeleton className="w-[200px] h-[80px]" />
-          </div>
-          <Skeleton className="h-40 w-full rounded-2xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
+          {redirecting ? (
+            <div className="text-center space-y-3">
+              <Loader2 className="w-8 h-8 text-finca-coral animate-spin mx-auto" />
+              <p className="text-sm text-muted-foreground">Redirigiendo a tu comunidad…</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-center">
+                <Skeleton className="w-[200px] h-[80px]" />
+              </div>
+              <Skeleton className="h-40 w-full rounded-2xl" />
+              <Skeleton className="h-12 w-full rounded-xl" />
+            </>
+          )}
         </div>
       </div>
     );
   }
 
+  /* ── Comunidad no encontrada ── */
   if (notFound) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-finca-peach/30 via-background to-background flex flex-col items-center justify-center px-4">
@@ -84,13 +133,16 @@ export default function InvitePage() {
     );
   }
 
+  /* ── Vista principal ── */
   return (
     <div className="min-h-screen bg-gradient-to-br from-finca-peach/30 via-background to-background flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm space-y-6">
+
         <div className="flex justify-center">
           <Image src="/Logo sin bg.png" alt="FincaOS" width={200} height={80} className="object-contain" priority />
         </div>
 
+        {/* ── Card comunidad ── */}
         <Card className="border-0 shadow-lg overflow-hidden">
           <div className="h-3 bg-gradient-to-r from-finca-coral to-finca-salmon" />
           <CardContent className="p-6 text-center space-y-4">
@@ -119,8 +171,9 @@ export default function InvitePage() {
           </CardContent>
         </Card>
 
-        {isLoggedIn ? (
-          /* Usuario ya autenticado → unirse directamente desde onboarding */
+        {/* ── CTA según estado ── */}
+        {isLoggedIn && !yaEnComunidad && (
+          /* Autenticado sin comunidad → unirse directamente */
           <Button
             onClick={() => router.push(`/onboarding?codigo=${codigo}`)}
             className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 text-base font-medium shadow-md shadow-finca-coral/20"
@@ -128,8 +181,10 @@ export default function InvitePage() {
             Unirme a esta comunidad
             <ChevronRight className="w-5 h-5 ml-1" />
           </Button>
-        ) : (
-          /* Usuario no autenticado → flujo normal de registro */
+        )}
+
+        {!isLoggedIn && authChecked && (
+          /* No autenticado → flujo de registro / login */
           <>
             <Button
               onClick={() => router.push(`/registro?codigo=${codigo}`)}
@@ -138,15 +193,20 @@ export default function InvitePage() {
               Unirme a esta comunidad
               <ChevronRight className="w-5 h-5 ml-1" />
             </Button>
-
             <p className="text-center text-xs text-muted-foreground">
               ¿Ya tienes cuenta?{' '}
-              <button onClick={() => router.push(`/login?redirect=/invite/${codigo}`)} className="text-finca-coral font-medium hover:underline">
+              <button
+                onClick={() => router.push(`/login?redirect=/invite/${codigo}`)}
+                className="text-finca-coral font-medium hover:underline"
+              >
                 Inicia sesión
               </button>
             </p>
           </>
         )}
+
+        {/* yaEnComunidad=true → ya disparó router.replace('/inicio'), no se renderiza nada */}
+
       </div>
     </div>
   );
