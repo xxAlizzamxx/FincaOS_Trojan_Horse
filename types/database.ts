@@ -45,7 +45,7 @@ export interface Perfil {
 }
 
 /* ─── Notificaciones de comunidad ────────────────────────────────────────────
-   Colección: comunidades/{comunidadId}/notificaciones/{notifId}
+   Subcolección: comunidades/{comunidadId}/notificaciones/{notifId}
    Un único documento por evento — NO uno por vecino.
    "No leída" se determina comparando created_at con perfil.notificaciones_last_read.
 ──────────────────────────────────────────────────────────────────────────── */
@@ -56,14 +56,14 @@ export type TipoNotificacion =
   | 'documento';
 
 export interface NotificacionComunidad {
-  id: string;
-  tipo: TipoNotificacion;
-  titulo: string;
-  mensaje: string;
-  created_at: string;
-  created_by: string;   // userId del autor — se excluye de su propio contador
-  related_id: string;   // id del objeto original
-  link: string;         // ruta de navegación al pulsar
+  id         : string;
+  tipo       : TipoNotificacion;
+  titulo     : string;
+  mensaje    : string;
+  created_at : string;   // ISO — comparar con notificaciones_last_read
+  created_by : string;   // uid del autor (excluido de su propio contador)
+  related_id : string;   // id del objeto original
+  link       : string;   // ruta de navegación al pulsar
 }
 
 export interface CategoriaIncidencia {
