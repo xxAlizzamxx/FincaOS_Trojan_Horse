@@ -99,7 +99,8 @@ export interface Incidencia {
   descripcion: string | null;
   estado: EstadoIncidencia;
   prioridad: PrioridadIncidencia;
-  ubicacion: string | null;
+  ubicacion: string | null;   // texto libre legacy — usar zona para lógica
+  zona?: 'vivienda' | 'jardin' | 'zonas_comunes' | 'parking' | 'otro';
   estimacion_min: number | null;
   estimacion_max: number | null;
   presupuesto_proveedor: number | null;   // presupuesto real del proveedor

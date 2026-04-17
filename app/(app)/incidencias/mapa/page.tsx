@@ -12,19 +12,14 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StaggerList } from '@/components/animation/StaggerList';
 import { BuildingMap, type ZonaEdificio } from '@/components/incidencias/BuildingMap';
+import { ZONA_META } from '@/lib/incidencias/mapZona';
 import { ESTADO_CONFIG } from '@/lib/incidencias/workflow';
 import { cn } from '@/lib/utils';
 import type { Incidencia } from '@/types/database';
 
-const LABEL_ZONA: Record<string, string> = {
-  zona_comun:  '🌿 Zonas comunes',
-  parking:     '🅿️ Parking',
-  planta_baja: '🏢 Planta baja',
-};
-
 function labelZona(z: ZonaEdificio): string {
-  if (z in LABEL_ZONA) return LABEL_ZONA[z];
-  return `${z.replace('piso_', '')}º Piso`;
+  const meta = ZONA_META[z as keyof typeof ZONA_META];
+  return meta ? `${meta.emoji} ${meta.label}` : z;
 }
 
 const SEMAFORO: Record<string, string> = {

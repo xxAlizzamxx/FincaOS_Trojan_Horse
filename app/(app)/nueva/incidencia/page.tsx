@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { normalizeZona, type Zona } from '@/lib/incidencias/mapZona';
 
 const CATEGORIAS = [
   { id: 'filtraciones', nombre: 'Filtraciones', emoji: '💧' },
@@ -33,12 +34,13 @@ const prioridades = [
   { value: 'urgente', label: 'Urgente', emoji: '🚨', color: 'border-red-300 bg-red-50 text-red-700'         },
 ];
 
-const ubicaciones = [
-  { label: 'Mi vivienda', emoji: '🏠' },
-  { label: 'Zona común',  emoji: '🏢' },
-  { label: 'Garaje',      emoji: '🅿️' },
-  { label: 'Jardín',      emoji: '🌳' },
-  { label: 'Otro',        emoji: '📍' },
+// Zonas con valor canónico (enum) — lo que se guarda en Firestore
+const UBICACIONES: { label: string; emoji: string; zona: Zona }[] = [
+  { label: 'Mi vivienda', emoji: '🏠', zona: 'vivienda'      },
+  { label: 'Zona común',  emoji: '🏢', zona: 'zonas_comunes' },
+  { label: 'Garaje',      emoji: '🅿️', zona: 'parking'       },
+  { label: 'Jardín',      emoji: '🌳', zona: 'jardin'        },
+  { label: 'Otro',        emoji: '📍', zona: 'otro'          },
 ];
 
 export default function NuevaIncidenciaPage() {
@@ -58,7 +60,8 @@ export default function NuevaIncidenciaPage() {
   const [descripcion, setDescripcion] = useState('');
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
   const [prioridad, setPrioridad] = useState('normal');
-  const [ubicacion, setUbicacion] = useState('Zona común');
+  const [ubicacion, setUbicacion] = useState('Zona común');   // label para display
+  const [zona, setZona]           = useState<Zona>('zonas_comunes'); // enum para Firestore
 
   async function fetchEstimacion(catNombre: string, desc: string, ubi: string) {
     setEstimando(true);
@@ -165,7 +168,8 @@ export default function NuevaIncidenciaPage() {
         categoria_id: categoriaId,
         estado:       'pendiente',
         prioridad,
-        ubicacion,
+        ubicacion,                       // texto libre legacy — para display
+        zona:         normalizeZona(zona), // enum canónico — para BuildingMap y filtros
         estimacion_min: est.min,
         estimacion_max: est.max,
         created_at:   ahora,
@@ -361,11 +365,12 @@ export default function NuevaIncidenciaPage() {
         <div className="space-y-2">
           <Label>¿Dónde?</Label>
           <div className="grid grid-cols-2 gap-2">
-            {ubicaciones.map((u) => (
-              <button key={u.label} type="button" onClick={() => setUbicacion(u.label)}
+            {UBICACIONES.map((u) => (
+              <button key={u.zona} type="button"
+                onClick={() => { setUbicacion(u.label); setZona(u.zona); }}
                 className={cn('p-2.5 rounded-xl border text-center transition-all',
-                  u.label === 'Otro' && 'col-span-2',
-                  ubicacion === u.label ? 'border-finca-coral bg-finca-peach/30 text-finca-coral' : 'border-border bg-white text-muted-foreground hover:border-finca-salmon'
+                  u.zona === 'otro' && 'col-span-2',
+                  zona === u.zona ? 'border-finca-coral bg-finca-peach/30 text-finca-coral' : 'border-border bg-white text-muted-foreground hover:border-finca-salmon'
                 )}>
                 <span className="text-xl block mb-1">{u.emoji}</span>
                 <span className="text-xs font-medium">{u.label}</span>

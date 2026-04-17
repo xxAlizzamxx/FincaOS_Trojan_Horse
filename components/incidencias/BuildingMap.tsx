@@ -3,39 +3,28 @@
 import { useRef, useEffect } from 'react';
 import { gsap } from 'gsap';
 import { cn } from '@/lib/utils';
+import {
+  normalizeZona,
+  ZONAS_ORDENADAS,
+  ZONA_META,
+  type Zona,
+} from '@/lib/incidencias/mapZona';
 import type { Incidencia } from '@/types/database';
 
-/* ── Tipos públicos ───────────────────────────────────────────── */
-export type ZonaEdificio =
-  | 'zona_comun'
-  | 'parking'
-  | 'planta_baja'
-  | `piso_${number}`;
-
-/* ── Mapear ubicación libre → zona canónica ───────────────────── */
-export function ubicacionAZona(ubicacion: string | null): ZonaEdificio {
-  if (!ubicacion) return 'zona_comun';
-  const u = ubicacion.toLowerCase();
-  if (u.includes('parking') || u.includes('garaje')) return 'parking';
-  if (u.includes('baja') || u.includes('portal') || u.includes('entrada')) return 'planta_baja';
-  const m = u.match(/(\d+)[ºo°]?\s*(planta|piso)/);
-  if (m) return `piso_${parseInt(m[1])}`;
-  if (u.includes('comun') || u.includes('común') || u.includes('jardín') || u.includes('piscina')) return 'zona_comun';
-  return 'zona_comun';
-}
+/* ── Exportamos Zona como ZonaEdificio para no romper el import en mapa/page ── */
+export type { Zona as ZonaEdificio } from '@/lib/incidencias/mapZona';
+export { normalizeZona as ubicacionAZona };    // alias legacy — no eliminar todavía
 
 /* ── Niveles de impacto ────────────────────────────────────────── */
 type NivelImpacto = 'bajo' | 'medio' | 'critico';
 
 const IMPACTO: Record<NivelImpacto, {
-  bg: string; border: string; text: string; dot: string;
-  label: string; emoji: string;
+  bg: string; border: string; text: string; dot: string; emoji: string;
 }> = {
-  bajo:    { bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700',  dot: '#22c55e', label: 'Impacto bajo',  emoji: '🟢' },
-  medio:   { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', dot: '#f97316', label: 'Impacto medio', emoji: '🟠' },
-  critico: { bg: 'bg-red-50',    border: 'border-red-300',    text: 'text-red-700',    dot: '#ef4444', label: 'Crítico',       emoji: '🔴' },
+  bajo:    { bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700',  dot: '#22c55e', emoji: '🟢' },
+  medio:   { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', dot: '#f97316', emoji: '🟠' },
+  critico: { bg: 'bg-red-50',    border: 'border-red-300',    text: 'text-red-700',    dot: '#ef4444', emoji: '🔴' },
 };
-
 const IMPACT_ORDER: Record<string, number> = { critico: 3, medio: 2, bajo: 1 };
 
 function nivelImpacto(items: Incidencia[]): NivelImpacto {
@@ -44,39 +33,46 @@ function nivelImpacto(items: Incidencia[]): NivelImpacto {
   return 'bajo';
 }
 
-function labelZona(z: ZonaEdificio): string {
-  if (z === 'zona_comun')  return 'Zonas comunes';
-  if (z === 'parking')     return 'Parking';
-  if (z === 'planta_baja') return 'Planta baja';
-  return `Piso ${z.replace('piso_', '')}`;
-}
-
 /* ── Props ─────────────────────────────────────────────────────── */
 interface Props {
   incidencias: Incidencia[];
-  numPisos?:   number;          // mantenido por compatibilidad, ya no se usa para renderizar
-  onZonaClick: (zona: ZonaEdificio, items: Incidencia[]) => void;
+  numPisos?:   number;   // mantenido para compatibilidad — no se usa
+  onZonaClick: (zona: Zona, items: Incidencia[]) => void;
 }
 
 /* ── Componente ────────────────────────────────────────────────── */
 export function BuildingMap({ incidencias, onZonaClick }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
 
-  /* Agrupar por zona */
-  const porZona = new Map<ZonaEdificio, Incidencia[]>();
+  /* ── Grouping estricto por campo zona (enum) ──────────────────
+     Fallback: si inc.zona no existe o es texto libre legacy,
+     se normaliza con normalizeZona() que convierte "Jardín" → 'jardin', etc.
+  ──────────────────────────────────────────────────────────────── */
+  const grouped = Object.fromEntries(
+    ZONAS_ORDENADAS.map((z) => [z, [] as Incidencia[]]),
+  ) as Record<Zona, Incidencia[]>;
+
   incidencias.forEach((inc) => {
-    const zona = ubicacionAZona(inc.ubicacion);
-    porZona.set(zona, [...(porZona.get(zona) ?? []), inc]);
+    // 1. campo zona es el enum canónico (nuevas incidencias)
+    // 2. si no existe, normalizar ubicacion legacy
+    const rawZona = (inc as any).zona ?? inc.ubicacion ?? '';
+    const zona: Zona = ZONAS_ORDENADAS.includes(rawZona as Zona)
+      ? (rawZona as Zona)
+      : normalizeZona(rawZona);
+
+    console.log('[MAP ZONA]', inc.id, '→', zona, '(raw:', rawZona, ')');
+    grouped[zona].push(inc);
   });
 
-  /* Solo zonas con datos, ordenadas por impacto (crítico primero) */
-  const zonas = Array.from(porZona.entries())
-    .filter(([, items]) => items.length > 0)
-    .sort(([, a], [, b]) =>
-      (IMPACT_ORDER[nivelImpacto(b)] ?? 0) - (IMPACT_ORDER[nivelImpacto(a)] ?? 0),
+  /* Solo zonas con datos, ordenadas por impacto */
+  const zonas = ZONAS_ORDENADAS
+    .filter((z) => grouped[z].length > 0)
+    .sort((a, b) =>
+      (IMPACT_ORDER[nivelImpacto(grouped[b])] ?? 0) -
+      (IMPACT_ORDER[nivelImpacto(grouped[a])] ?? 0),
     );
 
-  /* GSAP stagger: animar cuando llegan los datos */
+  /* GSAP stagger — anima cuando llegan los datos */
   useEffect(() => {
     const el = listRef.current;
     if (!el || zonas.length === 0) return;
@@ -85,18 +81,11 @@ export function BuildingMap({ incidencias, onZonaClick }: Props) {
       gsap.fromTo(
         children,
         { opacity: 0, y: 14 },
-        {
-          opacity:    1,
-          y:          0,
-          duration:   0.35,
-          ease:       'power2.out',
-          stagger:    0.07,
-          clearProps: 'opacity,y',
-        },
+        { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out', stagger: 0.07, clearProps: 'opacity,y' },
       );
     }, el);
     return () => ctx.revert();
-  }, [zonas.length]);   // re-anima si cambia la cantidad de zonas (carga asíncrona)
+  }, [zonas.length]);
 
   /* Estado vacío */
   if (zonas.length === 0) {
@@ -111,11 +100,13 @@ export function BuildingMap({ incidencias, onZonaClick }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Bloques de zonas */}
+      {/* Bloques de zonas — solo las que tienen incidencias */}
       <div ref={listRef} className="grid gap-3">
-        {zonas.map(([zona, items]) => {
+        {zonas.map((zona) => {
+          const items = grouped[zona];
           const nivel = nivelImpacto(items);
           const cfg   = IMPACTO[nivel];
+          const meta  = ZONA_META[zona];
           return (
             <button
               key={zona}
@@ -127,18 +118,20 @@ export function BuildingMap({ incidencias, onZonaClick }: Props) {
               )}
             >
               <div className="flex items-center justify-between gap-3">
-                {/* Izquierda: dot + nombre */}
+                {/* Izquierda: emoji zona + nombre */}
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-lg shrink-0">{cfg.emoji}</span>
+                  <span className="text-xl shrink-0">{meta.emoji}</span>
                   <div className="min-w-0">
                     <p className={cn('font-semibold text-base leading-tight', cfg.text)}>
-                      {labelZona(zona)}
+                      {meta.label}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{cfg.label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {cfg.emoji} {nivel === 'critico' ? 'Crítico' : nivel === 'medio' ? 'Impacto medio' : 'Impacto bajo'}
+                    </p>
                   </div>
                 </div>
 
-                {/* Derecha: badge de count + pulso */}
+                {/* Derecha: count + pulso */}
                 <div className="flex items-center gap-2 shrink-0">
                   <span className={cn(
                     'text-sm font-bold px-3 py-1 rounded-full border',
@@ -160,9 +153,9 @@ export function BuildingMap({ incidencias, onZonaClick }: Props) {
       {/* Leyenda */}
       <div className="flex items-center justify-center gap-5 pt-1 flex-wrap">
         {(Object.entries(IMPACTO) as [NivelImpacto, typeof IMPACTO[NivelImpacto]][]).map(([, v]) => (
-          <div key={v.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div key={v.dot} className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: v.dot }} />
-            {v.label}
+            {v.emoji === '🟢' ? 'Impacto bajo' : v.emoji === '🟠' ? 'Impacto medio' : 'Crítico'}
           </div>
         ))}
       </div>
