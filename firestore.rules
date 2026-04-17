@@ -50,9 +50,16 @@ service cloud.firestore {
 
     // Comunidades (public read for invite page)
     match /comunidades/{comunidadId} {
-      allow read: if true;
+      allow read:   if true;
       allow create: if isAuth();
       allow update: if isAuth();
+
+      // Subcollección notificaciones de comunidad (un doc por evento, visible para todos los miembros)
+      match /notificaciones/{notifId} {
+        allow read:   if isAuth() && belongsToCommunity(comunidadId);
+        allow create: if isAuth() && belongsToCommunity(comunidadId);
+        // Solo sistema / Admin SDK actualiza — no se necesita update desde cliente
+      }
     }
 
     // Perfiles
@@ -73,9 +80,17 @@ service cloud.firestore {
 
     // Incidencias
     match /incidencias/{incidenciaId} {
-      allow read: if isAuth();
+      allow read:   if isAuth();
       allow create: if isAuth() && belongsToCommunity(request.resource.data.comunidad_id);
       allow update: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+
+      // Subcollección afectados: cada vecino solo puede escribir/borrar su propio doc
+      match /afectados/{userId} {
+        allow read:   if isAuth();
+        allow create: if isAuth() && request.auth.uid == userId;
+        allow delete: if isAuth() && request.auth.uid == userId;
+        // update lo hace la API con Admin SDK, no el cliente
+      }
     }
 
     // Comentarios

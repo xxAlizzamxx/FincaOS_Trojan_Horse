@@ -154,8 +154,8 @@ export default function NuevaIncidenciaPage() {
       const coef = (perfil as any).coeficiente ?? 1;
       const ahora = new Date().toISOString();
 
-      // ── OPERACIONES CRÍTICAS ──────────────────────────────────────
-      // Solo estas dos pueden bloquear el éxito. Si fallan, mostramos error.
+      // ── OPERACIÓN CRÍTICA ─────────────────────────────────────────
+      // Solo addDoc puede bloquear el éxito. Si falla, mostramos error.
 
       const ref = await addDoc(collection(db, 'incidencias'), {
         comunidad_id: perfil.comunidad_id,
@@ -180,55 +180,65 @@ export default function NuevaIncidenciaPage() {
         },
       });
 
-      await setDoc(
-        doc(db, 'incidencias', ref.id, 'afectados', perfil.id),
-        { coeficiente: coef, added_at: ahora, es_autor: true },
-      );
+      console.log('[CREATE INCIDENCIA] doc principal creado — id:', ref.id);
 
-      console.log('[CREATE INCIDENCIA] creada con éxito — id:', ref.id);
-
-      // ✅ Éxito confirmado: mostrar pantalla de confirmación ahora,
+      // ✅ Éxito confirmado: mostrar pantalla de confirmación AHORA,
       // antes de cualquier operación secundaria que pueda fallar.
       setEnviado(true);
       setLoading(false);
 
       // ── OPERACIONES SECUNDARIAS (fire-and-forget) ─────────────────
       // Fallos aquí NO deben mostrar error al usuario.
+      // Cada operación tiene su propio try/catch y log exacto.
 
+      // 1. Añadir creador como afectado (subcollección — requiere regla Firestore)
+      setDoc(
+        doc(db, 'incidencias', ref.id, 'afectados', perfil.id),
+        { coeficiente: coef, added_at: ahora, es_autor: true },
+      ).then(() => {
+        console.log('[CREATE INCIDENCIA] afectados subcollection — ok');
+      }).catch((err) => {
+        console.error('[FIRESTORE WRITE FAILED] afectados subcollection:', err?.code, err?.message);
+      });
+
+      // 2. Subir fotos
       if (fotos.length > 0) {
         uploadFotos(ref.id, perfil.comunidad_id).catch((err) =>
-          console.warn('[CREATE INCIDENCIA] uploadFotos parcial:', err),
+          console.error('[FIRESTORE WRITE FAILED] uploadFotos:', err?.message ?? err),
         );
       }
 
-      try {
-        notificarAdmins(
-          perfil.comunidad_id,
-          'incidencia',
-          titulo.trim(),
-          `Reportado por ${perfil.nombre_completo}`,
-          `/incidencias/${ref.id}`,
-        );
-      } catch (err) {
-        console.warn('[CREATE INCIDENCIA] notificarAdmins falló (ignorado):', err);
-      }
+      // 3. Notificar admins (escribe en colección notificaciones)
+      notificarAdmins(
+        perfil.comunidad_id,
+        'incidencia',
+        titulo.trim(),
+        `Reportado por ${perfil.nombre_completo}`,
+        `/incidencias/${ref.id}`,
+      ).catch((err) => {
+        console.error('[FIRESTORE WRITE FAILED] notificarAdmins:', err?.code, err?.message);
+      });
 
-      void crearNotificacionComunidad(perfil.comunidad_id, {
+      // 4. Notificación de comunidad (subcollección comunidades/{id}/notificaciones)
+      crearNotificacionComunidad(perfil.comunidad_id, {
         tipo:       'incidencia',
         titulo:     titulo.trim(),
         mensaje:    `Reportado por ${perfil.nombre_completo}`,
         created_by: perfil.id,
         related_id: ref.id,
         link:       `/incidencias/${ref.id}`,
+      }).catch((err) => {
+        console.error('[FIRESTORE WRITE FAILED] crearNotificacionComunidad:', err?.code, err?.message);
       });
 
+      // 5. Sonido
       try { play('incidencia_creada'); } catch (err) {
-        console.warn('[CREATE INCIDENCIA] play() falló (ignorado):', err);
+        console.warn('[CREATE INCIDENCIA] play() ignorado:', err);
       }
 
-    } catch (err) {
-      // Solo llega aquí si addDoc o setDoc fallan (incidencia NO creada)
-      console.error('[CREATE INCIDENCIA] error crítico:', err);
+    } catch (err: any) {
+      // Solo llega aquí si addDoc falla (incidencia NO creada)
+      console.error('[FIRESTORE WRITE FAILED] addDoc incidencias:', err?.code, err?.message, err);
       toast.error('Error al crear la incidencia');
       setLoading(false);
     }
