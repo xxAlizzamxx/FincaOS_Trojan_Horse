@@ -39,6 +39,7 @@ export function IncidenciaCard({
   modoSeleccion = false,
   onToggle,
 }: Props) {
+  console.log('[IncidenciaCard] renderizando:', inc.id, '| quorum:', inc.quorum, '| totalVecinos:', totalVecinos);
   const cfg         = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG.pendiente;
   const afectados   = inc.quorum?.afectados_count ?? 0;
   const umbral      = inc.quorum?.umbral ?? 30;

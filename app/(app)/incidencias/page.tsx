@@ -1,29 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { Search, CircleAlert as AlertCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, CircleAlert as AlertCircle, LayoutGrid, Map } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import { collection, query, where, orderBy, getDocs, getDoc, doc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia } from '@/types/database';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { ESTADO_CONFIG } from '@/lib/incidencias/workflow';
-
-const prioridadConfig: Record<string, { color: string; emoji: string; label: string }> = {
-  baja:    { color: 'text-green-600',  emoji: '🟢', label: 'Baja'    },
-  normal:  { color: 'text-blue-600',   emoji: '🔵', label: 'Normal'  },
-  alta:    { color: 'text-orange-600', emoji: '⚠️', label: 'Alta'    },
-  urgente: { color: 'text-red-600',    emoji: '🚨', label: 'Urgente' },
-};
+import { IncidenciaCard } from '@/components/incidencias/IncidenciaCard';
 
 const filtros = ['Todas', 'Pendiente', 'En revisión', 'Resuelta'];
 const filtroMap: Record<string, string[]> = {
@@ -34,8 +24,10 @@ const filtroMap: Record<string, string[]> = {
 };
 
 export default function IncidenciasPage() {
+  const router = useRouter();
   const { perfil } = useAuth();
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
+  const [totalVecinos, setTotalVecinos] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [filtroActivo, setFiltroActivo] = useState('Todas');
@@ -45,15 +37,21 @@ export default function IncidenciasPage() {
   }, [perfil?.comunidad_id]);
 
   async function fetchIncidencias() {
-    console.log('[Incidencias] fetchIncidencias — cid:', perfil!.comunidad_id);
+    const cid = perfil!.comunidad_id!;
+    console.log('[Incidencias] fetchIncidencias — cid:', cid);
     try {
-      const q = query(
-        collection(db, 'incidencias'),
-        where('comunidad_id', '==', perfil!.comunidad_id!),
-        orderBy('created_at', 'desc')
-      );
-      const snap = await getDocs(q);
-      console.log('[Incidencias] encontradas:', snap.size);
+      // Fetch incidencias + total vecinos en paralelo
+      const [snap, vecinosSnap] = await Promise.all([
+        getDocs(query(
+          collection(db, 'incidencias'),
+          where('comunidad_id', '==', cid),
+          orderBy('created_at', 'desc'),
+        )),
+        getDocs(query(collection(db, 'perfiles'), where('comunidad_id', '==', cid))),
+      ]);
+      console.log('[Incidencias] encontradas:', snap.size, '| vecinos:', vecinosSnap.size);
+      setTotalVecinos(vecinosSnap.size);
+
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
       const enriched = await Promise.all(
@@ -91,6 +89,8 @@ export default function IncidenciasPage() {
     }
   }
 
+  console.log('[IncidenciasPage] render — incidencias:', incidencias.length, '| totalVecinos:', totalVecinos, '| loading:', loading);
+
   const incidenciasFiltradas = incidencias.filter((inc) => {
     const matchBusqueda = inc.titulo.toLowerCase().includes(busqueda.toLowerCase());
     const estadosFiltro = filtroMap[filtroActivo];
@@ -100,9 +100,35 @@ export default function IncidenciasPage() {
 
   return (
     <div className="px-4 py-5 space-y-4">
-      <div className="space-y-0.5">
-        <h1 className="text-2xl font-semibold text-finca-dark">Incidencias</h1>
-        <p className="text-sm text-muted-foreground">Problemas reportados en tu comunidad</p>
+      {/* DEBUG BANNER — borrar tras confirmar que funciona */}
+      <div style={{ background: 'red', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 'bold' }}>
+        🚀 NUEVO SISTEMA ACTIVO · IncidenciaCard + Quórum · vecinos: {totalVecinos}
+      </div>
+
+      {/* Header con vistas */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-0.5">
+          <h1 className="text-2xl font-semibold text-finca-dark">Incidencias</h1>
+          <p className="text-sm text-muted-foreground">Problemas reportados en tu comunidad</p>
+        </div>
+        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 shrink-0">
+          <button
+            onClick={() => router.push('/incidencias/tablero')}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-finca-dark hover:bg-white transition-all"
+            title="Vista tablero"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Tablero</span>
+          </button>
+          <button
+            onClick={() => router.push('/incidencias/mapa')}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-finca-dark hover:bg-white transition-all"
+            title="Vista mapa"
+          >
+            <Map className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Mapa</span>
+          </button>
+        </div>
       </div>
 
       <div className="relative">
@@ -164,62 +190,13 @@ export default function IncidenciasPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {incidenciasFiltradas.map((inc) => {
-            const estado = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG['pendiente'];
-            return (
-              <Link key={inc.id} href={`/incidencias/${inc.id}`}>
-                <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-[0.99] cursor-pointer">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className={cn('w-2 h-2 rounded-full shrink-0', estado.dot)} />
-                          <p className="font-medium text-sm text-finca-dark truncate">{inc.titulo}</p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {(inc.categoria as any)?.nombre && (
-                            <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                              {(inc.categoria as any)?.icono
-                                ? `${(inc.categoria as any).icono} ${(inc.categoria as any).nombre}`
-                                : `🏷️ ${(inc.categoria as any).nombre}`}
-                            </span>
-                          )}
-                          {inc.ubicacion && (
-                            <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                              📍 {inc.ubicacion}
-                            </span>
-                          )}
-                          {(() => {
-                            const p = prioridadConfig[inc.prioridad];
-                            return p ? (
-                              <span className={cn('text-xs font-medium', p.color)}>
-                                {p.emoji} {p.label}
-                              </span>
-                            ) : null;
-                          })()}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-[11px] text-muted-foreground">
-                            {(inc.autor as any)?.nombre_completo?.split(' ')[0]} • {formatDistanceToNow(new Date(inc.created_at), { addSuffix: true, locale: es })}
-                          </span>
-                        </div>
-                      </div>
-                      <Badge className={cn('text-[10px] border shrink-0 self-start', estado.badge)}>
-                        {estado.label}
-                      </Badge>
-                    </div>
-                    {(inc.estimacion_min != null || inc.estimacion_max != null) && (
-                      <div className="mt-2 pt-2 border-t border-border/50">
-                        <p className="text-xs text-muted-foreground">
-                          Estimación IA: <span className="font-medium text-finca-dark">{inc.estimacion_min ?? 0}€ – {inc.estimacion_max ?? 0}€</span>
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
+          {incidenciasFiltradas.map((inc) => (
+            <IncidenciaCard
+              key={inc.id}
+              incidencia={inc}
+              totalVecinos={totalVecinos}
+            />
+          ))}
         </div>
       )}
     </div>

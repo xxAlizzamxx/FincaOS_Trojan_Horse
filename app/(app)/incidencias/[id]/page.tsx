@@ -11,6 +11,7 @@ import {
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { getAuth } from 'firebase/auth';
 import {
   collection, query, where, orderBy, getDocs,
   getDoc, addDoc, deleteDoc, updateDoc, doc,
@@ -167,8 +168,22 @@ export default function IncidenciaDetailPage() {
   }
 
   async function fetchAfectados() {
+    // Primero intentar la subcollección nueva (generada por /api/incidencias/afectar)
+    try {
+      const subSnap = await getDocs(collection(db, 'incidencias', incidenciaId, 'afectados'));
+      if (subSnap.size > 0) {
+        // En la subcollección el doc id ES el vecino_id
+        setAfectados(subSnap.docs.map((d) => ({ id: d.id, vecino_id: d.id })));
+        console.log('[Afectados] subcollección:', subSnap.size);
+        return;
+      }
+    } catch {
+      // Si la subcollección no existe, continuar con fallback
+    }
+    // Fallback: colección global legacy
     const q = query(collection(db, 'incidencia_afectados'), where('incidencia_id', '==', incidenciaId));
     const snap = await getDocs(q);
+    console.log('[Afectados] colección global (legacy):', snap.size);
     setAfectados(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, vecino_id: d.data().vecino_id })));
   }
 
@@ -213,32 +228,52 @@ export default function IncidenciaDetailPage() {
     }
   }
 
-  /* ── Sumarme / quitarme ── */
+  /* ── Sumarme / quitarme — usa /api/incidencias/afectar ── */
   async function toggleSumarme() {
     if (!perfil || esAutor) return;
     setSumandome(true);
-    if (yaSumado) {
-      const q = query(
-        collection(db, 'incidencia_afectados'),
-        where('incidencia_id', '==', incidenciaId),
-        where('vecino_id', '==', perfil.id),
-      );
-      const snap = await getDocs(q);
-      await Promise.all(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => deleteDoc(doc(db, 'incidencia_afectados', d.id))));
-      toast.success('Ya no apareces como afectado');
-    } else {
-      try {
-        await addDoc(collection(db, 'incidencia_afectados'), {
-          incidencia_id: incidenciaId,
-          vecino_id: perfil.id,
-        });
-        toast.success('Te has sumado a la incidencia');
-      } catch {
-        toast.error('Error al sumarte a la incidencia');
+    const wasAdded = yaSumado;
+
+    // Optimistic update: reflejar el cambio en pantalla antes de esperar al servidor
+    setAfectados((prev) =>
+      wasAdded
+        ? prev.filter((a) => a.vecino_id !== perfil.id)
+        : [...prev, { id: perfil.id, vecino_id: perfil.id }],
+    );
+
+    try {
+      const token = await getAuth().currentUser?.getIdToken(false);
+      console.log('[Afectar] llamando API — incidenciaId:', incidenciaId, '| quitar:', wasAdded);
+      const res = await fetch('/api/incidencias/afectar', {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ incidenciaId, quitar: wasAdded }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `Error ${res.status}`);
       }
+
+      console.log('[Afectar] éxito — recargando incidencia para quórum actualizado');
+      toast.success(wasAdded ? 'Ya no apareces como afectado' : '¡Te has sumado a la incidencia!');
+      // Recargar incidencia para mostrar quórum actualizado
+      fetchIncidencia();
+    } catch (err: any) {
+      // Revertir update optimista
+      setAfectados((prev) =>
+        wasAdded
+          ? [...prev, { id: perfil.id, vecino_id: perfil.id }]
+          : prev.filter((a) => a.vecino_id !== perfil.id),
+      );
+      console.error('[Afectar] error:', err.message);
+      toast.error(err.message ?? 'Error al actualizar');
+    } finally {
+      setSumandome(false);
     }
-    fetchAfectados();
-    setSumandome(false);
   }
 
   /* ── Comentarios ── */
@@ -528,8 +563,38 @@ export default function IncidenciaDetailPage() {
           </Card>
         )}
 
-        {/* ── Afectados ── */}
-        <div className="flex items-center gap-3">
+        {/* ── Afectados + barra de quórum ── */}
+        <div className="space-y-3">
+          {/* Barra de quórum — muestra si existe el campo quorum O si hay afectados */}
+          {(() => {
+            const q       = (incidencia as any).quorum;
+            const count   = q?.afectados_count ?? afectados.length;
+            const umbral  = q?.umbral ?? 30;
+            const alcanzado = q?.alcanzado ?? false;
+            // Barra: mostramos cuántos afectados hay respecto a un estimado de vecinos
+            // Si tenemos afectados_count del servidor úsalo, si no, usa el local
+            const barPct = Math.min(100, alcanzado ? 100 : Math.round((count / Math.max(1, count + 3)) * 80));
+            return (
+              <div className={cn('rounded-xl p-3 space-y-2 border', alcanzado ? 'bg-red-50 border-red-200' : 'bg-muted/30 border-border/50')}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className={cn('font-medium', alcanzado ? 'text-red-700' : 'text-finca-dark')}>
+                    {alcanzado ? '⚠️ Quórum alcanzado' : '👥 Vecinos afectados'}
+                  </span>
+                  <span className={cn('font-medium tabular-nums', alcanzado ? 'text-red-600' : 'text-muted-foreground')}>
+                    {count} afectado{count !== 1 ? 's' : ''} · umbral {umbral}%
+                  </span>
+                </div>
+                <div className="h-2 bg-white rounded-full overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full transition-all duration-700', alcanzado ? 'bg-red-500' : 'bg-finca-coral')}
+                    style={{ width: `${barPct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-muted rounded-xl px-3 py-2 shrink-0">
             <Users className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm font-medium text-finca-dark">{totalAfectados}</span>
@@ -554,6 +619,7 @@ export default function IncidenciaDetailPage() {
               }
             </Button>
           )}
+          </div>
         </div>
 
         {/* ── Autor confirma resolución (cuando estado = en_ejecucion) ── */}
