@@ -154,48 +154,65 @@ export default function NuevaIncidenciaPage() {
       const coef = (perfil as any).coeficiente ?? 1;
       const ahora = new Date().toISOString();
 
+      // ── OPERACIONES CRÍTICAS ──────────────────────────────────────
+      // Solo estas dos pueden bloquear el éxito. Si fallan, mostramos error.
+
       const ref = await addDoc(collection(db, 'incidencias'), {
         comunidad_id: perfil.comunidad_id,
-        autor_id: perfil.id,
-        titulo: titulo.trim(),
-        descripcion: descripcion.trim() || null,
+        autor_id:     perfil.id,
+        titulo:       titulo.trim(),
+        descripcion:  descripcion.trim() || null,
         categoria_id: categoriaId,
-        estado: 'pendiente',
+        estado:       'pendiente',
         prioridad,
         ubicacion,
         estimacion_min: est.min,
         estimacion_max: est.max,
-        created_at: ahora,
-        updated_at: ahora,
-        resuelta_at: null,
-        // Quórum inicial: el creador ya cuenta como afectado
+        created_at:   ahora,
+        updated_at:   ahora,
+        resuelta_at:  null,
         quorum: {
-          tipo:             'simple',
-          umbral:           30,
-          afectados_count:  1,
-          peso_afectados:   coef,
-          alcanzado:        false,
+          tipo:            'simple',
+          umbral:          30,
+          afectados_count: 1,
+          peso_afectados:  coef,
+          alcanzado:       false,
         },
       });
 
-      // Escribir al creador en la subcollección afectados
       await setDoc(
         doc(db, 'incidencias', ref.id, 'afectados', perfil.id),
         { coeficiente: coef, added_at: ahora, es_autor: true },
       );
-      console.log('[QUORUM REAL] incidencia creada — afectados_count inicial: 1, autor:', perfil.id);
+
+      console.log('[CREATE INCIDENCIA] creada con éxito — id:', ref.id);
+
+      // ✅ Éxito confirmado: mostrar pantalla de confirmación ahora,
+      // antes de cualquier operación secundaria que pueda fallar.
+      setEnviado(true);
+      setLoading(false);
+
+      // ── OPERACIONES SECUNDARIAS (fire-and-forget) ─────────────────
+      // Fallos aquí NO deben mostrar error al usuario.
 
       if (fotos.length > 0) {
-        await uploadFotos(ref.id, perfil.comunidad_id);
+        uploadFotos(ref.id, perfil.comunidad_id).catch((err) =>
+          console.warn('[CREATE INCIDENCIA] uploadFotos parcial:', err),
+        );
       }
-      notificarAdmins(
-        perfil.comunidad_id,
-        'incidencia',
-        titulo.trim(),
-        `Reportado por ${perfil.nombre_completo}`,
-        `/incidencias/${ref.id}`
-      );
-      // Notificación comunidad (tiempo real para todos los vecinos)
+
+      try {
+        notificarAdmins(
+          perfil.comunidad_id,
+          'incidencia',
+          titulo.trim(),
+          `Reportado por ${perfil.nombre_completo}`,
+          `/incidencias/${ref.id}`,
+        );
+      } catch (err) {
+        console.warn('[CREATE INCIDENCIA] notificarAdmins falló (ignorado):', err);
+      }
+
       void crearNotificacionComunidad(perfil.comunidad_id, {
         tipo:       'incidencia',
         titulo:     titulo.trim(),
@@ -204,13 +221,17 @@ export default function NuevaIncidenciaPage() {
         related_id: ref.id,
         link:       `/incidencias/${ref.id}`,
       });
-      play('incidencia_creada');
-      setEnviado(true);
-    } catch {
-      toast.error('Error al crear la incidencia');
-    }
 
-    setLoading(false);
+      try { play('incidencia_creada'); } catch (err) {
+        console.warn('[CREATE INCIDENCIA] play() falló (ignorado):', err);
+      }
+
+    } catch (err) {
+      // Solo llega aquí si addDoc o setDoc fallan (incidencia NO creada)
+      console.error('[CREATE INCIDENCIA] error crítico:', err);
+      toast.error('Error al crear la incidencia');
+      setLoading(false);
+    }
   }
 
   if (enviado) {
