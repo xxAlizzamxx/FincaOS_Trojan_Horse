@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Users, AlertTriangle } from 'lucide-react';
+import { StaggerList } from '@/components/animation/StaggerList';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -49,7 +50,7 @@ export function KanbanColumna({ label, colorTop, bgColor, incidencias, totalVeci
       </div>
 
       {/* Cards */}
-      <div className="space-y-2">
+      <StaggerList className="space-y-2" stagger={0.05}>
         {sorted.map((inc) => {
           const cfg        = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG.pendiente;
           const afectados  = Math.max(1, inc.quorum?.afectados_count ?? 0);
@@ -89,7 +90,7 @@ export function KanbanColumna({ label, colorTop, bgColor, incidencias, totalVeci
                       {pct}%/{umbral}%
                     </span>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className={cn(
                         'h-full rounded-full transition-all duration-500',
@@ -109,7 +110,7 @@ export function KanbanColumna({ label, colorTop, bgColor, incidencias, totalVeci
             Sin incidencias
           </p>
         )}
-      </div>
+      </StaggerList>
     </div>
   );
 }

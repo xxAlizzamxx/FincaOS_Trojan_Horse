@@ -52,6 +52,7 @@ export function IncidenciaCard({
   const cardContent = (
     <Card className={cn(
       'border-0 shadow-sm transition-all duration-200',
+      'hover:shadow-md hover:-translate-y-0.5',
       seleccionada && 'ring-2 ring-finca-coral shadow-md',
       qAlcanzado && 'border-l-4 border-l-red-500',
     )}>
@@ -76,7 +77,7 @@ export function IncidenciaCard({
         </div>
 
         {/* Fila 2: título */}
-        <p className="font-semibold text-finca-dark leading-snug line-clamp-2">
+        <p className="text-base font-semibold text-finca-dark leading-snug line-clamp-2 tracking-tight">
           {inc.titulo}
         </p>
 
@@ -96,7 +97,7 @@ export function IncidenciaCard({
               {pct}% / {umbral}%
             </span>
           </div>
-          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+          <div className="h-2.5 bg-muted rounded-full overflow-hidden">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-700',

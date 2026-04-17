@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IncidenciaCard } from '@/components/incidencias/IncidenciaCard';
 import { sortByPrioridad } from '@/lib/incidencias/workflow';
+import { StaggerList } from '@/components/animation/StaggerList';
 
 const filtros = ['Todas', 'Pendiente', 'En revisión', 'Resuelta'];
 const filtroMap: Record<string, string[]> = {
@@ -190,7 +191,7 @@ export default function IncidenciasPage() {
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <StaggerList className="flex flex-col gap-3" stagger={0.06}>
           {sortByPrioridad(incidenciasFiltradas).map((inc) => (
             <IncidenciaCard
               key={inc.id}
@@ -198,7 +199,7 @@ export default function IncidenciasPage() {
               totalVecinos={totalVecinos}
             />
           ))}
-        </div>
+        </StaggerList>
       )}
     </div>
   );

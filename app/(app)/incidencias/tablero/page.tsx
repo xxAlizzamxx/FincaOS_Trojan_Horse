@@ -13,11 +13,24 @@ import type { Incidencia } from '@/types/database';
 
 const COLUMNAS = [
   {
+    id: 'criticas',
+    label: '🚨 Críticas',
+    colorTop: 'border-t-red-500',
+    bgColor: 'bg-red-50/70',
+    filtro: (inc: Incidencia) =>
+      !!(inc as any).escalada_por_quorum ||
+      inc.prioridad === 'urgente' ||
+      inc.estado === 'en_ejecucion',
+  },
+  {
     id: 'nuevas',
     label: 'Nuevas',
     colorTop: 'border-t-yellow-400',
     bgColor: 'bg-yellow-50/70',
-    filtro: (inc: Incidencia) => inc.estado === 'pendiente' && !(inc as any).escalada_por_quorum,
+    filtro: (inc: Incidencia) =>
+      inc.estado === 'pendiente' &&
+      !(inc as any).escalada_por_quorum &&
+      inc.prioridad !== 'urgente',
   },
   {
     id: 'en_progreso',
@@ -25,17 +38,9 @@ const COLUMNAS = [
     colorTop: 'border-t-blue-400',
     bgColor: 'bg-blue-50/70',
     filtro: (inc: Incidencia) =>
-      ['en_revision', 'presupuestada'].includes(inc.estado) && !(inc as any).escalada_por_quorum,
-  },
-  {
-    id: 'criticas',
-    label: '🚨 Críticas',
-    colorTop: 'border-t-red-500',
-    bgColor: 'bg-red-50/70',
-    filtro: (inc: Incidencia) =>
-      !!(inc as any).escalada_por_quorum ||
-      (inc.estado === 'en_ejecucion') ||
-      inc.prioridad === 'urgente',
+      ['en_revision', 'presupuestada'].includes(inc.estado) &&
+      !(inc as any).escalada_por_quorum &&
+      inc.prioridad !== 'urgente',
   },
   {
     id: 'resueltas',
