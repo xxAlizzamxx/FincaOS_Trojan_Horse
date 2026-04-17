@@ -100,3 +100,21 @@ export const WORKFLOW_STEPS = [
   'En ejecución',
   'Resuelta',
 ];
+
+/* ─── Orden numérico de prioridad ─── */
+export const PRIORIDAD_ORDEN: Record<string, number> = {
+  urgente: 3,
+  alta:    2,
+  normal:  1,
+  baja:    0,
+};
+
+/**
+ * Ordena incidencias de mayor a menor prioridad (urgente primero).
+ * Devuelve una copia del array — no muta el original.
+ */
+export function sortByPrioridad<T extends { prioridad: string }>(list: T[]): T[] {
+  return [...list].sort(
+    (a, b) => (PRIORIDAD_ORDEN[b.prioridad] ?? 0) - (PRIORIDAD_ORDEN[a.prioridad] ?? 0),
+  );
+}

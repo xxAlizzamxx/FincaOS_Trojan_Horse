@@ -5,7 +5,7 @@ import { Users, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { ESTADO_CONFIG } from '@/lib/incidencias/workflow';
+import { ESTADO_CONFIG, sortByPrioridad } from '@/lib/incidencias/workflow';
 import type { Incidencia } from '@/types/database';
 
 const PRIORIDAD_BADGE: Record<string, string> = {
@@ -23,7 +23,6 @@ interface Props {
   totalVecinos: number;
 }
 
-const PRIORIDAD_ORDEN: Record<string, number> = { urgente: 3, alta: 2, normal: 1, baja: 0 };
 const SEMAFORO: Record<string, string> = {
   urgente: 'bg-red-500',
   alta:    'bg-orange-400',
@@ -34,9 +33,7 @@ const SEMAFORO: Record<string, string> = {
 export function KanbanColumna({ label, colorTop, bgColor, incidencias, totalVecinos }: Props) {
   const router = useRouter();
 
-  const sorted = [...incidencias].sort(
-    (a, b) => (PRIORIDAD_ORDEN[b.prioridad] ?? 0) - (PRIORIDAD_ORDEN[a.prioridad] ?? 0),
-  );
+  const sorted = sortByPrioridad(incidencias);
 
   return (
     <div className={cn(

@@ -40,8 +40,9 @@ export function IncidenciaCard({
   onToggle,
 }: Props) {
   console.log('[IncidenciaCard] renderizando:', inc.id, '| quorum:', inc.quorum, '| totalVecinos:', totalVecinos);
+  console.log('[QUORUM REAL] id:', inc.id, '| afectados_count RAW:', inc.quorum?.afectados_count ?? 'undefined');
   const cfg         = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG.pendiente;
-  const afectados   = Math.max(1, inc.quorum?.afectados_count ?? 0);
+  const afectados   = Math.max(1, inc.quorum?.afectados_count ?? 0); // Math.max(1) = safety net para incidencias legacy sin quorum
   const umbral      = inc.quorum?.umbral ?? 30;
   const pct         = totalVecinos > 0 ? Math.round((afectados / totalVecinos) * 100) : 0;
   const qAlcanzado  = inc.quorum?.alcanzado ?? false;

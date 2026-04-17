@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IncidenciaCard } from '@/components/incidencias/IncidenciaCard';
+import { sortByPrioridad } from '@/lib/incidencias/workflow';
 
 const filtros = ['Todas', 'Pendiente', 'En revisión', 'Resuelta'];
 const filtroMap: Record<string, string[]> = {
@@ -190,7 +191,7 @@ export default function IncidenciasPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {incidenciasFiltradas.map((inc) => (
+          {sortByPrioridad(incidenciasFiltradas).map((inc) => (
             <IncidenciaCard
               key={inc.id}
               incidencia={inc}

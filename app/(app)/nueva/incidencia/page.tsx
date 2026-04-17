@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { ArrowLeft, CircleCheck as CheckCircle2, Camera, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
 import { notificarAdmins, crearNotificacionComunidad } from '@/lib/firebase/notifications';
@@ -151,6 +151,9 @@ export default function NuevaIncidenciaPage() {
     const est = estimacion || { min: 100, max: 600 };
 
     try {
+      const coef = (perfil as any).coeficiente ?? 1;
+      const ahora = new Date().toISOString();
+
       const ref = await addDoc(collection(db, 'incidencias'), {
         comunidad_id: perfil.comunidad_id,
         autor_id: perfil.id,
@@ -162,10 +165,26 @@ export default function NuevaIncidenciaPage() {
         ubicacion,
         estimacion_min: est.min,
         estimacion_max: est.max,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: ahora,
+        updated_at: ahora,
         resuelta_at: null,
+        // Quórum inicial: el creador ya cuenta como afectado
+        quorum: {
+          tipo:             'simple',
+          umbral:           30,
+          afectados_count:  1,
+          peso_afectados:   coef,
+          alcanzado:        false,
+        },
       });
+
+      // Escribir al creador en la subcollección afectados
+      await setDoc(
+        doc(db, 'incidencias', ref.id, 'afectados', perfil.id),
+        { coeficiente: coef, added_at: ahora, es_autor: true },
+      );
+      console.log('[QUORUM REAL] incidencia creada — afectados_count inicial: 1, autor:', perfil.id);
+
       if (fotos.length > 0) {
         await uploadFotos(ref.id, perfil.comunidad_id);
       }
