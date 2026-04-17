@@ -35,7 +35,12 @@
       "Bash(touch \"/mnt/c/Users/USER/Documents/Batch8-cooweb/Proyecto final cooweb/FincaOS_Trojan_Horse/components/layout/NotificationsPanel.tsx\")",
       "Bash(cmd.exe /c \"dir \\\\\"C:\\\\Users\\\\USER\\\\Documents\\\\Batch8-cooweb\\\\Proyecto final cooweb\\\\FincaOS_Trojan_Horse\\\\hooks\\\\\" 2>&1\")",
       "Bash(cmd.exe /c \"dir \\\\\"C:\\\\\\\\Users\\\\\\\\USER\\\\\\\\Documents\\\\\\\\Batch8-cooweb\\\\\\\\Proyecto final cooweb\\\\\\\\FincaOS_Trojan_Horse\\\\\\\\hooks\\\\\"\")",
-      "Bash(cmd.exe /c \"findstr /s /i /l \\\\\"incidencia\\\\\" \\\\\"C:\\\\Users\\\\USER\\\\Documents\\\\Batch8-cooweb\\\\Proyecto final cooweb\\\\FincaOS_Trojan_Horse\\\\app\\\\\\(app\\)\\\\*.tsx\\\\\"\")"
+      "Bash(cmd.exe /c \"findstr /s /i /l \\\\\"incidencia\\\\\" \\\\\"C:\\\\Users\\\\USER\\\\Documents\\\\Batch8-cooweb\\\\Proyecto final cooweb\\\\FincaOS_Trojan_Horse\\\\app\\\\\\(app\\)\\\\*.tsx\\\\\"\")",
+      "Bash(gh api:*)",
+      "Bash(vercel --version)",
+      "Bash(npx vercel:*)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:v for k,v in d.get\\('dependencies',{}\\).items\\(\\)}, indent=2\\)\\)\")",
+      "Bash(node -e \"const d=require\\('./package.json'\\); const deps={...d.dependencies,...d.devDependencies}; Object.keys\\(deps\\).sort\\(\\).forEach\\(k=>console.log\\(k+': '+deps[k]\\)\\)\")"
     ]
   }
 }
