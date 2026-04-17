@@ -179,7 +179,7 @@ export default function MediacionesPage() {
         </div>
 
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {mediaciones.map((m) => {
             const cfg = ESTADO_CFG[m.estado] ?? {
               label: m.estado ?? 'Desconocido',
@@ -199,7 +199,7 @@ export default function MediacionesPage() {
             return (
               <Link key={m.id} href={`/mediaciones/${m.id}`}>
                 <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-[0.99] cursor-pointer">
-                  <CardContent className="p-4">
+                  <CardContent className="p-4 py-5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
