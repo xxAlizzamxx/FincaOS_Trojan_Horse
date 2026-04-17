@@ -23,8 +23,20 @@ interface Props {
   totalVecinos: number;
 }
 
+const PRIORIDAD_ORDEN: Record<string, number> = { urgente: 3, alta: 2, normal: 1, baja: 0 };
+const SEMAFORO: Record<string, string> = {
+  urgente: 'bg-red-500',
+  alta:    'bg-orange-400',
+  normal:  'bg-blue-400',
+  baja:    'bg-green-400',
+};
+
 export function KanbanColumna({ label, colorTop, bgColor, incidencias, totalVecinos }: Props) {
   const router = useRouter();
+
+  const sorted = [...incidencias].sort(
+    (a, b) => (PRIORIDAD_ORDEN[b.prioridad] ?? 0) - (PRIORIDAD_ORDEN[a.prioridad] ?? 0),
+  );
 
   return (
     <div className={cn(
@@ -41,9 +53,9 @@ export function KanbanColumna({ label, colorTop, bgColor, incidencias, totalVeci
 
       {/* Cards */}
       <div className="space-y-2">
-        {incidencias.map((inc) => {
+        {sorted.map((inc) => {
           const cfg        = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG.pendiente;
-          const afectados  = inc.quorum?.afectados_count ?? 0;
+          const afectados  = Math.max(1, inc.quorum?.afectados_count ?? 0);
           const umbral     = inc.quorum?.umbral ?? 30;
           const pct        = totalVecinos > 0 ? Math.round((afectados / totalVecinos) * 100) : 0;
           const qAlcanzado = inc.quorum?.alcanzado ?? false;
@@ -55,9 +67,10 @@ export function KanbanColumna({ label, colorTop, bgColor, incidencias, totalVeci
               onClick={() => router.push(`/incidencias/${inc.id}`)}
             >
               <CardContent className="p-3 space-y-2">
-                {/* Prioridad + alert */}
+                {/* Prioridad semáforo + alert */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', PRIORIDAD_BADGE[inc.prioridad])}>
+                  <span className={cn('w-2 h-2 rounded-full shrink-0', SEMAFORO[inc.prioridad] ?? 'bg-gray-300')} />
+                  <span className={cn('text-[10px] font-medium capitalize', PRIORIDAD_BADGE[inc.prioridad])}>
                     {inc.prioridad}
                   </span>
                   {qAlcanzado && <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />}

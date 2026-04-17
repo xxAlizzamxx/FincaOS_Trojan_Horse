@@ -41,7 +41,7 @@ export function IncidenciaCard({
 }: Props) {
   console.log('[IncidenciaCard] renderizando:', inc.id, '| quorum:', inc.quorum, '| totalVecinos:', totalVecinos);
   const cfg         = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG.pendiente;
-  const afectados   = inc.quorum?.afectados_count ?? 0;
+  const afectados   = Math.max(1, inc.quorum?.afectados_count ?? 0);
   const umbral      = inc.quorum?.umbral ?? 30;
   const pct         = totalVecinos > 0 ? Math.round((afectados / totalVecinos) * 100) : 0;
   const qAlcanzado  = inc.quorum?.alcanzado ?? false;
