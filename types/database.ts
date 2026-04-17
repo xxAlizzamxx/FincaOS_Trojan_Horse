@@ -112,6 +112,9 @@ export interface Incidencia {
   categoria?: CategoriaIncidencia;
   fotos?: IncidenciaFoto[];
   comentarios?: Comentario[];
+  quorum?: QuorumIncidencia;
+  escalada_por_quorum?: boolean;
+  prioridad_original?: PrioridadIncidencia;
 }
 
 export interface Anuncio {
@@ -201,6 +204,23 @@ export interface EntradaHistorialMediacion {
   fecha: string;       // ISO string
   usuario_id: string;
   nota?: string;
+}
+
+/* ─── Quórum ─── */
+export type TipoQuorum =
+  | 'simple'        // >X% de afectados de la incidencia
+  | 'absoluta'      // >50% de TODOS los vecinos
+  | 'cualificada'   // ≥66.6% (LPH obras accesibilidad)
+  | 'unanimidad'    // 100%
+  | 'lph_ponderado';// % coeficientes LPH
+
+export interface QuorumIncidencia {
+  tipo: TipoQuorum;
+  umbral: number;              // % requerido (ej: 30)
+  afectados_count: number;
+  peso_afectados: number;      // suma coeficientes afectados
+  alcanzado: boolean;
+  alcanzado_at: string | null; // ISO
 }
 
 export interface Mediacion {
