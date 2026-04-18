@@ -207,19 +207,24 @@ export default function CuotasPage() {
 
   /* ── Stripe payment (vecino) ── */
   async function pagarCuotaConStripe(cuota: Cuota) {
+    if (!user) return;
     setPagandoStripe(cuota.id);
     try {
+      const token = await user.getIdToken();
       const res = await fetch('/api/stripe/create-checkout-session', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           monto:        cuota.monto,
           tipo:         'cuota',
           referencia_id: cuota.id,
-          usuario_id:   user!.uid,
+          usuario_id:   user.uid,
           comunidad_id: perfil!.comunidad_id,
           descripcion:  `Cuota: ${cuota.nombre}`,
-          email:        user?.email ?? undefined,
+          email:        user.email ?? undefined,
         }),
       });
       const data = await res.json();

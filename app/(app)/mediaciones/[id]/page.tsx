@@ -187,13 +187,17 @@ export default function MediacionDetailPage() {
 
   /* ─── Stripe payment (solicitante) ─── */
   async function pagarMediacionConStripe() {
-    if (!mediacion || !perfil) return;
+    if (!mediacion || !perfil || !user) return;
     setPagandoStripe(true);
     try {
       const monto = mediacion.precio_acordado ?? mediacion.precio_min ?? 0;
+      const token = await user.getIdToken();
       const res = await fetch('/api/stripe/create-checkout-session', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           monto,
           tipo:         'mediacion',
@@ -201,7 +205,7 @@ export default function MediacionDetailPage() {
           usuario_id:   uid,
           comunidad_id: perfil.comunidad_id,
           descripcion:  'Servicio de mediación profesional',
-          email:        user?.email ?? undefined,
+          email:        user.email ?? undefined,
         }),
       });
       const data = await res.json();

@@ -53,9 +53,13 @@ export default function PricingPage() {
     if (!user || !perfil) return;
     setLoading(planId);
     try {
+      const token = await user.getIdToken();
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           plan: planId,
           userId: perfil.id,

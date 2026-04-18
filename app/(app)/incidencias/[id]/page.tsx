@@ -41,7 +41,7 @@ import { AvatarVecino } from '@/components/ui/avatar-vecino';
 export default function IncidenciaDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { perfil } = useAuth();
+  const { perfil, user } = useAuth();
 
   const [incidencia, setIncidencia]     = useState<Incidencia | null>(null);
   const [comentarios, setComentarios]   = useState<Comentario[]>([]);
@@ -350,14 +350,18 @@ export default function IncidenciaDetailPage() {
 
   /* ── Stripe payment (autor / vecino) ── */
   async function pagarIncidenciaConStripe() {
-    if (!incidencia || !perfil) return;
+    if (!incidencia || !perfil || !user) return;
     const monto = (incidencia as any).presupuesto_proveedor;
     if (!monto) return;
     setPagandoStripe(true);
     try {
+      const token = await user.getIdToken();
       const res = await fetch('/api/stripe/create-checkout-session', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           monto,
           tipo:         'incidencia',
