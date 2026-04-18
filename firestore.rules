@@ -51,6 +51,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── Admin audit logs ──────────────────────────────────────────────────
+    // Escritura SOLO via Admin SDK (backend). Lectura solo para admin/presidente
+    // de la misma comunidad — los vecinos nunca ven los logs de otros.
+
+    match /admin_logs/{logId} {
+      allow write: if false;  // backend-only (Admin SDK bypass rules)
+      allow read:  if isAdminOfCommunity(resource.data.comunidad_id);
+    }
+
     // ── Comunidades ───────────────────────────────────────────────────────
     // Read is public for the invite page.
     // Updates are restricted to the community's admin/presidente.
