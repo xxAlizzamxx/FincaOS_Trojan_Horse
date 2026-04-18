@@ -25,6 +25,9 @@ import type { AppEvent, AppEventType } from './types';
 
 type Handler<E extends AppEvent = AppEvent> = (event: E) => void | Promise<void>;
 
+/** Maps each event type literal to its full event object for strict narrowing. */
+type EventMap = { [E in AppEvent as E['type']]: E };
+
 class AppEventEmitter {
   private readonly handlers = new Map<AppEventType, Handler[]>();
 
@@ -32,13 +35,13 @@ class AppEventEmitter {
    * Register a handler for a specific event type.
    * @returns Unsubscribe function — call it to remove the handler.
    */
-  on<E extends AppEvent>(type: E['type'], handler: Handler<E>): () => void {
+  on<T extends AppEventType>(type: T, handler: Handler<EventMap[T]>): () => void {
     const existing = this.handlers.get(type) ?? [];
-    this.handlers.set(type, [...existing, handler as Handler]);
+    this.handlers.set(type, [...existing, handler as unknown as Handler]);
 
     return () => {
       const current = this.handlers.get(type) ?? [];
-      this.handlers.set(type, current.filter((h) => h !== (handler as Handler)));
+      this.handlers.set(type, current.filter((h) => h !== (handler as unknown as Handler)));
     };
   }
 
