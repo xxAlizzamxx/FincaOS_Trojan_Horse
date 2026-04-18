@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { LayoutDashboard, CircleAlert as AlertCircle, Users, Building2, Megaphone, Settings, LogOut, Menu, X, Wallet, CreditCard } from 'lucide-react';
+import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/animation/PageTransition';
@@ -118,11 +119,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-finca-peach flex items-center justify-center">
-              <span className="text-xs font-semibold text-finca-coral">
-                {perfil?.nombre_completo?.charAt(0) || 'A'}
-              </span>
-            </div>
+            {perfil && <AvatarVecino perfil={perfil} size="sm" />}
           </div>
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
