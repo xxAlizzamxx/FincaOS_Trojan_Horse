@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -118,51 +119,65 @@ export default function AdminVecinosPage() {
 
       ) : (
         <div className="space-y-2">
-          {filtrados.map((v) => (
-            <Card key={v.id} className="border-0 shadow-sm">
-              <CardContent className="p-3 flex items-center gap-3">
-                {/* Avatar */}
-                <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center shrink-0">
-                  <span className="font-semibold text-finca-coral text-sm">
-                    {v.nombre_completo.charAt(0)}
-                  </span>
-                </div>
+          {filtrados.map((v) => {
+            const esPresidente   = v.rol === 'presidente';
+            const esSelf         = v.id === perfil?.id;
+            // Un admin nunca puede cambiar ni eliminar al presidente
+            const puedeModificar = !esPresidente && !esSelf;
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm text-finca-dark">{v.nombre_completo}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {v.numero_piso ? `Piso ${v.numero_piso}` : 'Sin piso asignado'}
-                  </p>
-                </div>
+            return (
+              <Card key={v.id} className="border-0 shadow-sm">
+                <CardContent className="p-3 flex items-center gap-3">
+                  {/* Avatar con foto de Google */}
+                  <AvatarVecino perfil={v} size="sm" />
 
-                {/* Cambiar rol */}
-                <Select value={v.rol} onValueChange={(val) => cambiarRol(v.id, val)}>
-                  <SelectTrigger className="w-32 h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="vecino">Vecino</SelectItem>
-                    <SelectItem value="presidente">Presidente</SelectItem>
-                    <SelectItem value="admin">Administrador</SelectItem>
-                  </SelectContent>
-                </Select>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm text-finca-dark">{v.nombre_completo}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {v.numero_piso ? `Piso ${v.numero_piso}` : 'Sin piso asignado'}
+                    </p>
+                  </div>
 
-                {/* Eliminar — solo si no es el propio admin */}
-                {v.id !== perfil?.id && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-8 h-8 text-muted-foreground hover:text-red-500 hover:bg-red-50 shrink-0"
-                    onClick={() => setVecinoAEliminar(v)}
-                    title="Eliminar de la comunidad"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  {/* Cambiar rol — bloqueado para presidentes */}
+                  {puedeModificar ? (
+                    <Select value={v.rol} onValueChange={(val) => cambiarRol(v.id, val)}>
+                      <SelectTrigger className="w-32 h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vecino">Vecino</SelectItem>
+                        <SelectItem value="mediador">Mediador</SelectItem>
+                        <SelectItem value="admin">Administrador</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className={cn(
+                      'text-xs px-2.5 py-1 rounded-md font-medium',
+                      esPresidente
+                        ? 'bg-finca-peach/60 text-finca-coral'
+                        : 'bg-muted text-muted-foreground',
+                    )}>
+                      {esPresidente ? '👑 Presidente' : v.rol}
+                    </span>
+                  )}
+
+                  {/* Eliminar — no para presidente ni para uno mismo */}
+                  {puedeModificar && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-8 h-8 text-muted-foreground hover:text-red-500 hover:bg-red-50 shrink-0"
+                      onClick={() => setVecinoAEliminar(v)}
+                      title="Eliminar de la comunidad"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
