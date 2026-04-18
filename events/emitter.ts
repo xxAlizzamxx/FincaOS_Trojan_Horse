@@ -69,9 +69,7 @@ class AppEventEmitter {
 
   /** Number of registered handlers across all event types (useful for tests). */
   get handlerCount(): number {
-    let n = 0;
-    for (const list of this.handlers.values()) n += list.length;
-    return n;
+    return Array.from(this.handlers.values()).reduce((n, list) => n + list.length, 0);
   }
 }
 
