@@ -244,6 +244,25 @@ export interface PagoCuota {
   fecha_pago: string | null;
 }
 
+/* ─── Proveedores ─── */
+
+export interface Proveedor {
+  id:               string;
+  nombre:           string;
+  promedio_rating:  number;   // 0–5, recalculado en cada review
+  total_reviews:    number;
+  created_at:       string;
+}
+
+export interface ProveedorReview {
+  id:           string;
+  user_id:      string;
+  incidencia_id: string;
+  rating:       number;       // 1–5
+  comentario:   string;
+  created_at:   string;
+}
+
 /* ─── Mediaciones ─── */
 
 export type EstadoMediacion = 'solicitada' | 'asignada' | 'en_proceso' | 'finalizada';

@@ -269,6 +269,19 @@ service cloud.firestore {
                         || profile().rol in ['admin', 'presidente']);
     }
 
+    // ── Proveedores ───────────────────────────────────────────────────────
+    // Lectura pública (vecinos ven el rating). Escritura solo via Admin SDK.
+
+    match /proveedores/{proveedorId} {
+      allow read: if isAuth();
+      allow write: if false; // Admin SDK only
+
+      match /reviews/{reviewId} {
+        allow read: if isAuth();
+        allow write: if false; // Admin SDK only (via /api/proveedores/review)
+      }
+    }
+
     // ── Push subscriptions ────────────────────────────────────────────────
 
     match /push_subscriptions/{userId} {

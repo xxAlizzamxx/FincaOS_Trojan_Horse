@@ -13,7 +13,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getAuth } from 'firebase/auth';
 import {
-  collection, query, where, orderBy, getDocs,
+  collection, query, where, orderBy, limit, getDocs,
   getDoc, addDoc, deleteDoc, updateDoc, doc, onSnapshot,
   QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
@@ -70,6 +70,14 @@ export default function IncidenciaDetailPage() {
 
   /* Stripe */
   const [pagandoStripe, setPagandoStripe] = useState(false);
+
+  /* Valoración proveedor */
+  const [showRatingModal, setShowRatingModal]     = useState(false);
+  const [ratingValue, setRatingValue]             = useState(0);
+  const [comentarioRating, setComentarioRating]   = useState('');
+  const [enviandoRating, setEnviandoRating]       = useState(false);
+  const [yaValorado, setYaValorado]               = useState(false);
+  const [proveedorRating, setProveedorRating]     = useState<{ promedio_rating: number; total_reviews: number } | null>(null);
 
   const { confirmar, dialogProps } = useEliminar();
 
@@ -380,6 +388,62 @@ export default function IncidenciaDetailPage() {
       toast.error(err.message ?? 'No se pudo iniciar el pago');
     } finally {
       setPagandoStripe(false);
+    }
+  }
+
+  /* ── Cargar rating de proveedor cuando la incidencia está resuelta ── */
+  useEffect(() => {
+    const provNombre = (incidencia as any)?.proveedor_nombre as string | undefined;
+    if (incidencia?.estado !== 'resuelta' || !provNombre || !perfil?.id) return;
+
+    let cancelled = false;
+    async function cargarRating() {
+      try {
+        const provQ   = query(collection(db, 'proveedores'), where('nombre', '==', provNombre), limit(1));
+        const provSnap = await getDocs(provQ);
+        if (cancelled || provSnap.empty) return;
+
+        const provDoc  = provSnap.docs[0];
+        const provData = provDoc.data();
+        setProveedorRating({ promedio_rating: provData.promedio_rating, total_reviews: provData.total_reviews });
+
+        const revQ    = query(
+          collection(db, 'proveedores', provDoc.id, 'reviews'),
+          where('user_id',      '==', perfil!.id),
+          where('incidencia_id','==', incidenciaId),
+          limit(1),
+        );
+        const revSnap = await getDocs(revQ);
+        if (!cancelled) setYaValorado(!revSnap.empty);
+      } catch {
+        // proveedor aún no existe — no hay reviews
+      }
+    }
+    cargarRating();
+    return () => { cancelled = true; };
+  }, [incidencia?.estado, (incidencia as any)?.proveedor_nombre, perfil?.id, incidenciaId]);
+
+  /* ── Enviar valoración de proveedor ── */
+  async function submitRating() {
+    if (!user || ratingValue === 0) return;
+    setEnviandoRating(true);
+    try {
+      const token = await user.getIdToken();
+      const res   = await fetch('/api/proveedores/review', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ incidencia_id: incidenciaId, rating: ratingValue, comentario: comentarioRating }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error al enviar valoración');
+      toast.success('¡Gracias por tu valoración!');
+      setShowRatingModal(false);
+      setYaValorado(true);
+      setProveedorRating({ promedio_rating: data.promedio_rating, total_reviews: data.total_reviews });
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al enviar valoración');
+    } finally {
+      setEnviandoRating(false);
     }
   }
 
@@ -821,6 +885,71 @@ export default function IncidenciaDetailPage() {
           </Card>
         )}
 
+        {/* ── Valorar proveedor ── */}
+        {(() => {
+          const provNombre = (incidencia as any)?.proveedor_nombre as string | undefined;
+          if (estadoActual !== 'resuelta' || !provNombre) return null;
+
+          return (
+            <>
+              {/* Botón para valorar — sólo si el usuario no ha valorado aún */}
+              {!yaValorado && (
+                <Card className="border-0 shadow-sm bg-yellow-50 border-l-4 border-l-yellow-400">
+                  <CardContent className="p-4 space-y-2">
+                    <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Valorar al proveedor</p>
+                    <p className="text-sm text-muted-foreground">
+                      ¿Quedaste satisfecho con el trabajo de{' '}
+                      <span className="font-medium text-finca-dark">{provNombre}</span>?
+                    </p>
+                    <Button
+                      className="w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 h-10 font-semibold"
+                      onClick={() => { setRatingValue(0); setComentarioRating(''); setShowRatingModal(true); }}
+                    >
+                      <Star className="w-4 h-4 mr-2 fill-yellow-700 text-yellow-700" />
+                      Valorar a {provNombre}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Mostrar promedio si existe */}
+              {proveedorRating && proveedorRating.total_reviews > 0 && (
+                <Card className="border-0 shadow-sm">
+                  <CardContent className="p-4 space-y-1">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Valoración de {provNombre}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-0.5">
+                        {[1,2,3,4,5].map((star) => (
+                          <Star
+                            key={star}
+                            className={cn(
+                              'w-5 h-5',
+                              star <= Math.round(proveedorRating.promedio_rating)
+                                ? 'fill-yellow-400 text-yellow-400'
+                                : 'text-gray-200',
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-sm font-bold text-finca-dark">{proveedorRating.promedio_rating.toFixed(1)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({proveedorRating.total_reviews} {proveedorRating.total_reviews === 1 ? 'opinión' : 'opiniones'})
+                      </span>
+                      {yaValorado && (
+                        <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                          Ya valorado ✓
+                        </span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          );
+        })()}
+
         {/* ── Historial de estados (acordeón) ── */}
         {historial.length > 0 && (
           <Card className="border-0 shadow-sm">
@@ -928,6 +1057,77 @@ export default function IncidenciaDetailPage() {
         </section>
 
       </div>
+
+      {/* ── Modal: valorar proveedor ── */}
+      {showRatingModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={(e) => { if (!enviandoRating && e.target === e.currentTarget) setShowRatingModal(false); }}
+        >
+          <div className="bg-background rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="space-y-1">
+              <p className="font-semibold text-finca-dark">Valorar proveedor</p>
+              <p className="text-xs text-muted-foreground">
+                {(incidencia as any)?.proveedor_nombre}
+              </p>
+            </div>
+
+            {/* Estrellas */}
+            <div className="flex justify-center gap-1">
+              {[1,2,3,4,5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setRatingValue(star)}
+                  className="p-1 transition-transform hover:scale-110 active:scale-95"
+                >
+                  <Star
+                    className={cn(
+                      'w-9 h-9 transition-colors',
+                      star <= ratingValue ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300',
+                    )}
+                  />
+                </button>
+              ))}
+            </div>
+            {ratingValue > 0 && (
+              <p className="text-center text-xs text-muted-foreground -mt-1">
+                {['', 'Muy malo', 'Malo', 'Regular', 'Bueno', 'Excelente'][ratingValue]}
+              </p>
+            )}
+
+            {/* Comentario opcional */}
+            <Textarea
+              placeholder="Comentario opcional (máx. 500 caracteres)"
+              value={comentarioRating}
+              onChange={(e) => setComentarioRating(e.target.value.slice(0, 500))}
+              rows={3}
+              className="resize-none text-sm"
+            />
+
+            {/* Botones */}
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                disabled={enviandoRating}
+                onClick={() => setShowRatingModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold"
+                disabled={ratingValue === 0 || enviandoRating}
+                onClick={submitRating}
+              >
+                {enviandoRating
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <><Star className="w-4 h-4 mr-1.5 fill-yellow-700 text-yellow-700" />Enviar</>
+                }
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDeleteDialog {...dialogProps} />
     </div>
