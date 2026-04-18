@@ -8,12 +8,43 @@
   "orientation": "portrait",
   "start_url": "/inicio",
   "scope": "/",
+  "lang": "es",
+  "categories": ["business", "utilities"],
   "icons": [
+    {
+      "src": "/navegador.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/image.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nueva incidencia",
+      "short_name": "Incidencia",
+      "description": "Reportar una nueva incidencia en la comunidad",
+      "url": "/nueva/incidencia",
+      "icons": [{ "src": "/navegador.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Mis incidencias",
+      "short_name": "Incidencias",
+      "description": "Ver el listado de incidencias",
+      "url": "/incidencias",
+      "icons": [{ "src": "/navegador.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Mediaciones",
+      "short_name": "Mediaciones",
+      "description": "Gestionar mediaciones vecinales",
+      "url": "/mediaciones",
+      "icons": [{ "src": "/navegador.png", "sizes": "96x96" }]
     }
   ]
 }

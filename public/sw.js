@@ -1,10 +1,11 @@
-const CACHE_NAME = 'fincaos-v1';
+const CACHE_NAME = 'fincaos-v2';
 
 const PRECACHE_URLS = [
   '/inicio',
   '/incidencias',
   '/comunidad',
   '/perfil',
+  '/offline',
   '/manifest.json',
 ];
 
@@ -84,7 +85,7 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() =>
-          caches.match(request).then((cached) => cached || caches.match('/inicio'))
+          caches.match(request).then((cached) => cached || caches.match('/offline') || caches.match('/inicio'))
         )
     );
     return;

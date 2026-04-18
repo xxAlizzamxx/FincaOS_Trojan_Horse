@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Inbox, ArrowLeft, RefreshCw } from 'lucide-react';
+import { ChevronRight, Inbox, ArrowLeft, RefreshCw, Clock, Zap, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import { collection, getDocs, query, where, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
@@ -16,82 +16,175 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-/* Estado visual — cubre TODOS los estados posibles incluyendo los del flujo IA */
+/* ── Estado visual ─────────────────────────────────────────────────────────── */
 const ESTADO_CFG: Record<string, { label: string; badge: string; dot: string }> = {
-  ia_procesando:     { label: 'IA procesando',  badge: 'bg-blue-100 text-blue-700 border-blue-200',       dot: 'bg-blue-400'    },
-  ia_propuesta:      { label: 'Propuesta IA',   badge: 'bg-indigo-100 text-indigo-700 border-indigo-200', dot: 'bg-indigo-400'  },
-  mediador_requerido:{ label: 'Mediador req.',  badge: 'bg-orange-100 text-orange-700 border-orange-200', dot: 'bg-orange-400'  },
-  solicitada:        { label: 'Solicitada',     badge: 'bg-yellow-100 text-yellow-700 border-yellow-200', dot: 'bg-yellow-500'  },
-  asignada:          { label: 'Asignada',       badge: 'bg-blue-100 text-blue-700 border-blue-200',       dot: 'bg-blue-500'    },
-  en_proceso:        { label: 'En proceso',     badge: 'bg-purple-100 text-purple-700 border-purple-200', dot: 'bg-purple-500'  },
-  finalizada:        { label: 'Finalizada',     badge: 'bg-green-100 text-green-700 border-green-200',    dot: 'bg-green-500'   },
-  resuelto:          { label: 'Resuelta',       badge: 'bg-green-100 text-green-700 border-green-200',    dot: 'bg-green-500'   },
+  ia_procesando:      { label: 'IA procesando',  badge: 'bg-blue-100 text-blue-700 border-blue-200',       dot: 'bg-blue-400'    },
+  ia_propuesta:       { label: 'Propuesta IA',   badge: 'bg-indigo-100 text-indigo-700 border-indigo-200', dot: 'bg-indigo-400'  },
+  mediador_requerido: { label: 'Mediador req.',  badge: 'bg-orange-100 text-orange-700 border-orange-200', dot: 'bg-orange-400'  },
+  solicitada:         { label: 'Solicitada',     badge: 'bg-yellow-100 text-yellow-700 border-yellow-200', dot: 'bg-yellow-500'  },
+  asignada:           { label: 'Asignada',       badge: 'bg-blue-100 text-blue-700 border-blue-200',       dot: 'bg-blue-500'    },
+  en_proceso:         { label: 'En proceso',     badge: 'bg-purple-100 text-purple-700 border-purple-200', dot: 'bg-purple-500'  },
+  finalizada:         { label: 'Finalizada',     badge: 'bg-green-100 text-green-700 border-green-200',    dot: 'bg-green-500'   },
+  resuelto:           { label: 'Resuelta',       badge: 'bg-green-100 text-green-700 border-green-200',    dot: 'bg-green-500'   },
 };
 
-/* Convierte cualquier formato de fecha/Timestamp a milisegundos */
+/* ── Agrupación por estado ─────────────────────────────────────────────────── */
+const PENDIENTE_SET  = new Set(['solicitada', 'ia_procesando', 'ia_propuesta', 'mediador_requerido']);
+const EN_PROCESO_SET = new Set(['asignada', 'en_proceso']);
+
+type Grupo = 'pendiente' | 'en_proceso' | 'finalizada';
+
+function grupoDeEstado(estado: string): Grupo {
+  if (PENDIENTE_SET.has(estado))  return 'pendiente';
+  if (EN_PROCESO_SET.has(estado)) return 'en_proceso';
+  return 'finalizada';
+}
+
+/* ── Helper fecha ──────────────────────────────────────────────────────────── */
 function toMs(val: unknown): number {
   if (!val) return 0;
   if (typeof val === 'string') return new Date(val).getTime();
   if (typeof val === 'object' && val !== null) {
-    if (typeof (val as { toMillis?: () => number }).toMillis === 'function') {
+    if (typeof (val as { toMillis?: () => number }).toMillis === 'function')
       return (val as { toMillis: () => number }).toMillis();
-    }
-    if (typeof (val as { seconds?: number }).seconds === 'number') {
+    if (typeof (val as { seconds?: number }).seconds === 'number')
       return (val as { seconds: number }).seconds * 1000;
-    }
   }
   return 0;
 }
 
+/* ── Header de sección ─────────────────────────────────────────────────────── */
+function SectionHeader({
+  icon: Icon,
+  title,
+  count,
+  first = false,
+}: {
+  icon: React.ElementType;
+  title: string;
+  count: number;
+  first?: boolean;
+}) {
+  return (
+    <div className={cn('flex items-center gap-2 mb-1', first ? 'mt-0' : 'mt-6')}>
+      <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </span>
+      <span className="ml-auto text-[10px] font-medium bg-muted text-muted-foreground rounded-full px-2 py-0.5">
+        {count}
+      </span>
+    </div>
+  );
+}
+
+/* ── Card de mediación ─────────────────────────────────────────────────────── */
+function MediacionCard({ m }: { m: any }) {
+  const cfg = ESTADO_CFG[m.estado] ?? {
+    label: m.estado ?? 'Desconocido',
+    badge: 'bg-gray-100 text-gray-600 border-gray-200',
+    dot:   'bg-gray-400',
+  };
+  const raw   = m.updated_at ?? m.created_at;
+  const fecha = raw
+    ? typeof raw === 'string'
+      ? new Date(raw)
+      : typeof raw.toDate === 'function'
+      ? raw.toDate()
+      : new Date(raw.seconds * 1000)
+    : null;
+  const tipoLabel = m.tipo === 'profesional' ? '👔 Profesional' : '🤖 IA';
+
+  return (
+    <Link href={`/mediaciones/${m.id}`}>
+      {/* mt-3 = 12 px de margen superior en cada card */}
+      <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-[0.99] cursor-pointer mt-3">
+        <CardContent className="p-4 py-5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <div className={cn('w-2 h-2 rounded-full shrink-0', cfg.dot)} />
+                <p className="font-medium text-sm text-finca-dark truncate">
+                  {m.descripcion
+                    ? m.descripcion.slice(0, 60) + (m.descripcion.length > 60 ? '…' : '')
+                    : 'Sin descripción'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap mt-1">
+                <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                  {tipoLabel}
+                </span>
+                {m.precio_min != null && (
+                  <span className="text-xs text-muted-foreground">
+                    💰 {m.precio_min}€–{m.precio_max}€
+                  </span>
+                )}
+                {m.estado_pago === 'pagado' && (
+                  <span className="text-xs text-green-600 font-medium">✓ Pagado</span>
+                )}
+              </div>
+              {fecha && (
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  {formatDistanceToNow(fecha, { addSuffix: true, locale: es })}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col items-end gap-2 shrink-0">
+              <Badge className={cn('text-[10px] border', cfg.badge)}>{cfg.label}</Badge>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+/* ── Página principal ──────────────────────────────────────────────────────── */
 export default function MediacionesPage() {
-  const router = useRouter();
+  const router           = useRouter();
   const { perfil, user } = useAuth();
 
   const [mediaciones, setMediaciones] = useState<any[]>([]);
   const [loading, setLoading]         = useState(true);
 
   useEffect(() => {
-    if (perfil && user) fetch();
+    if (perfil && user) fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perfil?.id, user?.uid]);
 
-  async function fetch() {
+  async function fetchData() {
     setLoading(true);
     try {
       const cid = perfil!.comunidad_id;
       const uid = user!.uid;
       const rol = perfil!.rol;
 
-      if (!cid) {
-        setLoading(false);
-        return;
-      }
+      if (!cid) { setLoading(false); return; }
 
-      // Fetch TODAS las mediaciones de la comunidad sin filtros adicionales
       const snap = await getDocs(
-        query(collection(db, 'mediaciones'), where('comunidad_id', '==', cid))
+        query(collection(db, 'mediaciones'), where('comunidad_id', '==', cid)),
+      );
+      const todas = snap.docs.map(
+        (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Record<string, unknown> & { id: string }),
       );
 
-      const todas = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Record<string, unknown> & { id: string }));
-
-      // Filtrado client-side según rol
       let resultado: any[];
       if (rol === 'admin' || rol === 'presidente') {
         resultado = todas;
       } else if (rol === 'mediador') {
-        resultado = todas.filter(
-          (m) => m.estado === 'solicitada' || m.mediador_id === uid
-        );
+        resultado = todas.filter((m) => m.estado === 'solicitada' || m.mediador_id === uid);
       } else {
-        // vecino: las que creó (denunciante_id O solicitado_por)
-        resultado = todas.filter(
-          (m) => m.denunciante_id === uid || m.solicitado_por === uid
-        );
+        resultado = todas.filter((m) => m.denunciante_id === uid || m.solicitado_por === uid);
       }
 
-      resultado.sort((a, b) =>
-        toMs(b.updated_at ?? b.created_at) - toMs(a.updated_at ?? a.created_at)
-      );
+      // Orden: pendientes → en proceso → finalizadas; luego fecha desc dentro de cada grupo
+      const ORDEN: Record<Grupo, number> = { pendiente: 0, en_proceso: 1, finalizada: 2 };
+      resultado.sort((a, b) => {
+        const gd = ORDEN[grupoDeEstado(a.estado)] - ORDEN[grupoDeEstado(b.estado)];
+        if (gd !== 0) return gd;
+        return toMs(b.updated_at ?? b.created_at) - toMs(a.updated_at ?? a.created_at);
+      });
 
       setMediaciones(resultado);
     } catch (err: any) {
@@ -104,6 +197,11 @@ export default function MediacionesPage() {
 
   const esAdmin    = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
   const esMediador = perfil?.rol === 'mediador';
+
+  // Grupos
+  const pendientes  = mediaciones.filter((m) => grupoDeEstado(m.estado) === 'pendiente');
+  const enProceso   = mediaciones.filter((m) => grupoDeEstado(m.estado) === 'en_proceso');
+  const finalizadas = mediaciones.filter((m) => grupoDeEstado(m.estado) === 'finalizada');
 
   return (
     <div className="px-4 py-5 space-y-4">
@@ -129,7 +227,7 @@ export default function MediacionesPage() {
           </p>
         </div>
         <button
-          onClick={fetch}
+          onClick={fetchData}
           disabled={loading}
           className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors shrink-0"
         >
@@ -161,75 +259,44 @@ export default function MediacionesPage() {
               ? 'No hay solicitudes asignadas o disponibles'
               : 'No has realizado solicitudes de mediación'}
           </p>
-          <Button variant="outline" size="sm" onClick={fetch} className="mt-2">
+          <Button variant="outline" size="sm" onClick={fetchData} className="mt-2">
             <RefreshCw className="w-3.5 h-3.5 mr-2" />
             Reintentar
           </Button>
         </div>
 
       ) : (
-        <div className="space-y-4">
-          {mediaciones.map((m) => {
-            const cfg = ESTADO_CFG[m.estado] ?? {
-              label: m.estado ?? 'Desconocido',
-              badge: 'bg-gray-100 text-gray-600 border-gray-200',
-              dot: 'bg-gray-400',
-            };
-            const raw   = m.updated_at ?? m.created_at;
-            const fecha = raw
-              ? typeof raw === 'string'
-                ? new Date(raw)
-                : typeof raw.toDate === 'function'
-                ? raw.toDate()
-                : new Date(raw.seconds * 1000)
-              : null;
-            const tipoLabel = m.tipo === 'profesional' ? '👔 Profesional' : '🤖 IA';
+        <div className="pb-4">
 
-            return (
-              <Link key={m.id} href={`/mediaciones/${m.id}`}>
-                <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-[0.99] cursor-pointer">
-                  <CardContent className="p-4 py-5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className={cn('w-2 h-2 rounded-full shrink-0', cfg.dot)} />
-                          <p className="font-medium text-sm text-finca-dark truncate">
-                            {m.descripcion
-                              ? m.descripcion.slice(0, 60) + (m.descripcion.length > 60 ? '…' : '')
-                              : 'Sin descripción'}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap mt-1">
-                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                            {tipoLabel}
-                          </span>
-                          {m.precio_min != null && (
-                            <span className="text-xs text-muted-foreground">
-                              💰 {m.precio_min}€–{m.precio_max}€
-                            </span>
-                          )}
-                          {m.estado_pago === 'pagado' && (
-                            <span className="text-xs text-green-600 font-medium">✓ Pagado</span>
-                          )}
-                        </div>
-                        {fecha && (
-                          <p className="text-[11px] text-muted-foreground mt-1.5">
-                            {formatDistanceToNow(fecha, { addSuffix: true, locale: es })}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-col items-end gap-2 shrink-0">
-                        <Badge className={cn('text-[10px] border', cfg.badge)}>
-                          {cfg.label}
-                        </Badge>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
+          {/* ── Solicitadas ── */}
+          {pendientes.length > 0 && (
+            <div>
+              <SectionHeader icon={Clock} title="Solicitadas" count={pendientes.length} first />
+              {pendientes.map((m) => <MediacionCard key={m.id} m={m} />)}
+            </div>
+          )}
+
+          {/* ── En proceso ── */}
+          {enProceso.length > 0 && (
+            <div>
+              <SectionHeader icon={Zap} title="En proceso" count={enProceso.length} first={pendientes.length === 0} />
+              {enProceso.map((m) => <MediacionCard key={m.id} m={m} />)}
+            </div>
+          )}
+
+          {/* ── Finalizadas ── */}
+          {finalizadas.length > 0 && (
+            <div>
+              <SectionHeader
+                icon={CheckCircle2}
+                title="Finalizadas"
+                count={finalizadas.length}
+                first={pendientes.length === 0 && enProceso.length === 0}
+              />
+              {finalizadas.map((m) => <MediacionCard key={m.id} m={m} />)}
+            </div>
+          )}
+
         </div>
       )}
     </div>
