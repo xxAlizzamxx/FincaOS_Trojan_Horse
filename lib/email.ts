@@ -16,7 +16,9 @@
  * caliente. Para dedup absoluto entre invocaciones usa Firestore o Redis.
  */
 
-import nodemailer from 'nodemailer';
+import nodemailer   from 'nodemailer';
+import { createHash } from 'crypto';
+import type { Firestore } from 'firebase-admin/firestore';
 import { getAdminDb }    from '@/lib/firebase/admin';
 import { createLogger }  from '@/lib/logger';
 
@@ -29,21 +31,60 @@ const RATE_MAX     = 3;         // máx 3 emails por comunidad…
 const RATE_WIN_MS  = 60_000;   // …en una ventana de 60 s
 const RETRY_DELAY  = 1_000;    // 1 s entre intento 1 y reintento
 
-/* ── Estado in-memory ────────────────────────────────────────────────────── */
+/* ── Estado in-memory (fallback cuando Firestore no está disponible) ─────── */
 
 interface RateBucket { count: number; windowStart: number }
 
 /** key: `${comunidad_id}:${subject}` → last send timestamp */
-const dedupCache:     Map<string, number>     = new Map();
+const dedupCache:    Map<string, number>     = new Map();
 /** key: comunidad_id → rate bucket */
-const rateBucketMap:  Map<string, RateBucket> = new Map();
+const rateBucketMap: Map<string, RateBucket> = new Map();
 
-/* ── Guards ──────────────────────────────────────────────────────────────── */
+/* ── Dedup helper ────────────────────────────────────────────────────────── */
 
-function checkDedup(comunidad_id: string, subject: string): boolean {
+/** Clave determinista de 16 hex chars para el doc en _email_dedup. */
+function makeDedupKey(comunidad_id: string, subject: string): string {
+  return createHash('sha256')
+    .update(`${comunidad_id}:${subject}`)
+    .digest('hex')
+    .slice(0, 16);
+}
+
+/**
+ * Dedup primario — Firestore (persiste entre cold-starts).
+ * Devuelve true si el email ya se envió dentro de DEDUP_TTL_MS.
+ * Lanza si Firestore no está disponible (el caller hace fallback a memoria).
+ */
+async function checkFirestoreDedup(
+  db: Firestore,
+  comunidad_id: string,
+  subject: string,
+): Promise<boolean> {
+  const key = makeDedupKey(comunidad_id, subject);
+  const now = Date.now();
+  const ref = db.collection('_email_dedup').doc(key);
+  const snap = await ref.get();
+
+  if (snap.exists && (snap.data()!.expires_at as number) > now) {
+    return true; // duplicado dentro del TTL
+  }
+
+  // Marcar como enviado — fire-and-forget; no bloquea el envío
+  ref.set({
+    key,
+    comunidad_id,
+    created_at: new Date().toISOString(),
+    expires_at: now + DEDUP_TTL_MS,
+  }).catch(() => {}); // fallo no crítico
+
+  return false;
+}
+
+/** Dedup fallback en memoria (mismo container). */
+function checkInMemoryDedup(comunidad_id: string, subject: string): boolean {
   const key  = `${comunidad_id}:${subject}`;
   const last = dedupCache.get(key);
-  if (last && Date.now() - last < DEDUP_TTL_MS) return true; // duplicate
+  if (last && Date.now() - last < DEDUP_TTL_MS) return true;
   dedupCache.set(key, Date.now());
   return false;
 }
@@ -91,12 +132,13 @@ function createTransporter(): nodemailer.Transporter {
 /** Envía con 1 reintento automático (delay 1 s entre intentos). */
 async function sendWithRetry(
   transporter: nodemailer.Transporter,
-  options: nodemailer.SendMailOptions,
+  options:     nodemailer.SendMailOptions,
+  requestId?:  string,
 ): Promise<void> {
   try {
     await transporter.sendMail(options);
   } catch (firstErr) {
-    log.warn('email_send_retry', { subject: options.subject, error: String(firstErr) });
+    log.warn('email_send_retry', { subject: options.subject, error: String(firstErr), request_id: requestId });
     await delay(RETRY_DELAY);
     // Si el segundo intento también falla, lanza para que el caller lo capture
     await transporter.sendMail(options);
@@ -128,17 +170,29 @@ export async function sendAdminNotification({
   subject:      string;
   content:      string;
 }): Promise<void> {
-  const t0 = Date.now();
+  const t0        = Date.now();
+  const requestId = crypto.randomUUID().slice(0, 8);
 
-  // ── 1. Dedup ─────────────────────────────────────────────────────────────
-  if (checkDedup(comunidad_id, subject)) {
-    log.info('email_dedup_skipped', { comunidad_id, subject });
-    return;
+  // ── 1. Dedup — Firestore primario, memoria como fallback ──────────────────
+  try {
+    const db       = getAdminDb();
+    const isDupFs  = await checkFirestoreDedup(db, comunidad_id, subject);
+    if (isDupFs) {
+      log.info('email_dedup_skipped', { comunidad_id, subject, source: 'firestore', request_id: requestId });
+      return;
+    }
+  } catch (dedupErr) {
+    // Firestore no disponible → fallback a memoria
+    log.error('email_dedup_firestore_failed', dedupErr, { comunidad_id, subject, request_id: requestId });
+    if (checkInMemoryDedup(comunidad_id, subject)) {
+      log.info('email_dedup_skipped', { comunidad_id, subject, source: 'memory', request_id: requestId });
+      return;
+    }
   }
 
   // ── 2. Rate limit ─────────────────────────────────────────────────────────
   if (checkRateLimit(comunidad_id)) {
-    log.warn('email_rate_limited', { comunidad_id, subject, max: RATE_MAX, window_ms: RATE_WIN_MS });
+    log.warn('email_rate_limited', { comunidad_id, subject, max: RATE_MAX, window_ms: RATE_WIN_MS, request_id: requestId });
     return;
   }
 
@@ -154,7 +208,7 @@ export async function sendAdminNotification({
       .get();
 
     if (adminSnap.empty) {
-      log.info('email_no_admins', { comunidad_id });
+      log.info('email_no_admins', { comunidad_id, request_id: requestId });
       return;
     }
 
@@ -168,7 +222,7 @@ export async function sendAdminNotification({
       .filter((e): e is string => typeof e === 'string' && e.includes('@'));
 
     if (emails.length === 0) {
-      log.info('email_no_addresses', { comunidad_id });
+      log.info('email_no_addresses', { comunidad_id, request_id: requestId });
       return;
     }
 
@@ -180,13 +234,14 @@ export async function sendAdminNotification({
       subject: `[FincaOS] ${subject}`,
       html:    buildHtml(subject, content),
       text:    `${subject}\n\n${content}`,
-    });
+    }, requestId);
 
     log.info('email_sent', {
       comunidad_id,
       subject,
       recipients:  emails.length,
       duration_ms: Date.now() - t0,
+      request_id:  requestId,
     });
 
   } catch (err) {
@@ -195,6 +250,7 @@ export async function sendAdminNotification({
       comunidad_id,
       subject,
       duration_ms: Date.now() - t0,
+      request_id:  requestId,
     });
   }
 }

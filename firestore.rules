@@ -51,6 +51,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /_email_dedup/{document=**} {
+      allow read, write: if false;
+    }
+
     // ── Admin audit logs ──────────────────────────────────────────────────
     // Escritura SOLO via Admin SDK (backend). Lectura solo para admin/presidente
     // de la misma comunidad — los vecinos nunca ven los logs de otros.

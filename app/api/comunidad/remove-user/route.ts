@@ -108,18 +108,20 @@ export async function POST(req: NextRequest) {
   });
 
   // ── 8. Audit log en admin_logs ────────────────────────────────────────────
-  // Fire-and-forget: si el log falla no revertimos la eliminación
-  db.collection('admin_logs').add({
-    admin_id:       requesterId,
-    action:         'remove_user',
-    target_user_id: userId,
-    target_nombre:  targetData.nombre_completo ?? null,
-    comunidad_id:   comunidadId,
-    created_at:     FieldValue.serverTimestamp(),
-  }).catch((auditErr: unknown) => {
-    // No revertir la operación; solo loguear el fallo del audit
-    log.error('audit_log_failed', auditErr, { action: 'remove_user', target: userId });
-  });
+  // No revertir la operación si el log falla — solo registrar el fallo
+  try {
+    await db.collection('admin_logs').add({
+      admin_id:       requesterId,
+      action:         'remove_user',
+      target_user_id: userId,
+      target_nombre:  targetData.nombre_completo ?? null,
+      comunidad_id:   comunidadId,
+      request_id:     requestId,
+      created_at:     FieldValue.serverTimestamp(),
+    });
+  } catch (auditErr: unknown) {
+    log.error('admin_log_failed', auditErr, { action: 'remove_user', target: userId, request_id: requestId });
+  }
 
   log.info('user_removed', {
     removed_uid: userId,

@@ -44,6 +44,17 @@ async function safePut(cacheName, request, response) {
   }
 }
 
+/**
+ * fetch con AbortController timeout.
+ * Si la red no responde en `ms` ms → rechaza con AbortError.
+ */
+function fetchWithTimeout(request, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(request, { signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 /** Devuelve true si la URL es de una API o servicio externo que no debe cachearse. */
 function isNetworkOnly(url) {
   return (
@@ -153,12 +164,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── D. Navegación HTML — network-first, fallback /offline ─────────────────
+  // ── D. Navegación HTML — network-first (3s timeout), fallback /offline ──────
   // La app usa Firebase JS SDK (no SSR con datos), por lo que la shell HTML
   // no caduca: podemos cachearla y servirla offline sin problemas de stale data.
+  // Timeout de 3s evita esperar indefinidamente en redes lentas/portal cautivo.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetchWithTimeout(request, 3000)
         .then((res) => {
           if (res.ok) safePut(CACHE_PAGES, request.clone(), res.clone());
           return res;
