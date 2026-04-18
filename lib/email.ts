@@ -255,6 +255,95 @@ export async function sendAdminNotification({
   }
 }
 
+/* ── Smart Alerts ────────────────────────────────────────────────────────── */
+
+export type SmartAlertType =
+  | 'quorum_reached'
+  | 'high_zone_activity'
+  | 'pending_payments';
+
+interface SmartAlertTemplate { subject: string; content: string }
+
+function buildAlertTemplate(
+  type:     SmartAlertType,
+  metadata: Record<string, string | number> = {},
+): SmartAlertTemplate {
+  switch (type) {
+    case 'quorum_reached':
+      return {
+        subject: '⚠️ Quórum alcanzado — acción requerida',
+        content: [
+          `La incidencia "${metadata.titulo ?? 'sin título'}" ha alcanzado quórum.`,
+          '',
+          `📊 Vecinos afectados: ${metadata.afectados ?? '?'}`,
+          metadata.porcentaje ? `📈 Participación: ${Number(metadata.porcentaje).toFixed(1)}%` : '',
+          '',
+          'La incidencia ha sido escalada automáticamente a prioridad urgente y su estado es "en revisión".',
+          '',
+          'Accede al panel de administración para gestionar esta incidencia.',
+        ].filter(Boolean).join('\n'),
+      };
+
+    case 'high_zone_activity':
+      return {
+        subject: '📍 Alta actividad detectada en una zona',
+        content: [
+          `Se ha detectado una concentración inusual de incidencias en la zona "${metadata.zona ?? 'desconocida'}".`,
+          '',
+          `🔢 Incidencias activas: ${metadata.count ?? '?'}`,
+          '',
+          'Te recomendamos revisar las incidencias de esta zona y valorar una inspección presencial.',
+        ].join('\n'),
+      };
+
+    case 'pending_payments':
+      return {
+        subject: '💰 Cuotas pendientes de pago',
+        content: [
+          `Hay cuotas pendientes de pago en tu comunidad.`,
+          '',
+          `📋 Vecinos con pagos pendientes: ${metadata.count ?? '?'}`,
+          metadata.importe_total ? `💶 Importe total pendiente: ${metadata.importe_total}€` : '',
+          '',
+          'Accede a la sección de Cobros para consultar el detalle y enviar recordatorios.',
+        ].filter(Boolean).join('\n'),
+      };
+  }
+}
+
+/**
+ * Envía una alerta inteligente a los admins/presidentes de una comunidad.
+ *
+ * Solo para eventos importantes — el dedup de sendAdminNotification
+ * evita automáticamente el spam si el mismo evento se repite en 30 s.
+ *
+ * @example
+ * void sendSmartAlert({
+ *   type: 'quorum_reached',
+ *   comunidad_id: 'abc123',
+ *   metadata: { titulo: 'Fuga agua', afectados: 8, porcentaje: 34 },
+ * });
+ */
+export async function sendSmartAlert({
+  type,
+  comunidad_id,
+  metadata = {},
+}: {
+  type:          SmartAlertType;
+  comunidad_id:  string;
+  metadata?:     Record<string, string | number>;
+}): Promise<void> {
+  const template = buildAlertTemplate(type, metadata);
+
+  log.info('email_triggered', { alert_type: type, comunidad_id });
+
+  await sendAdminNotification({
+    comunidad_id,
+    subject: template.subject,
+    content: template.content,
+  });
+}
+
 /* ── Template HTML ───────────────────────────────────────────────────────── */
 
 function buildHtml(subject: string, content: string): string {

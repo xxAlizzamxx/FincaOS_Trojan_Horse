@@ -13,6 +13,7 @@ import { FieldValue }                from 'firebase-admin/firestore';
 import { getAuth }                   from 'firebase-admin/auth';
 import { getApps }                   from 'firebase-admin/app';
 import { getAdminDb }                from '@/lib/firebase/admin';
+import { sendAdminNotification }     from '@/lib/email';
 import { createLogger }              from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -124,9 +125,26 @@ export async function POST(req: NextRequest) {
   }
 
   log.info('user_removed', {
-    removed_uid: userId,
-    by_uid:      requesterId,
+    removed_uid:  userId,
+    by_uid:       requesterId,
     comunidad_id: comunidadId,
+    request_id:   requestId,
+  });
+
+  // ── 9. Email a admins — fire-and-forget ────────────────────────────────────
+  const nombreEliminado = (targetData.nombre_completo as string | undefined) ?? userId;
+  void sendAdminNotification({
+    comunidad_id: comunidadId,
+    subject:      'Vecino eliminado de la comunidad',
+    content: [
+      `El administrador ha eliminado a "${nombreEliminado}" de la comunidad.`,
+      '',
+      `👤 Usuario eliminado: ${nombreEliminado}`,
+      `🔑 Eliminado por: ${requesterId}`,
+      `🕒 Fecha: ${new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })}`,
+      '',
+      'Sus datos históricos (incidencias, pagos, comentarios) se han conservado.',
+    ].join('\n'),
   });
 
   return NextResponse.json({ ok: true });

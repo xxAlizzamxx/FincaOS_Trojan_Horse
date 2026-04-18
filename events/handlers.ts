@@ -9,7 +9,8 @@
  * Privacy guarantee: no email, no name, no message content stored in analytics.
  */
 
-import { eventBus } from './emitter';
+import { eventBus }      from './emitter';
+import { sendSmartAlert } from '@/lib/email';
 import type { AnalyticsEventName } from '@/types/database';
 
 /* ── Analytics writer (server-side, Admin SDK) ──────────────────────────── */
@@ -94,6 +95,16 @@ export function registerDefaultHandlers(): void {
       afectados: e.payload.afectados, comunidad_id: e.payload.comunidadId,
       request_id: e.request_id, timestamp: e.timestamp,
     }));
+
+    // Email alert — fire-and-forget; dedup built into sendAdminNotification
+    void sendSmartAlert({
+      type:         'quorum_reached',
+      comunidad_id: e.payload.comunidadId,
+      metadata: {
+        titulo:     e.payload.titulo || e.payload.incidenciaId,
+        afectados:  e.payload.afectados,
+      },
+    });
   });
 
   eventBus.on('incidencia.status_changed', (e) => {
