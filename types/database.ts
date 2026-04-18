@@ -227,7 +227,7 @@ export interface VotoUsuario {
 
 /* ─── Cuotas ─── */
 
-export type EstadoPago = 'pendiente' | 'pagado';
+export type EstadoPago = 'pendiente' | 'pagado' | 'overdue';
 
 export interface Cuota {
   id: string;

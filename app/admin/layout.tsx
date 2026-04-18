@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { LayoutDashboard, CircleAlert as AlertCircle, Users, Building2, Megaphone, Settings, LogOut, Menu, X, Wallet } from 'lucide-react';
+import { LayoutDashboard, CircleAlert as AlertCircle, Users, Building2, Megaphone, Settings, LogOut, Menu, X, Wallet, CreditCard } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/animation/PageTransition';
@@ -16,6 +16,7 @@ const navItems = [
   { href: '/admin/vecinos', icon: Users, label: 'Vecinos' },
   { href: '/admin/anuncios', icon: Megaphone, label: 'Anuncios' },
   { href: '/admin/cobros', icon: Wallet, label: 'Cobros' },
+  { href: '/admin/cuotas', icon: CreditCard, label: 'Cuotas' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

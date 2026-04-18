@@ -255,6 +255,56 @@ export async function sendAdminNotification({
   }
 }
 
+/* ── Payment Reminder ────────────────────────────────────────────────────── */
+
+/**
+ * Envía un recordatorio de cuota próxima a vencer a los admins de una comunidad.
+ * Se llama desde el cron /api/cron/cuotas cuando quedan ≤3 días para el vencimiento.
+ */
+export async function sendPaymentReminder({
+  comunidad_id,
+  cuota_nombre,
+  monto,
+  fecha_limite,
+  pending_count,
+}: {
+  comunidad_id:  string;
+  cuota_nombre:  string;
+  monto:         number;
+  fecha_limite:  string;
+  pending_count: number;
+}): Promise<void> {
+  const fechaFormateada = new Date(fecha_limite).toLocaleDateString('es-ES', {
+    day: '2-digit', month: 'long', year: 'numeric',
+  });
+
+  const montoFormateado = new Intl.NumberFormat('es-ES', {
+    style: 'currency', currency: 'EUR',
+  }).format(monto);
+
+  log.info('email_triggered', {
+    alert_type:   'payment_reminder',
+    comunidad_id,
+    cuota_nombre,
+    pending_count,
+  });
+
+  await sendAdminNotification({
+    comunidad_id,
+    subject: `⏰ Recordatorio: cuota "${cuota_nombre}" vence en 3 días`,
+    content: [
+      `La cuota "${cuota_nombre}" vence el ${fechaFormateada}.`,
+      '',
+      `💶 Importe: ${montoFormateado} por vecino`,
+      `👥 Vecinos con pago pendiente: ${pending_count}`,
+      '',
+      '📲 Accede al panel de administración → Cuotas para ver el detalle y hacer seguimiento.',
+      '',
+      'Puedes marcar pagos manualmente o dejar que los vecinos paguen a través de la app.',
+    ].join('\n'),
+  });
+}
+
 /* ── Smart Alerts ────────────────────────────────────────────────────────── */
 
 export type SmartAlertType =
