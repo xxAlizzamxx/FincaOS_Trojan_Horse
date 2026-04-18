@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse }  from 'next/server';
 import { getStripe }                  from '@/lib/stripe';
 import { getAdminDb }                 from '@/lib/firebase/admin';
-import type { FirebaseFirestore }     from 'firebase-admin/firestore';
+import type { DocumentReference }     from 'firebase-admin/firestore';
 import { createLogger }               from '@/lib/logger';
 import { handleApiError, StripeError } from '@/lib/errors';
 import { eventBus }                   from '@/events/emitter';
@@ -46,7 +46,7 @@ async function getComunidadDoc(db: Db, customerId: string) {
  * All calls are idempotent — repeated writes of the same plan are safe.
  */
 async function updateComunidadPlan(
-  ref: FirebaseFirestore.DocumentReference,
+  ref: DocumentReference,
   plan: 'free' | 'premium',
   extra: Record<string, unknown> = {},
 ) {
