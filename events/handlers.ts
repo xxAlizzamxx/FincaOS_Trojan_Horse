@@ -1,0 +1,159 @@
+/**
+ * Default event handlers — registered once at module load time.
+ *
+ * What these handlers do:
+ *  1. Structured logging (all events) — compatible with Vercel Logs / Datadog
+ *  2. Analytics writes to Firestore `analytics_events` (server-side, via Admin SDK)
+ *     Only non-sensitive data: IDs, contadores, booleans. NUNCA PII ni contenido.
+ *
+ * Privacy guarantee: no email, no name, no message content stored in analytics.
+ */
+
+import { eventBus } from './emitter';
+import type { AnalyticsEventName } from '@/types/database';
+
+/* ── Analytics writer (server-side, Admin SDK) ──────────────────────────── */
+
+/**
+ * Escribe un evento en analytics_events usando Admin SDK (server-side).
+ * Fire-and-forget: nunca bloquea ni lanza excepciones al caller.
+ * Solo almacena metadatos no sensibles.
+ */
+async function analyticsWrite(
+  event:       AnalyticsEventName,
+  userId:      string | undefined,
+  comunidadId: string | undefined,
+  metadata:    Record<string, string | number | boolean> = {},
+): Promise<void> {
+  if (!userId) return;  // no registrar eventos sin actor
+  try {
+    const { getAdminDb } = await import('@/lib/firebase/admin');
+    const db = getAdminDb();
+    await db.collection('analytics_events').add({
+      user_id:      userId,
+      comunidad_id: comunidadId ?? null,
+      event,
+      created_at:   new Date().toISOString(),
+      metadata,
+    });
+  } catch {
+    // Fallo silencioso — analytics no puede romper el flujo de negocio
+  }
+}
+
+let _registered = false;
+
+/**
+ * Register all default handlers exactly once.
+ * Call from any server module — subsequent calls are no-ops.
+ */
+export function registerDefaultHandlers(): void {
+  if (_registered) return;
+  _registered = true;
+
+  /* ── Structured log for every domain event ── */
+
+  eventBus.on('incidencia.created', (e) => {
+    console.log(JSON.stringify({
+      level: 'info', action: 'incidencia.created',
+      incidencia_id: e.payload.incidenciaId, titulo: e.payload.titulo,
+      prioridad: e.payload.prioridad, zona: e.payload.zona,
+      actor_id: e.actor_id, comunidad_id: e.comunidad_id,
+      request_id: e.request_id, timestamp: e.timestamp,
+    }));
+    // Analytics: solo IDs y metadatos no sensibles — sin título ni contenido
+    void analyticsWrite('crear_incidencia', e.actor_id, e.comunidad_id, {
+      incidencia_id: e.payload.incidenciaId,
+      prioridad:     e.payload.prioridad,
+      zona:          e.payload.zona,
+    });
+  });
+
+  eventBus.on('incidencia.affected', (e) => {
+    console.log(JSON.stringify({
+      level: 'info', action: 'incidencia.affected',
+      incidencia_id: e.payload.incidenciaId, user_id: e.payload.userId,
+      quitar: e.payload.quitar, new_count: e.payload.newCount,
+      porcentaje: e.payload.porcentaje,
+      request_id: e.request_id, timestamp: e.timestamp,
+    }));
+    // Analytics solo si el usuario está marcando (no quitando)
+    if (!e.payload.quitar) {
+      void analyticsWrite('marcar_afectado', e.actor_id, e.comunidad_id, {
+        incidencia_id: e.payload.incidenciaId,
+        new_count:     e.payload.newCount,
+      });
+    }
+  });
+
+  eventBus.on('incidencia.quorum_reached', (e) => {
+    // Quorum is a business-critical event — use 'warn' so it surfaces in alerts
+    console.warn(JSON.stringify({
+      level: 'warn', action: 'incidencia.quorum_reached',
+      incidencia_id: e.payload.incidenciaId, titulo: e.payload.titulo,
+      afectados: e.payload.afectados, comunidad_id: e.payload.comunidadId,
+      request_id: e.request_id, timestamp: e.timestamp,
+    }));
+  });
+
+  eventBus.on('incidencia.status_changed', (e) => {
+    console.log(JSON.stringify({
+      level: 'info', action: 'incidencia.status_changed',
+      incidencia_id: e.payload.incidenciaId,
+      from: e.payload.from, to: e.payload.to, changed_by: e.payload.changedBy,
+      request_id: e.request_id, timestamp: e.timestamp,
+    }));
+  });
+
+  eventBus.on('comment.created', (e) => {
+    console.log(JSON.stringify({
+      level: 'info', action: 'comment.created',
+      comentario_id: e.payload.comentarioId, incidencia_id: e.payload.incidenciaId,
+      actor_id: e.actor_id, request_id: e.request_id, timestamp: e.timestamp,
+    }));
+    // Sin contenido del comentario — solo el ID de la incidencia
+    void analyticsWrite('crear_comentario', e.actor_id, e.comunidad_id, {
+      incidencia_id: e.payload.incidenciaId,
+    });
+  });
+
+  eventBus.on('payment.updated', (e) => {
+    console.log(JSON.stringify({
+      level: 'info', action: 'payment.updated',
+      tipo: e.payload.tipo, referencia_id: e.payload.referenciaId,
+      estado: e.payload.estado, monto: e.payload.monto,
+      comunidad_id: e.comunidad_id,
+      request_id: e.request_id, timestamp: e.timestamp,
+    }));
+  });
+
+  eventBus.on('mediacion.created', (e) => {
+    console.log(JSON.stringify({
+      level: 'info', action: 'mediacion.created',
+      mediacion_id: e.payload.mediacionId, tipo: e.payload.tipo,
+      actor_id: e.actor_id, comunidad_id: e.payload.comunidadId,
+      request_id: e.request_id, timestamp: e.timestamp,
+    }));
+  });
+
+  eventBus.on('user.joined_community', (e) => {
+    console.log(JSON.stringify({
+      level: 'info', action: 'user.joined_community',
+      user_id: e.payload.userId, comunidad_id: e.payload.comunidadId,
+      rol: e.payload.rol, request_id: e.request_id, timestamp: e.timestamp,
+    }));
+    void analyticsWrite('join_community', e.actor_id, e.payload.comunidadId, {
+      rol: e.payload.rol,
+    });
+  });
+
+  eventBus.on('user.login', (e) => {
+    console.log(JSON.stringify({
+      level: 'info', action: 'user.login',
+      user_id: e.payload.userId, comunidad_id: e.payload.comunidadId,
+      timestamp: e.timestamp,
+    }));
+    // No escribimos analytics aquí: el login ya lo hace trackEvent() en useAuth
+    // para evitar doble escritura (el event bus es server-only).
+  });
+}

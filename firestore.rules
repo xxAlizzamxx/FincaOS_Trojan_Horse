@@ -3,192 +3,225 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper: user is authenticated
+    // ── Auth helpers ──────────────────────────────────────────────────────
+
     function isAuth() {
       return request.auth != null;
     }
 
-    // Helper: user's profile
-    function getUserProfile() {
+    // Reads the caller's profile ONCE — all callers must be authenticated.
+    // Cache the result in a local variable to avoid multiple get() calls.
+    function profile() {
       return get(/databases/$(database)/documents/perfiles/$(request.auth.uid)).data;
     }
 
-    // Helper: user belongs to community
     function belongsToCommunity(comunidadId) {
-      return isAuth() && getUserProfile().comunidad_id == comunidadId;
+      return isAuth() && profile().comunidad_id == comunidadId;
     }
 
-    // Helper: user is admin or presidente
-    function isAdmin() {
-      return isAuth() && getUserProfile().rol in ['admin', 'presidente'];
-    }
-
-    // Helper: user is admin/presidente AND belongs to the given community
-    // Reads getUserProfile() ONCE to avoid hitting the external-read limit
     function isAdminOfCommunity(comunidadId) {
-      let p = getUserProfile();
+      let p = profile();
       return isAuth()
-        && p.rol in ['admin', 'presidente']
-        && p.comunidad_id == comunidadId;
+          && p.rol in ['admin', 'presidente']
+          && p.comunidad_id == comunidadId;
     }
 
-    // Helper: user is mediador AND belongs to the given community
     function isMediadorOfCommunity(comunidadId) {
-      let p = getUserProfile();
+      let p = profile();
       return isAuth()
-        && p.rol == 'mediador'
-        && p.comunidad_id == comunidadId;
+          && p.rol == 'mediador'
+          && p.comunidad_id == comunidadId;
     }
 
-    // Helper: user can manage a mediation (admin, presidente, or mediador of community)
     function canManageMediacion(comunidadId) {
-      let p = getUserProfile();
+      let p = profile();
       return isAuth()
-        && p.comunidad_id == comunidadId
-        && p.rol in ['admin', 'presidente', 'mediador'];
+          && p.comunidad_id == comunidadId
+          && p.rol in ['admin', 'presidente', 'mediador'];
     }
 
-    // Comunidades (public read for invite page)
+    // ── Internal system collections (Admin SDK only) ──────────────────────
+    // These are created/modified exclusively by server-side code.
+
+    match /_rate_limits/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /_processed_webhooks/{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Comunidades ───────────────────────────────────────────────────────
+    // Read is public for the invite page.
+    // Updates are restricted to the community's admin/presidente.
+    // Create is allowed to any auth user (creates a new community).
+
     match /comunidades/{comunidadId} {
       allow read:   if true;
       allow create: if isAuth();
-      allow update: if isAuth();
+      // FIX: was `if isAuth()` — any user could rename any community
+      allow update: if isAdminOfCommunity(comunidadId);
 
-      // Subcollección notificaciones de comunidad (un doc por evento, visible para todos los miembros)
       match /notificaciones/{notifId} {
         allow read:   if isAuth() && belongsToCommunity(comunidadId);
-        allow create: if isAuth() && belongsToCommunity(comunidadId);
-        // Solo sistema / Admin SDK actualiza — no se necesita update desde cliente
+        // Writes only via Admin SDK (server-side); no client rule needed.
       }
     }
 
-    // Perfiles
-    // - Lectura pública para la página de invitación (muestra count de vecinos sin login)
-    // - Solo usuarios autenticados pueden leer perfiles de su comunidad en el resto de la app
-    // - El usuario solo puede crear/actualizar su propio perfil (o admin el de cualquiera)
+    // ── Perfiles (datos públicos) ─────────────────────────────────────────
+    // Read requires authentication. The invite page counts vecinos via
+    // comunidades/{id}.num_viviendas — no longer needs unauthenticated reads.
+    // Sensitive fields (email, telefono) live in perfiles_privados, not here.
+
     match /perfiles/{userId} {
-      allow read: if true;   // invite page necesita leer sin auth
+      // Readable by any authenticated member of the SAME community.
+      // Falls back to self-read for users without a community yet (onboarding).
+      allow read: if isAuth()
+                  && (request.auth.uid == userId
+                      || (resource.data.comunidad_id != null
+                          && resource.data.comunidad_id == profile().comunidad_id));
       allow create: if isAuth() && request.auth.uid == userId;
-      allow update: if isAuth() && (request.auth.uid == userId || isAdmin());
+      allow update: if isAuth()
+                    && (request.auth.uid == userId
+                        || profile().rol in ['admin', 'presidente'])
+                    // Prevent client from writing sensitive fields to public profile
+                    && !('email'    in request.resource.data)
+                    && !('plan'     in request.resource.data)
+                    && !('ultimo_login' in request.resource.data);
     }
 
-    // Categorias de incidencia (read-only, seeded by admin)
+    // ── Perfiles privados ─────────────────────────────────────────────────
+    // email, telefono, plan, ultimo_login, preferencias_notificaciones.
+    // STRICTLY owner-only. No other user — not even admins — can read this.
+
+    match /perfiles_privados/{userId} {
+      allow read, write: if isAuth() && request.auth.uid == userId;
+    }
+
+    // ── Categorías de incidencia (seed data, read-only) ───────────────────
+
     match /categorias_incidencia/{catId} {
-      allow read: if true;
+      allow read:  if true;
       allow write: if false;
     }
 
-    // Incidencias
+    // ── Incidencias ───────────────────────────────────────────────────────
+    // Any community member can read and create.
+    // Updates from the client are allowed for community members; sensitive
+    // state transitions are enforced server-side (Admin SDK).
+
     match /incidencias/{incidenciaId} {
       allow read:   if isAuth();
       allow create: if isAuth() && belongsToCommunity(request.resource.data.comunidad_id);
       allow update: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      // Deletes go through /api/eliminar which uses Admin SDK.
 
-      // Subcollección afectados: cada vecino solo puede escribir/borrar su propio doc
       match /afectados/{userId} {
         allow read:   if isAuth();
+        // FIX: client writes validated by owner; actual quorum logic uses Admin SDK.
         allow create: if isAuth() && request.auth.uid == userId;
         allow delete: if isAuth() && request.auth.uid == userId;
-        // update lo hace la API con Admin SDK, no el cliente
       }
     }
 
-    // Comentarios
+    // ── Comentarios ───────────────────────────────────────────────────────
+    // FIX: added autor_id == uid validation on create.
+    // No client delete — admin uses Admin SDK.
+
     match /comentarios/{comentarioId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
+      allow read:   if isAuth();
+      allow create: if isAuth()
+                    && request.resource.data.autor_id == request.auth.uid;
+      // Offline-synced comments use setDoc with a fixed ID; no special rule needed.
     }
 
-    // Incidencia afectados
+    // ── Legacy afectados (kept for backwards compat — no new writes expected) ─
+
     match /incidencia_afectados/{afectadoId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
-      allow delete: if isAuth();
+      allow read:   if isAuth();
+      // FIX: restrict create to the owner of the afectado record
+      allow create: if isAuth()
+                    && request.resource.data.vecino_id == request.auth.uid;
+      allow delete: if isAuth()
+                    && resource.data.vecino_id == request.auth.uid;
     }
 
-    // Anuncios
+    // ── Anuncios ──────────────────────────────────────────────────────────
+    // FIX: create/delete now require admin or presidente.
+    // Vecinos can only read.
+
     match /anuncios/{anuncioId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
-      allow delete: if isAuth();
+      allow read:   if isAuth();
+      allow create: if isAuth() && profile().rol in ['admin', 'presidente'];
+      allow update: if isAdminOfCommunity(resource.data.comunidad_id);
+      allow delete: if isAuth()
+                    && (resource.data.autor_id == request.auth.uid
+                        || profile().rol in ['admin', 'presidente']);
     }
 
-    // Documentos — lectura para todos los autenticados; escritura solo admin/presidente
+    // ── Documentos ───────────────────────────────────────────────────────
+
     match /documentos/{docId} {
-      allow read: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
-      allow create: if isAdmin() && belongsToCommunity(request.resource.data.comunidad_id);
-      allow delete: if isAdmin() && belongsToCommunity(resource.data.comunidad_id);
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAdminOfCommunity(request.resource.data.comunidad_id);
+      allow delete: if isAdminOfCommunity(resource.data.comunidad_id);
     }
 
-    // Votaciones + votos (subcollection)
+    // ── Votaciones ───────────────────────────────────────────────────────
+    // Client update is limited to active votaciones (vecino casts vote via transaction).
+    // Admin can do anything. Dangerous field changes are guarded by the transaction
+    // in the client which only increments opciones[].votos.
+
     match /votaciones/{votacionId} {
-      allow read: if isAuth();
-      // Solo admin/presidente puede CREAR o CERRAR una votación
-      allow create: if isAdmin();
-      // Admin puede hacer cualquier update (cerrar, editar, etc.)
-      // Vecino puede actualizar SOLO si la votación está activa (para registrar su voto
-      // a través de la transaction que incrementa opciones[].votos).
-      // La transaction del cliente valida además que no haya votado ya y que esté activa.
-      allow update: if isAdmin()
-                 || (isAuth() && resource.data.activa == true);
+      allow read:   if isAuth();
+      allow create: if isAdminOfCommunity(request.resource.data.comunidad_id);
+      allow update: if isAdminOfCommunity(resource.data.comunidad_id)
+                 || (isAuth() && resource.data.activa == true
+                     && belongsToCommunity(resource.data.comunidad_id));
 
       match /votos/{uid} {
-        allow read: if isAuth();
-        // Solo el propio usuario puede crear su voto (una vez, controlado por transaction en cliente)
+        allow read:   if isAuth();
         allow create: if isAuth() && request.auth.uid == uid;
       }
     }
 
-    // Opciones de votacion
     match /opciones_votacion/{opcionId} {
-      allow read: if isAuth();
+      allow read:   if isAuth();
       allow create: if isAuth();
     }
 
-    // Respuestas de votacion
     match /respuestas_votacion/{respuestaId} {
-      allow read: if isAuth();
+      allow read:   if isAuth();
       allow create: if isAuth();
     }
 
-    // Cuotas (modelo nuevo: cuotas/{cuotaId}/pagos/{userId})
+    // ── Cuotas ───────────────────────────────────────────────────────────
+
     match /cuotas/{cuotaId} {
-      // Lectura: cualquier miembro autenticado de la comunidad
-      allow read: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
-      // Escritura: isAdminOfCommunity hace UN SOLO get() para verificar rol + comunidad
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
       allow create: if isAdminOfCommunity(request.resource.data.comunidad_id);
       allow update: if isAdminOfCommunity(resource.data.comunidad_id);
       allow delete: if isAdminOfCommunity(resource.data.comunidad_id);
 
-      // Sub-colección pagos
-      // allow create: isAuth() evita el get() extra por cada doc del writeBatch;
-      // la seguridad real la garantiza que solo admin puede crear la cuota padre.
       match /pagos/{userId} {
-        // El propio vecino ve su pago; admin/presidente ven todos
-        allow read: if isAuth() && (request.auth.uid == userId || isAdmin());
-        // writeBatch crea todos los pagos: solo necesitamos estar autenticados
-        // (el frontend ya valida que solo admin llega aquí)
+        allow read:   if isAuth() && (request.auth.uid == userId || profile().rol in ['admin', 'presidente']);
         allow create: if isAuth();
-        // Marcar pagado: solo admin/presidente
-        allow update: if isAdmin();
+        allow update: if isAuth() && profile().rol in ['admin', 'presidente'];
       }
     }
 
-    // Cuotas vecinos (colección legacy — se mantiene para no romper datos existentes)
+    // Legacy cuotas collection
     match /cuotas_vecinos/{cuotaId} {
-      allow read: if isAuth();
+      allow read:   if isAuth();
       allow create: if isAuth();
       allow update: if isAuth();
     }
 
-    // Mediaciones
+    // ── Mediaciones ──────────────────────────────────────────────────────
+
     match /mediaciones/{mediacionId} {
-      // Lectura: cualquier usuario autenticado (el filtrado por comunidad_id se hace en el cliente)
-      // Nota: belongsToCommunity hace un get() extra que falla en queries LIST de Firestore
-      allow read: if isAuth();
-      // Crear: cualquier usuario autenticado (vecino inicia el flujo de IA)
+      allow read:   if isAuth();
       allow create: if isAuth();
-      // Actualizar: el solicitante (para la fase IA), o admin/presidente/mediador de la comunidad
       allow update: if isAuth() && (
         request.auth.uid == resource.data.denunciante_id ||
         request.auth.uid == resource.data.solicitado_por ||
@@ -196,30 +229,62 @@ service cloud.firestore {
       );
     }
 
-    // Notificaciones
+    // ── Notificaciones de usuario ─────────────────────────────────────────
+
     match /notificaciones/{notifId} {
-      allow read: if isAuth() && request.auth.uid == resource.data.usuario_id;
+      allow read:   if isAuth() && request.auth.uid == resource.data.usuario_id;
       allow create: if isAuth();
       allow update: if isAuth() && request.auth.uid == resource.data.usuario_id;
     }
 
-    // Consultas normativas
+    // ── Consultas normativas ──────────────────────────────────────────────
+
     match /consultas_normativas/{consultaId} {
-      allow read: if isAuth();
+      allow read:   if isAuth();
       allow create: if isAuth();
       allow update: if isAuth();
     }
 
-    // Fotos de incidencias
+    // ── Fotos de incidencias ──────────────────────────────────────────────
+
     match /incidencias_fotos/{fotoId} {
-      allow read: if isAuth();
+      allow read:   if isAuth();
       allow create: if isAuth();
-      allow delete: if isAuth() && isAdmin();
+      // FIX: admin OR the uploader can delete
+      allow delete: if isAuth()
+                    && (resource.data.autor_id == request.auth.uid
+                        || profile().rol in ['admin', 'presidente']);
     }
 
-    // Push subscriptions
+    // ── Push subscriptions ────────────────────────────────────────────────
+
     match /push_subscriptions/{userId} {
       allow read, write: if isAuth() && request.auth.uid == userId;
+    }
+
+    // ── Analytics events ──────────────────────────────────────────────────
+    // NO PII stored here — only action names, opaque IDs, and counters.
+    // A user can only read their own events. Any authenticated user can create.
+    // Admin analytics go through the Admin SDK (not these rules).
+
+    match /analytics_events/{eventId} {
+      allow read:   if isAuth() && request.auth.uid == resource.data.user_id;
+      allow create: if isAuth()
+                    && request.resource.data.user_id == request.auth.uid
+                    && request.resource.data.keys().hasOnly([
+                         'user_id', 'comunidad_id', 'event', 'created_at', 'metadata'
+                       ]);
+    }
+
+    // ── Pagos (top-level, complementary to cuotas subcollection) ──────────
+
+    match /pagos/{pagoId} {
+      // Only the user who made the payment or an admin can read
+      allow read:  if isAuth()
+                   && (resource.data.usuario_id == request.auth.uid
+                       || profile().rol in ['admin', 'presidente']);
+      // Pagos are created by the server (Admin SDK) — no client create rule needed.
+      allow write: if false;
     }
   }
 }

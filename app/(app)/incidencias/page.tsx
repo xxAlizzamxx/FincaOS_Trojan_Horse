@@ -91,8 +91,6 @@ export default function IncidenciasPage() {
     }
   }
 
-  console.log('[IncidenciasPage] render — incidencias:', incidencias.length, '| totalVecinos:', totalVecinos, '| loading:', loading);
-
   const incidenciasFiltradas = incidencias.filter((inc) => {
     const matchBusqueda = inc.titulo.toLowerCase().includes(busqueda.toLowerCase());
     const estadosFiltro = filtroMap[filtroActivo];
@@ -102,11 +100,6 @@ export default function IncidenciasPage() {
 
   return (
     <div className="px-4 py-5 space-y-4">
-      {/* DEBUG BANNER — borrar tras confirmar que funciona */}
-      <div style={{ background: 'red', color: 'white', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 'bold' }}>
-        🚀 NUEVO SISTEMA ACTIVO · IncidenciaCard + Quórum · vecinos: {totalVecinos}
-      </div>
-
       {/* Header con vistas */}
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-0.5">

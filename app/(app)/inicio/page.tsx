@@ -60,14 +60,11 @@ export default function InicioPage() {
 
       console.log('[Inicio] fetchData — comunidadId:', comunidadId, 'rol:', rol);
 
-      const incSnapPromise:    Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(5)));
-      const anuncSnapPromise:  Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'anuncios'),   where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3)));
-      const allIncSnapPromise: Promise<QuerySnapshot<DocumentData>> = getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId)));
-
-      const [incSnap, anuncSnap, allIncSnap] = await Promise.all([
-        incSnapPromise,
-        anuncSnapPromise,
-        allIncSnapPromise,
+      const [incSnap, anuncSnap, allIncSnap, vecinosSnap] = await Promise.all([
+        getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(5))) as Promise<QuerySnapshot<DocumentData>>,
+        getDocs(query(collection(db, 'anuncios'),   where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3))) as Promise<QuerySnapshot<DocumentData>>,
+        getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId))) as Promise<QuerySnapshot<DocumentData>>,
+        getDocs(query(collection(db, 'perfiles'),   where('comunidad_id', '==', comunidadId))) as Promise<QuerySnapshot<DocumentData>>,
       ]);
 
       console.log('[Inicio] incidencias:', incSnap.size, '| anuncios:', anuncSnap.size, '| allIncs:', allIncSnap.size);
@@ -82,21 +79,17 @@ export default function InicioPage() {
         (d: QueryDocumentSnapshot<DocumentData>) => d.data(),
       );
 
-      // Fetch autor y categoria para cada incidencia
-      for (const inc of incs) {
-        if (inc.autor_id) {
-          const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
-          if (autorSnap.exists()) {
-            inc.autor = { id: autorSnap.id, ...autorSnap.data() } as Incidencia['autor'];
-          }
-        }
-        if (inc.categoria_id) {
-          const catSnap = await getDoc(doc(db, 'categorias_incidencia', String(inc.categoria_id)));
-          if (catSnap.exists()) {
-            inc.categoria = { id: catSnap.id, ...catSnap.data() } as Incidencia['categoria'];
-          }
-        }
-      }
+      // Fetch autor y categoria en paralelo (evita N+1 queries)
+      await Promise.all(
+        incs.map(async (inc) => {
+          const [autorSnap, catSnap] = await Promise.all([
+            inc.autor_id    ? getDoc(doc(db, 'perfiles',              inc.autor_id))                       : Promise.resolve(null),
+            inc.categoria_id ? getDoc(doc(db, 'categorias_incidencia', String(inc.categoria_id))) : Promise.resolve(null),
+          ]);
+          if (autorSnap?.exists())  inc.autor     = { id: autorSnap.id,  ...autorSnap.data()  } as Incidencia['autor'];
+          if (catSnap?.exists())    inc.categoria = { id: catSnap.id,    ...catSnap.data()    } as Incidencia['categoria'];
+        }),
+      );
 
       setIncidencias(incs);
       setAnuncios(anuncs);
@@ -107,7 +100,7 @@ export default function InicioPage() {
       const resueltas = allIncs.filter(
         (i: DocumentData) => i['estado'] === 'resuelta',
       ).length;
-      setStats({ abiertas, resueltas, vecinos: 0 });
+      setStats({ abiertas, resueltas, vecinos: vecinosSnap.size });
 
       // Mediaciones (solo para mediador / admin / presidente)
       if (canSeeMediaciones) {
@@ -213,7 +206,7 @@ export default function InicioPage() {
         {[
           { icon: AlertCircle, value: stats.abiertas, label: 'Abiertas', color: 'text-yellow-600', bg: 'bg-yellow-50' },
           { icon: CheckCircle2, value: stats.resueltas, label: 'Resueltas', color: 'text-green-600', bg: 'bg-green-50' },
-          { icon: TrendingUp, value: stats.abiertas + stats.resueltas, label: 'Totales', color: 'text-finca-coral', bg: 'bg-finca-peach/30' },
+          { icon: TrendingUp, value: stats.vecinos, label: 'Vecinos', color: 'text-finca-coral', bg: 'bg-finca-peach/30' },
         ].map((stat) => (
           <Card key={stat.label} className="border-0 shadow-sm">
             <CardContent className="p-3 text-center">

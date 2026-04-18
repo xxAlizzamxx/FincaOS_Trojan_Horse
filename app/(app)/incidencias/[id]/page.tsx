@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
@@ -14,7 +14,7 @@ import { es } from 'date-fns/locale';
 import { getAuth } from 'firebase/auth';
 import {
   collection, query, where, orderBy, getDocs,
-  getDoc, addDoc, deleteDoc, updateDoc, doc,
+  getDoc, addDoc, deleteDoc, updateDoc, doc, onSnapshot,
   QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
 import { Input } from '@/components/ui/input';
@@ -75,6 +75,9 @@ export default function IncidenciaDetailPage() {
 
   const incidenciaId = params.id as string;
 
+  // Cache de datos enriquecidos (autor/categoría) — se obtienen una vez y se reutilizan
+  const enrichmentRef = useRef<{ autor: any; categoria: any } | null>(null);
+
   /* ── Vivienda del autor (torre · piso · puerta, con fallback a numero_piso) ── */
   function lineaVivienda(autor: any): string {
     const parts = [
@@ -91,41 +94,68 @@ export default function IncidenciaDetailPage() {
     baja: '🟢', normal: '🔵', alta: '⚠️', urgente: '🚨',
   };
 
-  useEffect(() => { fetchIncidencia(); fetchAfectados(); fetchFotos(); }, [incidenciaId]);
+  // ── onSnapshot: actualiza la incidencia en tiempo real ──
+  useEffect(() => {
+    enrichmentRef.current = null; // resetear cache al cambiar de incidencia
+    const incRef = doc(db, 'incidencias', incidenciaId);
 
-  async function fetchIncidencia() {
-    const incSnap = await getDoc(doc(db, 'incidencias', incidenciaId));
-    if (incSnap.exists()) {
-      const incData: any = { id: incSnap.id, ...incSnap.data() };
+    const unsub = onSnapshot(incRef, async (snap) => {
+      if (!snap.exists()) {
+        setLoading(false);
+        return;
+      }
 
-      if (incData.autor_id) {
-        const autorSnap = await getDoc(doc(db, 'perfiles', incData.autor_id));
-        if (autorSnap.exists()) {
+      const incData: any = { id: snap.id, ...snap.data() };
+
+      // Enriquece autor y categoría sólo la primera vez (o si cambia autor/categoría)
+      if (!enrichmentRef.current ||
+          enrichmentRef.current._autorId !== incData.autor_id ||
+          enrichmentRef.current._categoriaId !== incData.categoria_id) {
+        const [autorSnap, catSnap] = await Promise.all([
+          incData.autor_id     ? getDoc(doc(db, 'perfiles',              incData.autor_id))     : Promise.resolve(null),
+          incData.categoria_id ? getDoc(doc(db, 'categorias_incidencia', incData.categoria_id)) : Promise.resolve(null),
+        ]);
+
+        let autor = null;
+        if (autorSnap?.exists()) {
           const a = autorSnap.data();
-          incData.autor = {
+          autor = {
             id:              autorSnap.id,
             nombre_completo: a.nombre_completo,
-            avatar_url:      a.avatar_url ?? null,
-            rol:             a.rol ?? 'vecino',
+            avatar_url:      a.avatar_url  ?? null,
+            rol:             a.rol         ?? 'vecino',
             torre:           a.torre       ?? null,
             piso:            a.piso        ?? null,
             puerta:          a.puerta      ?? null,
             numero_piso:     a.numero_piso ?? null,
           };
         }
-      }
 
-      if (incData.categoria_id) {
-        const catSnap = await getDoc(doc(db, 'categorias_incidencia', incData.categoria_id));
-        if (catSnap.exists()) {
+        let categoria = null;
+        if (catSnap?.exists()) {
           const c = catSnap.data();
-          incData.categoria = { nombre: c.nombre, icono: c.icono };
+          categoria = { nombre: c.nombre, icono: c.icono };
         }
+
+        enrichmentRef.current = {
+          _autorId:     incData.autor_id,
+          _categoriaId: incData.categoria_id,
+          autor,
+          categoria,
+        };
       }
 
-      setIncidencia(incData as Incidencia);
-    }
+      setIncidencia({ ...incData, ...enrichmentRef.current } as Incidencia);
+      setLoading(false);
+    });
 
+    return () => unsub();
+  }, [incidenciaId]);
+
+  useEffect(() => { fetchAfectados(); fetchFotos(); }, [incidenciaId]);
+
+  // fetchComentarios separado (comentarios no tienen onSnapshot para evitar reads excesivos)
+  async function fetchIncidencia() {
     const comQ = query(
       collection(db, 'comentarios'),
       where('incidencia_id', '==', incidenciaId),
@@ -154,7 +184,6 @@ export default function IncidenciaDetailPage() {
     );
 
     setComentarios(enrichedComs as Comentario[]);
-    setLoading(false);
   }
 
   async function fetchFotos() {

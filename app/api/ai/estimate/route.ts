@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { askGemini } from '@/lib/gemini';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 const SYSTEM_PROMPT = `Eres un experto en reparaciones y mantenimiento de comunidades de propietarios en España.
 Tu tarea es estimar el rango de coste de una reparación y clasificar su urgencia basándote en la categoría, descripción y ubicación.
@@ -18,6 +19,11 @@ REGLAS:
   - "baja": mejoras estéticas, mantenimiento preventivo, peticiones no urgentes`;
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 10 requests / 60 s per IP — Firestore-backed, works across instances
+  const ip  = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
+  const rl  = await checkRateLimit(`ai-estimate:${ip}`, 10, 60_000);
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   try {
     const { categoria, descripcion, ubicacion } = await req.json();
 

@@ -35,13 +35,62 @@ export interface Perfil {
   rol: Rol;
   coeficiente: number | null;   // % de participación según LPH (ej: 5.2 = 5.2%)
   avatar_url: string | null;
-  telefono: string | null;
+  /**
+   * @deprecated Usar PerfilPrivado.telefono — este campo ya no se escribe en
+   * perfiles/{uid}. Se mantiene para compatibilidad con datos existentes.
+   */
+  telefono?: string | null;
   created_at: string;
   updated_at: string;
   comunidad?: Comunidad;
   /** ISO timestamp: última vez que el usuario leyó las notificaciones.
    *  Notificación no leída = created_at > notificaciones_last_read */
   notificaciones_last_read?: string;
+}
+
+/* ─── Perfil privado (colección perfiles_privados/{uid}) ────────────────────
+   Datos sensibles del usuario — solo accesibles por el propio usuario.
+   NUNCA incluir en respuestas de API que otros usuarios puedan ver.
+   Regla Firestore: allow read, write: if request.auth.uid == userId
+─────────────────────────────────────────────────────────────────────────── */
+export interface PerfilPrivado {
+  /** UID del usuario — siempre coincide con el ID del documento */
+  uid: string;
+  email: string | null;
+  telefono: string | null;
+  plan: 'free' | 'premium' | null;
+  ultimo_login: string | null;          // ISO
+  preferencias_notificaciones: {
+    push:  boolean;
+    email: boolean;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+/* ─── Analytics (colección analytics_events) ────────────────────────────────
+   Eventos de uso del producto — sin PII, sin contenido de texto.
+   Solo acciones y IDs opacos.
+   Regla: read si user_id == uid; create si autenticado.
+─────────────────────────────────────────────────────────────────────────── */
+export type AnalyticsEventName =
+  | 'login'
+  | 'crear_incidencia'
+  | 'marcar_afectado'
+  | 'ver_incidencia'
+  | 'crear_comentario'
+  | 'crear_mediacion'
+  | 'pago_completado'
+  | 'join_community'
+  | 'create_community';
+
+export interface AnalyticsEvent {
+  user_id:      string;
+  comunidad_id: string | null;
+  event:        AnalyticsEventName;
+  created_at:   string;
+  /** Solo metadatos no sensibles: IDs opacos, contadores, booleanos. */
+  metadata:     Record<string, string | number | boolean>;
 }
 
 /* ─── Notificaciones de comunidad ────────────────────────────────────────────

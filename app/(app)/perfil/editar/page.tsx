@@ -6,6 +6,7 @@ import { ArrowLeft, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
+import { updatePerfilPrivado } from '@/lib/firebase/createPerfil';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,17 +45,24 @@ export default function EditarPerfilPage() {
   }, [user]);
 
   async function fetchPerfil() {
-    const snap = await getDoc(doc(db, 'perfiles', user!.uid));
-    if (snap.exists()) {
-      const data = snap.data();
-      setForm({
-        nombre_completo: data.nombre_completo || '',
-        telefono:        data.telefono        || '',
-        torre:           data.torre           || '',
-        piso:            data.piso            || '',
-        puerta:          data.puerta          || '',
-      });
-    }
+    // Cargar datos públicos y privados en paralelo
+    const [publicSnap, privadoSnap] = await Promise.all([
+      getDoc(doc(db, 'perfiles',         user!.uid)),
+      getDoc(doc(db, 'perfiles_privados', user!.uid)),
+    ]);
+
+    const publicData  = publicSnap.exists()  ? publicSnap.data()  : {};
+    const privadoData = privadoSnap.exists() ? privadoSnap.data() : {};
+
+    setForm({
+      nombre_completo: publicData.nombre_completo  || '',
+      // Teléfono: fuente de verdad es perfiles_privados.
+      // Fallback a perfiles para usuarios pre-migración.
+      telefono: privadoData.telefono ?? publicData.telefono ?? '',
+      torre:    publicData.torre  || '',
+      piso:     publicData.piso   || '',
+      puerta:   publicData.puerta || '',
+    });
     setLoading(false);
   }
 
@@ -77,15 +85,23 @@ export default function EditarPerfilPage() {
           .filter(Boolean)
           .join(' · ') || null;
 
-      await updateDoc(doc(db, 'perfiles', user.uid), {
-        nombre_completo: form.nombre_completo.trim(),
-        telefono:        form.telefono.trim() || null,
-        torre:           form.torre.trim()    || null,
-        piso:            form.piso.trim()     || null,
-        puerta:          form.puerta.trim()   || null,
-        numero_piso:     numeroPiso,
-        updated_at:      new Date().toISOString(),
-      });
+      // ── Escribir en paralelo: datos públicos + datos privados ───────────
+      await Promise.all([
+        // Perfil PÚBLICO — sin teléfono
+        updateDoc(doc(db, 'perfiles', user.uid), {
+          nombre_completo: form.nombre_completo.trim(),
+          torre:           form.torre.trim()  || null,
+          piso:            form.piso.trim()   || null,
+          puerta:          form.puerta.trim() || null,
+          numero_piso:     numeroPiso,
+          updated_at:      new Date().toISOString(),
+        }),
+        // Perfil PRIVADO — teléfono va aquí (nunca al perfil público)
+        updatePerfilPrivado(user.uid, {
+          telefono: form.telefono.trim() || null,
+        }),
+      ]);
+
       toast.success('Perfil actualizado correctamente');
       router.back();
     } catch {

@@ -1,4 +1,4 @@
-import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
 import { db } from './client';
 import type { TipoNotificacion } from '@/types/database';
 
@@ -20,8 +20,9 @@ export async function crearNotificacion(data: NotificationData) {
 }
 
 export async function notificarAdmins(comunidadId: string, tipo: NotificationData['tipo'], titulo: string, mensaje: string, link?: string) {
+  // limit(20): una comunidad nunca tendrá más de 20 presidentes/admins simultáneos
   const adminsSnap = await getDocs(
-    query(collection(db, 'perfiles'), where('comunidad_id', '==', comunidadId), where('rol', 'in', ['admin', 'presidente']))
+    query(collection(db, 'perfiles'), where('comunidad_id', '==', comunidadId), where('rol', 'in', ['admin', 'presidente']), limit(20))
   );
   const promises = adminsSnap.docs.map((d) =>
     crearNotificacion({ usuario_id: d.id, comunidad_id: comunidadId, tipo, titulo, mensaje, link })
@@ -30,8 +31,10 @@ export async function notificarAdmins(comunidadId: string, tipo: NotificationDat
 }
 
 export async function notificarComunidad(comunidadId: string, tipo: NotificationData['tipo'], titulo: string, mensaje: string, link?: string, exceptUserId?: string) {
+  // limit(500): techo razonable para una comunidad de propietarios.
+  // Para comunidades más grandes migrar a crearNotificacionComunidad() (1 doc por evento).
   const vecinosSnap = await getDocs(
-    query(collection(db, 'perfiles'), where('comunidad_id', '==', comunidadId))
+    query(collection(db, 'perfiles'), where('comunidad_id', '==', comunidadId), limit(500))
   );
   const promises = vecinosSnap.docs
     .filter((d) => d.id !== exceptUserId)
@@ -82,11 +85,13 @@ export async function notificarMediadores(
   mediacionId: string,
   descripcion = 'Un vecino solicitó mediación profesional',
 ) {
+  // limit(20): número máximo razonable de mediadores en una comunidad
   const snap = await getDocs(
     query(
       collection(db, 'perfiles'),
       where('comunidad_id', '==', comunidadId),
       where('rol', '==', 'mediador'),
+      limit(20),
     ),
   );
   const promises = snap.docs.map((d) =>

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getAdminDb } from '@/lib/firebase/admin';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 if (!getApps().length) {
   initializeApp({
@@ -25,8 +26,17 @@ export type AccionMasiva =
   | 'notificar_afectados'
   | 'eliminar';
 
+/** Maximum IDs per request — prevents DoS via arbitrarily large batch */
+const MAX_IDS = 100;
+
+/** Allowed actions — explicit whitelist */
+const VALID_ACCIONES = new Set<AccionMasiva>([
+  'resolver', 'marcar_en_revision', 'cambiar_prioridad_urgente',
+  'notificar_afectados', 'eliminar',
+]);
+
 export async function POST(req: NextRequest) {
-  // Auth
+  // Auth first (we need uid for the rate limit key)
   const authHeader = req.headers.get('Authorization') ?? '';
   if (!authHeader.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
@@ -38,6 +48,10 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
   }
+
+  // Rate limit: 20 bulk ops / 60 s per authenticated admin UID
+  const rl = await checkRateLimit(`bulk-action:${uid}`, 20, 60_000);
+  if (!rl.allowed) return rateLimitResponse(rl);
 
   const db = getAdminDb();
 
@@ -52,6 +66,21 @@ export async function POST(req: NextRequest) {
 
   if (!ids?.length || !accion) {
     return NextResponse.json({ error: 'Parámetros inválidos' }, { status: 400 });
+  }
+
+  // ── Input validation ────────────────────────────────────────────────────
+  if (!VALID_ACCIONES.has(accion)) {
+    return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
+  }
+  if (ids.length > MAX_IDS) {
+    return NextResponse.json(
+      { error: `Demasiados IDs. Máximo ${MAX_IDS} por solicitud.` },
+      { status: 400 },
+    );
+  }
+  // Ensure all IDs are non-empty strings to prevent Firestore injection
+  if (!ids.every(id => typeof id === 'string' && id.trim().length > 0)) {
+    return NextResponse.json({ error: 'IDs inválidos' }, { status: 400 });
   }
 
   const ahora = new Date().toISOString();

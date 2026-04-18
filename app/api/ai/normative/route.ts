@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { askGemini } from '@/lib/gemini';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 const SYSTEM_PROMPT = `Eres un asistente legal especializado en comunidades de propietarios en España.
 Conoces a fondo:
@@ -20,6 +21,11 @@ REGLAS:
 - Si no estás seguro de algo, dilo claramente.`;
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 10 requests / 60 s per IP
+  const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
+  const rl = await checkRateLimit(`ai-normative:${ip}`, 10, 60_000);
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   try {
     const { pregunta } = await req.json();
 

@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { Building2, UserPlus } from 'lucide-react';
 import { doc, setDoc, updateDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
+import { createPerfilBatch } from '@/lib/firebase/createPerfil';
+import { trackEvent } from '@/lib/analytics';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,18 +51,27 @@ export default function OnboardingPage() {
 
       const comunidadDoc = snap.docs[0];
 
-      // Usamos setDoc con merge para que funcione tanto si el perfil ya existe
-      // como si fue creado de forma incompleta (race condition en registro Google)
-      await setDoc(doc(db, 'perfiles', user.uid), {
-        comunidad_id:  comunidadDoc.id,
-        numero_piso:   piso || null,
-        rol:           perfil?.rol ?? 'vecino',   // preservar rol si ya existe
-        nombre_completo: perfil?.nombre_completo ?? user.displayName ?? 'Usuario',
-        avatar_url:    perfil?.avatar_url ?? user.photoURL ?? null,
-        telefono:      perfil?.telefono ?? null,
-        updated_at:    new Date().toISOString(),
-        created_at:    perfil?.created_at ?? new Date().toISOString(),
-      }, { merge: true });
+      // Batch atómico: actualiza perfil público + crea/actualiza perfil privado
+      await createPerfilBatch(
+        user.uid,
+        {
+          comunidad_id:    comunidadDoc.id,
+          numero_piso:     piso || null,
+          rol:             perfil?.rol ?? 'vecino',
+          nombre_completo: perfil?.nombre_completo ?? user.displayName ?? 'Usuario',
+          avatar_url:      perfil?.avatar_url ?? user.photoURL ?? null,
+          coeficiente:     null,
+          torre:           null,
+          piso:            null,
+          puerta:          null,
+          created_at:      perfil?.created_at ?? new Date().toISOString(),
+          updated_at:      new Date().toISOString(),
+        },
+        { email: user.email ?? null },  // telefono queda null hasta que lo editen
+      );
+
+      // Analytics — sin PII
+      void trackEvent('join_community', user.uid, comunidadDoc.id);
 
       toast.success('¡Te has unido a la comunidad!');
       window.location.href = '/inicio';
@@ -87,12 +98,26 @@ export default function OnboardingPage() {
         created_at: new Date().toISOString(),
       });
 
-      await updateDoc(doc(db, 'perfiles', perfil.id), {
-        comunidad_id: comunidadRef.id,
-        numero_piso: piso || null,
-        rol: 'presidente',
-        updated_at: new Date().toISOString(),
-      });
+      await createPerfilBatch(
+        perfil.id,
+        {
+          comunidad_id:    comunidadRef.id,
+          numero_piso:     piso || null,
+          rol:             'presidente',
+          nombre_completo: perfil.nombre_completo,
+          avatar_url:      perfil.avatar_url ?? null,
+          coeficiente:     null,
+          torre:           null,
+          piso:            null,
+          puerta:          null,
+          created_at:      perfil.created_at,
+          updated_at:      new Date().toISOString(),
+        },
+        {},  // privado ya existe — solo actualizamos el público
+      );
+
+      // Analytics — sin PII
+      void trackEvent('create_community', perfil.id, comunidadRef.id);
 
       toast.success(`Comunidad creada. Código: ${codigo}`);
       window.location.href = '/inicio';

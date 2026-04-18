@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { askGemini } from '@/lib/gemini';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 const SYSTEM_PROMPT = `Eres un mediador experto en conflictos vecinales en comunidades de propietarios en España.
 Conoces a fondo la Ley de Propiedad Horizontal (LPH, Ley 49/1960), la Ley 5/2012 de mediación en asuntos civiles y mercantiles, y las ordenanzas municipales habituales.
@@ -17,6 +18,11 @@ REGLAS:
 - Máximo 300 palabras.`;
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 5 requests / 60 s per IP (mediación calls are expensive)
+  const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
+  const rl = await checkRateLimit(`ai-mediate:${ip}`, 5, 60_000);
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   try {
     const { tipo, descripcion, es_recurrente } = await req.json();
 

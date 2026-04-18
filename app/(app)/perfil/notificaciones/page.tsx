@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Bell, BellOff, CheckCheck, Eye, CircleCheck } from 'lucide-react';
+import { ArrowLeft, Bell, BellOff, CheckCheck, Eye, CircleCheck, ChevronDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, getDocs, getDoc,
-  updateDoc, doc, writeBatch,
+  updateDoc, doc, writeBatch, limit, startAfter,
   QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
@@ -110,12 +110,17 @@ function parseNotif(notif: Notificacion): { reporter: string; incTitle: string }
   return { reporter, incTitle: notif.titulo };
 }
 
+const PAGE_SIZE = 50;
+
 export default function NotificacionesPerfilPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [marcandoTodas, setMarcandoTodas] = useState(false);
 
   /* Sheet */
@@ -138,14 +143,41 @@ export default function NotificacionesPerfilPage() {
       const q = query(
         collection(db, 'notificaciones'),
         where('usuario_id', '==', user!.uid),
-        orderBy('created_at', 'desc')
+        orderBy('created_at', 'desc'),
+        limit(PAGE_SIZE),
       );
       const snap = await getDocs(q);
-      setNotificaciones(snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Notificacion)));
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Notificacion));
+      setNotificaciones(docs);
+      setLastDoc(snap.docs[snap.docs.length - 1] ?? null);
+      setHasMore(snap.docs.length === PAGE_SIZE);
     } catch {
       toast.error('Error al cargar las notificaciones');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchMore() {
+    if (!lastDoc || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const q = query(
+        collection(db, 'notificaciones'),
+        where('usuario_id', '==', user!.uid),
+        orderBy('created_at', 'desc'),
+        startAfter(lastDoc),
+        limit(PAGE_SIZE),
+      );
+      const snap = await getDocs(q);
+      const moreDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Notificacion));
+      setNotificaciones((prev) => [...prev, ...moreDocs]);
+      setLastDoc(snap.docs[snap.docs.length - 1] ?? null);
+      setHasMore(snap.docs.length === PAGE_SIZE);
+    } catch {
+      toast.error('Error al cargar más notificaciones');
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -312,6 +344,23 @@ export default function NotificacionesPerfilPage() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Paginación — "Cargar más" */}
+      {hasMore && (
+        <div className="pt-2 pb-4 flex justify-center">
+          <Button
+            variant="outline" size="sm"
+            onClick={fetchMore}
+            disabled={loadingMore}
+            className="text-xs border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white"
+          >
+            {loadingMore
+              ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              : <ChevronDown className="w-3.5 h-3.5 mr-1.5" />}
+            {loadingMore ? 'Cargando…' : 'Cargar más'}
+          </Button>
         </div>
       )}
 

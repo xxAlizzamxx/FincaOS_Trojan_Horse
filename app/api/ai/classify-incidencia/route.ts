@@ -8,6 +8,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getAdminDb } from '@/lib/firebase/admin';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 if (!getApps().length) {
   initializeApp({
@@ -22,6 +23,11 @@ if (!getApps().length) {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 15 requests / 60 s per IP
+  const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown';
+  const rl = await checkRateLimit(`ai-classify:${ip}`, 15, 60_000);
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   // Auth
   const authHeader = req.headers.get('Authorization') ?? '';
   if (!authHeader.startsWith('Bearer ')) {

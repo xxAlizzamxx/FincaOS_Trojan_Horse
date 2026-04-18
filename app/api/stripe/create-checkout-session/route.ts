@@ -1,9 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { getAuth } from 'firebase-admin/auth';
+import { getApps, initializeApp, cert } from 'firebase-admin/app';
 
 export const runtime = 'nodejs';
 
+if (!getApps().length) {
+  initializeApp({
+    credential: cert({
+      projectId:   process.env.FIREBASE_ADMIN_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+      privateKey:  process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
+  });
+}
+
+/** Allowed payment types — prevents injection of arbitrary tipo values into metadata */
+const VALID_TIPOS = new Set(['cuota', 'mediacion', 'incidencia']);
+
 export async function POST(req: NextRequest) {
+
+  /* ── 0. Auth guard ── */
+  const authHeader = req.headers.get('Authorization') ?? '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+  }
+  let uid: string;
+  try {
+    const decoded = await getAuth().verifyIdToken(authHeader.slice(7));
+    uid = decoded.uid;
+  } catch {
+    return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+  }
 
   /* ── 1. Validate env ── */
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -22,14 +50,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  console.log('BODY:', JSON.stringify(body));
-
   const { monto, tipo, referencia_id, usuario_id, comunidad_id, descripcion, email } = body;
 
   if (!monto)         return NextResponse.json({ error: 'Falta: monto' },        { status: 400 });
   if (!tipo)          return NextResponse.json({ error: 'Falta: tipo' },         { status: 400 });
   if (!referencia_id) return NextResponse.json({ error: 'Falta: referencia_id' },{ status: 400 });
   if (!usuario_id)    return NextResponse.json({ error: 'Falta: usuario_id' },   { status: 400 });
+
+  // ── Security validations ────────────────────────────────────────────────
+  // Prevent users from creating payment records for other users
+  if (usuario_id !== uid) {
+    return NextResponse.json({ error: 'usuario_id no coincide con el token' }, { status: 403 });
+  }
+  // Whitelist tipo to prevent injection into Stripe metadata
+  if (!VALID_TIPOS.has(tipo)) {
+    return NextResponse.json({ error: 'tipo no válido' }, { status: 400 });
+  }
+  // Validate monto: must be a positive number, max 99 999 €
+  const montoNum = Number(monto);
+  if (!Number.isFinite(montoNum) || montoNum <= 0 || montoNum > 99_999) {
+    return NextResponse.json({ error: 'monto no válido (debe ser entre 0.01 y 99999 €)' }, { status: 400 });
+  }
 
   /* ── 4. Generate pago ID (independent of Firestore) ── */
   const pagoId = crypto.randomUUID();

@@ -4,45 +4,56 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
-import { Perfil } from '@/types/database';
+import { Perfil, PerfilPrivado } from '@/types/database';
+import { createPerfilBatch, updatePerfilPrivado } from '@/lib/firebase/createPerfil';
+import { trackEvent } from '@/lib/analytics';
 
 interface AuthContextValue {
-  user: User | null;
-  perfil: Perfil | null;
-  loading: boolean;
-  signOut: () => Promise<void>;
+  user:          User | null;
+  perfil:        Perfil | null;
+  /** Datos privados del usuario actual — NUNCA compartir con otros componentes públicos. */
+  perfilPrivado: PerfilPrivado | null;
+  loading:       boolean;
+  signOut:       () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
-  user: null,
-  perfil: null,
-  loading: true,
-  signOut: async () => {},
+  user:          null,
+  perfil:        null,
+  perfilPrivado: null,
+  loading:       true,
+  signOut:       async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [perfil, setPerfil] = useState<Perfil | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user,          setUser]          = useState<User | null>(null);
+  const [perfil,        setPerfil]        = useState<Perfil | null>(null);
+  const [perfilPrivado, setPerfilPrivado] = useState<PerfilPrivado | null>(null);
+  const [loading,       setLoading]       = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        await fetchPerfil(firebaseUser.uid);
+        await fetchPerfil(firebaseUser);
       } else {
         setPerfil(null);
+        setPerfilPrivado(null);
         setLoading(false);
       }
     });
-
     return () => unsubscribe();
   }, []);
 
-  async function fetchPerfil(userId: string) {
-    const perfilSnap = await getDoc(doc(db, 'perfiles', userId));
+  async function fetchPerfil(firebaseUser: User) {
+    const uid = firebaseUser.uid;
+
+    // ── 1. Cargar perfil público ──────────────────────────────────────────
+    const perfilSnap = await getDoc(doc(db, 'perfiles', uid));
+
     if (perfilSnap.exists()) {
       const perfilData = { id: perfilSnap.id, ...perfilSnap.data() } as Perfil;
+
       if (perfilData.comunidad_id) {
         const comunidadSnap = await getDoc(doc(db, 'comunidades', perfilData.comunidad_id));
         if (comunidadSnap.exists()) {
@@ -51,28 +62,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setPerfil(perfilData);
     } else {
-      // Perfil no encontrado — puede ocurrir si el registro con Google fue interrumpido.
-      // Creamos un perfil mínimo para que el flujo de onboarding funcione correctamente.
-      const firebaseUser = auth.currentUser;
-      if (firebaseUser) {
-        const nuevoPerfil = {
-          nombre_completo: firebaseUser.displayName || 'Usuario',
-          avatar_url:      firebaseUser.photoURL || null,
-          telefono:        null,
-          comunidad_id:    null,
-          numero_piso:     null,
-          rol:             'vecino' as const,
-          created_at:      new Date().toISOString(),
-          updated_at:      new Date().toISOString(),
-        };
-        try {
-          await setDoc(doc(db, 'perfiles', userId), nuevoPerfil);
-          setPerfil({ id: userId, ...nuevoPerfil } as Perfil);
-        } catch (err) {
-          console.error('[useAuth] No se pudo crear el perfil de recuperación:', err);
-        }
+      // Perfil no encontrado — registro con Google fue interrumpido.
+      // Crear perfil mínimo via batch (crea también perfiles_privados).
+      const nuevoPerfil = {
+        nombre_completo: firebaseUser.displayName || 'Usuario',
+        avatar_url:      firebaseUser.photoURL    || null,
+        comunidad_id:    null,
+        numero_piso:     null,
+        torre:           null,
+        piso:            null,
+        puerta:          null,
+        rol:             'vecino' as const,
+        coeficiente:     null,
+        created_at:      new Date().toISOString(),
+        updated_at:      new Date().toISOString(),
+      };
+      try {
+        await createPerfilBatch(uid, nuevoPerfil, {
+          email:       firebaseUser.email ?? null,
+          telefono:    null,
+          plan:        'free',
+          ultimo_login: new Date().toISOString(),
+        });
+        setPerfil({ id: uid, ...nuevoPerfil } as Perfil);
+      } catch (err) {
+        console.error('[useAuth] No se pudo crear el perfil de recuperación:', err);
       }
     }
+
+    // ── 2. Cargar perfil privado (solo para el propio usuario) ────────────
+    try {
+      const privadoSnap = await getDoc(doc(db, 'perfiles_privados', uid));
+      if (privadoSnap.exists()) {
+        setPerfilPrivado({ uid, ...privadoSnap.data() } as PerfilPrivado);
+      } else {
+        // Perfil privado no existe aún (usuario pre-migración) — crearlo ahora
+        await createPerfilBatch(uid, {} as any, {
+          email:       firebaseUser.email ?? null,
+          telefono:    null,
+          plan:        'free',
+          ultimo_login: new Date().toISOString(),
+        });
+        setPerfilPrivado({
+          uid,
+          email:        firebaseUser.email ?? null,
+          telefono:     null,
+          plan:         'free',
+          ultimo_login: new Date().toISOString(),
+          preferencias_notificaciones: { push: true, email: true },
+          created_at:   new Date().toISOString(),
+          updated_at:   new Date().toISOString(),
+        });
+      }
+    } catch {
+      // Si falla el perfil privado, no bloquear el resto de la app
+    }
+
+    // ── 3. Actualizar ultimo_login (fire-and-forget) ──────────────────────
+    updatePerfilPrivado(uid, { ultimo_login: new Date().toISOString() }).catch(() => {});
+
+    // ── 4. Analytics — evento login (fire-and-forget, sin await) ─────────
+    //    Obtenemos comunidad_id del perfil si ya existe para el contexto
+    getDoc(doc(db, 'perfiles', uid)).then((snap) => {
+      const comunidadId = snap.data()?.comunidad_id ?? null;
+      trackEvent('login', uid, comunidadId).catch(() => {});
+    }).catch(() => {});
+
     setLoading(false);
   }
 
@@ -81,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, perfil, loading, signOut }}>
+    <AuthContext.Provider value={{ user, perfil, perfilPrivado, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

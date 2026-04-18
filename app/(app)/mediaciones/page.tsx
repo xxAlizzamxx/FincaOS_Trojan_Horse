@@ -49,7 +49,6 @@ export default function MediacionesPage() {
 
   const [mediaciones, setMediaciones] = useState<any[]>([]);
   const [loading, setLoading]         = useState(true);
-  const [fetchInfo, setFetchInfo]     = useState('');
 
   useEffect(() => {
     if (perfil && user) fetch();
@@ -64,7 +63,6 @@ export default function MediacionesPage() {
       const rol = perfil!.rol;
 
       if (!cid) {
-        setFetchInfo('Sin comunidad_id en el perfil');
         setLoading(false);
         return;
       }
@@ -75,7 +73,6 @@ export default function MediacionesPage() {
       );
 
       const todas = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Record<string, unknown> & { id: string }));
-      setFetchInfo(`cid=${cid} uid=${uid} rol=${rol} → ${todas.length} docs`);
 
       // Filtrado client-side según rol
       let resultado: any[];
@@ -99,8 +96,7 @@ export default function MediacionesPage() {
       setMediaciones(resultado);
     } catch (err: any) {
       console.error('Error mediaciones:', err);
-      toast.error('Error al cargar: ' + (err?.message ?? err));
-      setFetchInfo('ERROR: ' + (err?.message ?? String(err)));
+      toast.error('Error al cargar mediaciones');
     } finally {
       setLoading(false);
     }
@@ -140,13 +136,6 @@ export default function MediacionesPage() {
           <RefreshCw className={cn('w-4 h-4 text-muted-foreground', loading && 'animate-spin')} />
         </button>
       </div>
-
-      {/* Debug info — quitar en producción */}
-      {fetchInfo && (
-        <div className="text-[10px] text-muted-foreground bg-muted/40 rounded-lg px-3 py-1.5 font-mono break-all">
-          {fetchInfo}
-        </div>
-      )}
 
       {/* Loading */}
       {loading ? (

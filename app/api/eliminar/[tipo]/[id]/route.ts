@@ -131,8 +131,39 @@ export async function DELETE(
     }
   }
 
-  /* 7 — Eliminar */
+  /* 7 — Eliminar (con cascade completo para subcollecciones y colecciones relacionadas) */
   try {
+    if (coleccion === 'incidencias') {
+      // Fetch related data in parallel
+      const [afectadosSnap, comentariosSnap, fotosSnap] = await Promise.all([
+        db.collection('incidencias').doc(id).collection('afectados').get(),
+        db.collection('comentarios').where('incidencia_id', '==', id).get(),
+        db.collection('incidencias_fotos').where('incidencia_id', '==', id).get(),
+      ]);
+
+      // Collect all refs to delete
+      const toDelete = [
+        ...afectadosSnap.docs,
+        ...comentariosSnap.docs,
+        ...fotosSnap.docs,
+      ].map((d) => d.ref);
+
+      // Batch-delete in chunks of 499 (Firestore hard limit is 500 per batch)
+      const CHUNK = 499;
+      for (let i = 0; i < toDelete.length; i += CHUNK) {
+        const chunk = toDelete.slice(i, i + CHUNK);
+        const batch = db.batch();
+        chunk.forEach((ref) => batch.delete(ref));
+        await batch.commit();
+      }
+
+      console.log(
+        `[DELETE] Cascade for incidencia ${id}: ` +
+        `${afectadosSnap.size} afectados, ${comentariosSnap.size} comentarios, ` +
+        `${fotosSnap.size} fotos eliminados`,
+      );
+    }
+
     await docRef.delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
