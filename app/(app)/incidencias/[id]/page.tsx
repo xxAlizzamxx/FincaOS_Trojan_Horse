@@ -76,7 +76,7 @@ export default function IncidenciaDetailPage() {
   const incidenciaId = params.id as string;
 
   // Cache de datos enriquecidos (autor/categoría) — se obtienen una vez y se reutilizan
-  const enrichmentRef = useRef<{ autor: any; categoria: any } | null>(null);
+  const enrichmentRef = useRef<{ autor: any; categoria: any; _autorId?: string; _categoriaId?: string } | null>(null);
 
   /* ── Vivienda del autor (torre · piso · puerta, con fallback a numero_piso) ── */
   function lineaVivienda(autor: any): string {
