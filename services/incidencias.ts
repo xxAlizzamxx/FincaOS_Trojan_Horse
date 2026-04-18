@@ -100,7 +100,8 @@ export async function toggleAfectado(
     const wasNewQuorum = !yaAlcanzado && porcentaje >= umbral;
     const ahora        = new Date().toISOString();
 
-    const updates: Record<string, unknown> = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updates: Record<string, any> = {
       'quorum.tipo':            'simple',
       'quorum.umbral':          umbral,
       'quorum.afectados_count': newCount,
