@@ -15,7 +15,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 export default function InvitePage() {
   const params = useParams();
   const router = useRouter();
-  const codigo = (params.codigo as string).toUpperCase();
+  const [codigo, setCodigo] = useState<string>('');
+
+  // Extract codigo from params safely
+  useEffect(() => {
+    if (params.codigo) {
+      const c = (params.codigo as string).toUpperCase();
+      console.log('[InvitePage] Codigo extracted:', c);
+      setCodigo(c);
+    }
+  }, [params.codigo]);
 
   const [comunidad, setComunidad] = useState<Comunidad | null>(null);
   const [vecinos, setVecinos]     = useState(0);
@@ -83,7 +92,8 @@ export default function InvitePage() {
 
   /* ── 2. Cargar datos de la comunidad ── */
   useEffect(() => {
-    if (!codigo) return;
+    if (!codigo || codigo.length === 0) return;
+    console.log('[InvitePage] Loading community data for codigo:', codigo);
     fetchComunidad();
   }, [codigo]);
 
@@ -155,8 +165,8 @@ export default function InvitePage() {
     autoJoin();
   }, [isLoggedIn, yaEnComunidad, joined, comunidad]);
 
-  /* ── Skeleton / redirigiendo ── */
-  if (loading || redirecting) {
+  /* ── Esperando codigo o cargando ── */
+  if (!codigo || loading || redirecting) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-finca-peach/30 via-background to-background flex flex-col items-center justify-center px-4">
         <div className="w-full max-w-sm space-y-6">
