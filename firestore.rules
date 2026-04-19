@@ -270,16 +270,53 @@ service cloud.firestore {
     }
 
     // ── Proveedores ───────────────────────────────────────────────────────
-    // Lectura pública (vecinos ven el rating). Escritura solo via Admin SDK.
+    // Registro y edición de perfil: solo el propio proveedor.
+    // Campos de rating/trabajosRealizados se actualizan también via Admin SDK.
+    // La subcolección reviews sigue siendo Admin SDK only.
 
     match /proveedores/{proveedorId} {
       allow read: if isAuth();
-      allow write: if false; // Admin SDK only
+      allow create: if isAuth() && request.auth.uid == proveedorId;
+      allow update: if isAuth() && request.auth.uid == proveedorId;
+      // delete: Admin SDK only (never from client)
 
       match /reviews/{reviewId} {
         allow read: if isAuth();
         allow write: if false; // Admin SDK only (via /api/proveedores/review)
       }
+    }
+
+    // ── Presupuestos ──────────────────────────────────────────────────────
+    // El proveedor crea sus propios presupuestos.
+    // Admin/presidente puede actualizar el estado (aceptado/rechazado).
+    // Todos los autenticados pueden leer (proveedor ve los suyos, admin ve todos).
+
+    match /presupuestos/{presupuestoId} {
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        resource.data.proveedorId == request.auth.uid
+        || profile().rol in ['admin', 'presidente']
+      );
+    }
+
+    // ── Valoraciones de proveedor ─────────────────────────────────────────
+    // Cualquier vecino autenticado puede dejar una valoración.
+    // Solo lectura para todos los autenticados.
+
+    match /valoraciones_proveedor/{valoracionId} {
+      allow read:   if isAuth();
+      allow create: if isAuth();
+    }
+
+    // ── Vencimientos ──────────────────────────────────────────────────────
+    // Admin de la comunidad gestiona. Todos los autenticados pueden leer.
+
+    match /vencimientos/{vencimientoId} {
+      allow read:   if isAuth();
+      allow create: if isAdminOfCommunity(request.resource.data.comunidadId);
+      allow update: if isAdminOfCommunity(resource.data.comunidadId);
+      allow delete: if isAdminOfCommunity(resource.data.comunidadId);
     }
 
     // ── Push subscriptions ────────────────────────────────────────────────
