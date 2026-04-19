@@ -26,7 +26,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         if (snap.exists()) {
           // This user is a provider — keep spinner up and redirect
           setIsProveedor(true);
-          router.replace('/proveedor/dashboard');
+          router.replace('/proveedor'); // smart gate: /proveedor handles setup vs dashboard
         }
       })
       .catch(() => { /* network error: don't block the app */ })

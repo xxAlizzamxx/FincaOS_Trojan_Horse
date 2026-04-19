@@ -48,6 +48,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function fetchPerfil(firebaseUser: User) {
     const uid = firebaseUser.uid;
 
+    // ── 0. Proveedor priority check ───────────────────────────────────────
+    // If this UID already has a proveedores document, skip ALL perfiles logic.
+    // Providers must NEVER get a perfiles doc auto-created; that would break
+    // the single-role enforcement and the Firestore create rule on /proveedores.
+    try {
+      const proveedorSnap = await getDoc(doc(db, 'proveedores', uid));
+      if (proveedorSnap.exists()) {
+        // Provider is authenticated — let layout.tsx handle the redirect
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Network error — fall through and try perfiles normally
+    }
+
     // ── 1. Cargar perfil público ──────────────────────────────────────────
     const perfilSnap = await getDoc(doc(db, 'perfiles', uid));
 

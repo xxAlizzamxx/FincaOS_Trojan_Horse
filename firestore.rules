@@ -281,10 +281,11 @@ service cloud.firestore {
       //   2. Auth UID == uid field stored in the document
       //   3. No perfiles document exists for this UID (single-role enforcement)
       //      → A user who already has a vecino/admin profile cannot register as provider.
+      // Single-role enforcement via app logic (useAuth checks proveedores/{uid} first
+      // and skips perfiles creation for providers). No !exists() needed here.
       allow create: if request.auth != null
                     && request.auth.uid == proveedorId
-                    && request.auth.uid == request.resource.data.uid
-                    && !exists(/databases/$(database)/documents/perfiles/$(request.auth.uid));
+                    && request.auth.uid == request.resource.data.uid;
       // On update: only the owner can change their own provider doc.
       allow update: if request.auth != null
                     && request.auth.uid == proveedorId

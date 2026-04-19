@@ -3,8 +3,10 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Building2, UserPlus } from 'lucide-react';
-import { doc, setDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { Building2, UserPlus, Wrench, ChevronLeft } from 'lucide-react';
+import {
+  doc, setDoc, getDoc, collection, query, where, getDocs, addDoc,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { trackEvent } from '@/lib/analytics';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,16 +16,22 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+type RolSeleccionado = null | 'vecino' | 'proveedor';
+
 // ── Inner component (uses useSearchParams, needs Suspense) ────────────────────
 function OnboardingInner() {
   const searchParams = useSearchParams();
   const { perfil, user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
+
+  // Role selection state — null = show role picker cards
+  const [rolSeleccionado, setRolSeleccionado] = useState<RolSeleccionado>(null);
 
   const [piso, setPiso] = useState('');
   const [codigoComunidad, setCodigoComunidad] = useState('');
 
-  // Pre-rellenar el código si viene de un link de invitación (?codigo=XXXXX)
+  // Pre-fill código if coming from an invitation link (?codigo=XXXXX)
   useEffect(() => {
     const code = searchParams.get('codigo');
     if (code) setCodigoComunidad(code.toUpperCase());
@@ -33,13 +41,13 @@ function OnboardingInner() {
   const [direccion, setDireccion] = useState('');
   const [numViviendas, setNumViviendas] = useState('');
 
+  // ── Vecino: join existing community ──────────────────────────────────────
   async function handleUnirse(e: React.FormEvent) {
     e.preventDefault();
     if (!codigoComunidad || !user) return;
     setLoading(true);
 
     try {
-      // 1. Buscar la comunidad por código
       const q = query(
         collection(db, 'comunidades'),
         where('codigo', '==', codigoComunidad.toUpperCase()),
@@ -54,8 +62,6 @@ function OnboardingInner() {
 
       const comunidadDoc = snap.docs[0];
 
-      // 2. Actualizar solo el perfil público del usuario (merge seguro)
-      //    — perfiles_privados ya existe/se crea en useAuth, no tocar aquí.
       await setDoc(
         doc(db, 'perfiles', user.uid),
         {
@@ -74,9 +80,7 @@ function OnboardingInner() {
         { merge: true },
       );
 
-      // Analytics (fire-and-forget)
       void trackEvent('join_community', user.uid, comunidadDoc.id);
-
       toast.success('¡Te has unido a la comunidad!');
       window.location.href = '/inicio';
     } catch (err: any) {
@@ -86,6 +90,7 @@ function OnboardingInner() {
     }
   }
 
+  // ── Vecino: create new community ──────────────────────────────────────────
   async function handleCrear(e: React.FormEvent) {
     e.preventDefault();
     if (!nombreComunidad || !direccion || !user) return;
@@ -94,7 +99,6 @@ function OnboardingInner() {
     const codigo = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     try {
-      // 1. Crear la comunidad
       const comunidadRef = await addDoc(collection(db, 'comunidades'), {
         nombre:        nombreComunidad,
         direccion,
@@ -103,7 +107,6 @@ function OnboardingInner() {
         created_at:    new Date().toISOString(),
       });
 
-      // 2. Actualizar solo el perfil público (merge seguro)
       await setDoc(
         doc(db, 'perfiles', user.uid),
         {
@@ -122,9 +125,7 @@ function OnboardingInner() {
         { merge: true },
       );
 
-      // Analytics (fire-and-forget)
       void trackEvent('create_community', user.uid, comunidadRef.id);
-
       toast.success(`Comunidad creada. Código: ${codigo}`);
       window.location.href = '/inicio';
     } catch (err: any) {
@@ -134,8 +135,166 @@ function OnboardingInner() {
     setLoading(false);
   }
 
+  // ── Proveedor: create proveedores doc and redirect ────────────────────────
+  async function handleRegistrarProveedor() {
+    if (!user) return;
+    setLoading(true);
+
+    try {
+      // Check if already exists (idempotent)
+      const existing = await getDoc(doc(db, 'proveedores', user.uid));
+      if (!existing.exists()) {
+        await setDoc(doc(db, 'proveedores', user.uid), {
+          uid:               user.uid,
+          nombre:            user.displayName ?? '',
+          email:             user.email ?? '',
+          telefono:          '',
+          servicios:         [],        // new setup-screen field
+          especialidad:      '',        // backward compat with dashboard filter
+          zona:              '',
+          rating:            0,
+          promedio_rating:   0,
+          total_reviews:     0,
+          trabajosRealizados: 0,        // backward compat
+          createdAt:         new Date().toISOString(),
+        });
+      }
+
+      void trackEvent('register_proveedor', user.uid, null);
+      toast.success('¡Cuenta de proveedor creada!');
+      router.replace('/proveedor');
+    } catch (err: any) {
+      console.error('[Onboarding] Error al registrar proveedor:', err?.code ?? err);
+      toast.error('Error al crear cuenta de proveedor. Inténtalo de nuevo.');
+      setLoading(false);
+    }
+  }
+
+  // ── Role selector screen ──────────────────────────────────────────────────
+  if (rolSeleccionado === null) {
+    return (
+      <div className="px-4 py-8 max-w-sm mx-auto space-y-6">
+        <div className="text-center space-y-2">
+          <div className="w-16 h-16 bg-finca-peach/50 rounded-full flex items-center justify-center mx-auto">
+            <Building2 className="w-8 h-8 text-finca-coral" />
+          </div>
+          <h1 className="text-2xl font-semibold text-finca-dark">
+            Hola, {perfil?.nombre_completo?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'bienvenido'}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            ¿Cómo quieres usar FincaOS?
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {/* Vecino card */}
+          <button
+            type="button"
+            onClick={() => setRolSeleccionado('vecino')}
+            className="w-full text-left rounded-xl border-2 border-border hover:border-finca-coral/60 bg-card p-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-finca-coral"
+          >
+            <div className="flex items-start gap-4">
+              <div className="text-3xl mt-0.5">👤</div>
+              <div>
+                <p className="font-semibold text-base">Unirme como vecino</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Gestiona incidencias, participa en votaciones y comunícate con tu comunidad.
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {/* Proveedor card */}
+          <button
+            type="button"
+            onClick={() => setRolSeleccionado('proveedor')}
+            className="w-full text-left rounded-xl border-2 border-border hover:border-finca-coral/60 bg-card p-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-finca-coral"
+          >
+            <div className="flex items-start gap-4">
+              <div className="text-3xl mt-0.5">🛠️</div>
+              <div>
+                <p className="font-semibold text-base">Unirme como proveedor</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Recibe solicitudes de servicio de comunidades en tu zona y gestiona presupuestos.
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Proveedor confirmation screen ─────────────────────────────────────────
+  if (rolSeleccionado === 'proveedor') {
+    return (
+      <div className="px-4 py-8 max-w-sm mx-auto space-y-6">
+        <button
+          type="button"
+          onClick={() => setRolSeleccionado(null)}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Volver
+        </button>
+
+        <div className="text-center space-y-2">
+          <div className="w-16 h-16 bg-finca-peach/50 rounded-full flex items-center justify-center mx-auto">
+            <Wrench className="w-8 h-8 text-finca-coral" />
+          </div>
+          <h1 className="text-2xl font-semibold text-finca-dark">Cuenta de proveedor</h1>
+          <p className="text-sm text-muted-foreground">
+            Crearemos tu perfil de proveedor con{' '}
+            <span className="font-medium">{user?.email}</span>.
+            Después podrás configurar tus servicios.
+          </p>
+        </div>
+
+        <Card className="border-0 shadow-lg">
+          <CardContent className="pt-6 space-y-4">
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="text-base">📩</span>
+                <span>Recibe solicitudes filtradas por especialidad</span>
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="text-base">💶</span>
+                <span>Envía presupuestos digitales</span>
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="text-base">⭐</span>
+                <span>Acumula valoraciones de vecinos</span>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleRegistrarProveedor}
+              disabled={loading}
+              className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-11"
+            >
+              {loading
+                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <><Wrench className="w-4 h-4 mr-2" />Crear cuenta de proveedor</>
+              }
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Vecino onboarding (join / create) ─────────────────────────────────────
   return (
     <div className="px-4 py-8 max-w-sm mx-auto space-y-6">
+      <button
+        type="button"
+        onClick={() => setRolSeleccionado(null)}
+        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronLeft className="w-4 h-4" />
+        Volver
+      </button>
+
       <div className="text-center space-y-2">
         <div className="w-16 h-16 bg-finca-peach/50 rounded-full flex items-center justify-center mx-auto">
           <Building2 className="w-8 h-8 text-finca-coral" />
