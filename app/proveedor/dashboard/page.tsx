@@ -99,12 +99,14 @@ export default function ProveedorDashboardPage() {
   const [valoraciones, setValoraciones] = useState<Valoracion[]>([]);
   const [loadingValoraciones, setLoadingValoraciones] = useState(false);
 
-  // Auth + role check
-  // Order of checks:
-  //   1. Not logged in              → /proveedor/login
-  //   2. Logged in, has proveedores doc  → OK, this is a provider
-  //   3. Logged in, has perfiles doc     → /inicio  (vecino/admin — wrong portal)
-  //   4. Neither doc exists          → /proveedor/login (incomplete registration)
+  // Auth + role check (single-role system — proveedores takes priority)
+  //
+  // Resolution order:
+  //   1. Not authenticated             → /proveedor/login
+  //   2. Has proveedores doc           → ✅ load dashboard
+  //   3. Has perfiles doc (vecino)     → /inicio  (wrong portal)
+  //   4. Neither doc                   → /proveedor/login
+  //   5. Network / Firestore error     → /proveedor/login  (safe fallback, never stuck)
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
@@ -112,25 +114,31 @@ export default function ProveedorDashboardPage() {
         return;
       }
 
-      // Primary check: is this user a provider?
-      const provSnap = await getDoc(doc(db, 'proveedores', firebaseUser.uid));
-      if (provSnap.exists()) {
-        setUser(firebaseUser);
-        setProveedor(provSnap.data() as ProveedorProfile);
-        setAuthLoading(false);
-        return;
-      }
+      try {
+        // Step 1 — is this user a provider? (proveedores always wins)
+        const provSnap = await getDoc(doc(db, 'proveedores', firebaseUser.uid));
+        if (provSnap.exists()) {
+          setUser(firebaseUser);
+          setProveedor(provSnap.data() as ProveedorProfile);
+          setAuthLoading(false);
+          return;
+        }
 
-      // Secondary check: is this a vecino/admin who wandered in?
-      const perfilSnap = await getDoc(doc(db, 'perfiles', firebaseUser.uid));
-      if (perfilSnap.exists()) {
-        // Authenticated vecino/admin — send them to their home, not here
-        router.replace('/inicio');
-        return;
-      }
+        // Step 2 — is this a vecino/admin who accidentally landed here?
+        const perfilSnap = await getDoc(doc(db, 'perfiles', firebaseUser.uid));
+        if (perfilSnap.exists()) {
+          router.replace('/inicio');
+          return;
+        }
 
-      // Unknown user — send to provider login
-      router.replace('/proveedor/login');
+        // Step 3 — unknown/incomplete registration
+        router.replace('/proveedor/login');
+      } catch {
+        // Network error or Firestore unavailable:
+        // Never leave the user stuck on an infinite spinner.
+        // Safe fallback → login page (they can retry).
+        router.replace('/proveedor/login');
+      }
     });
     return () => unsub();
   }, [router]);

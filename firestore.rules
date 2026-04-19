@@ -276,11 +276,16 @@ service cloud.firestore {
 
     match /proveedores/{proveedorId} {
       allow read: if isAuth();
-      // Double lock: path UID must match auth UID, AND the uid field in the document
-      // must also match — prevents anyone writing a doc on behalf of another provider.
+      // Triple lock on create:
+      //   1. Auth UID == document path
+      //   2. Auth UID == uid field stored in the document
+      //   3. No perfiles document exists for this UID (single-role enforcement)
+      //      → A user who already has a vecino/admin profile cannot register as provider.
       allow create: if request.auth != null
                     && request.auth.uid == proveedorId
-                    && request.auth.uid == request.resource.data.uid;
+                    && request.auth.uid == request.resource.data.uid
+                    && !exists(/databases/$(database)/documents/perfiles/$(request.auth.uid));
+      // On update: only the owner can change their own provider doc.
       allow update: if request.auth != null
                     && request.auth.uid == proveedorId
                     && request.auth.uid == resource.data.uid;
