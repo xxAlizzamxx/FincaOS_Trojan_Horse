@@ -34,6 +34,7 @@ export default function InvitePage() {
     let cancelled = false;
 
     (async () => {
+      console.log('[InvitePage] Checking auth state...');
       // Wait for Firebase to finish restoring the session from IndexedDB.
       // Without this, onAuthStateChanged fires with `null` on hard reload before
       // the session is restored, causing a redirect loop with /login.
@@ -41,7 +42,10 @@ export default function InvitePage() {
       if (cancelled) return;
 
       const u = auth.currentUser;
+      console.log('[InvitePage] Current user:', u?.uid ? 'logged in' : 'NOT logged in');
+
       if (!u) {
+        console.log('[InvitePage] Saving codigo to localStorage and redirecting to login');
         if (typeof window !== 'undefined') {
           localStorage.setItem('finca_invite_code', codigo);
         }
@@ -52,10 +56,12 @@ export default function InvitePage() {
       setIsLoggedIn(true);
 
       try {
+        console.log('[InvitePage] Checking if user has community...');
         const perfilSnap = await getDoc(doc(db, 'perfiles', u.uid));
         if (cancelled) return;
         if (perfilSnap.exists() && perfilSnap.data().comunidad_id) {
           /* ✋ Usuario ya está en una comunidad → redirigir a /inicio */
+          console.log('[InvitePage] User already has community, redirecting to /inicio');
           setYaEnComunidad(true);
           setRedirecting(true);
           toast.info('Ya perteneces a una comunidad');
@@ -67,6 +73,7 @@ export default function InvitePage() {
       }
 
       if (cancelled) return;
+      console.log('[InvitePage] Auth checked, ready for auto-join');
       setYaEnComunidad(false);
       setAuthChecked(true);
     })();
@@ -76,10 +83,17 @@ export default function InvitePage() {
 
   /* ── 2. Cargar datos de la comunidad ── */
   useEffect(() => {
+    if (!codigo) return;
     fetchComunidad();
   }, [codigo]);
 
   async function fetchComunidad() {
+    if (!codigo) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
     const q    = query(collection(db, 'comunidades'), where('codigo', '==', codigo));
     const snap = await getDocs(q);
 
@@ -102,21 +116,32 @@ export default function InvitePage() {
 
   /* ── 3. Auto-join: cuando usuario vuelve a /invite después del login ── */
   useEffect(() => {
+    console.log('[InvitePage] Auto-join check:', { isLoggedIn, yaEnComunidad, joined, comunidad: !!comunidad, codigo });
+
     if (!isLoggedIn || yaEnComunidad || joined || !comunidad) return;
+
+    console.log('[InvitePage] Triggering auto-join...');
 
     const autoJoin = async () => {
       try {
         const u = auth.currentUser;
-        if (!u) return;
+        console.log('[InvitePage] Auto-join user:', u?.uid);
+        if (!u) {
+          console.warn('[InvitePage] No current user in auto-join');
+          return;
+        }
 
+        console.log('[InvitePage] Setting joined=true, redirecting=true');
         setJoined(true);
         setRedirecting(true);
 
+        console.log('[InvitePage] Updating perfil with comunidad_id:', comunidad.id);
         // Actualizar perfil con comunidad_id
         await updateDoc(doc(db, 'perfiles', u.uid), {
           comunidad_id: comunidad.id,
         });
 
+        console.log('[InvitePage] Perfil updated, redirecting to /inicio');
         // Redirigir a inicio
         router.replace('/inicio');
       } catch (err) {
