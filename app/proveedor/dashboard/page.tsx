@@ -478,17 +478,19 @@ export default function ProveedorDashboardPage() {
                       {p.estado}
                     </Badge>
                   </div>
-                  <p className="font-semibold text-sm">€{p.precio}</p>
-                  {p.comentario && (
-                    <p className="text-sm text-muted-foreground">{p.comentario}</p>
+                  <p className="font-semibold text-sm">€{p.monto ?? p.precio}</p>
+                  {(p.mensaje || p.comentario) && (
+                    <p className="text-sm text-muted-foreground">{p.mensaje ?? p.comentario}</p>
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(p.createdAt).toLocaleDateString('es-ES', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
-                  </p>
+                  {(p.created_at || (p as any).createdAt) && (
+                    <p className="text-xs text-muted-foreground">
+                      {new Date((p.created_at as any)?.toDate?.() ?? p.created_at ?? (p as any).createdAt).toLocaleDateString('es-ES', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             ))}
