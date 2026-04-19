@@ -295,10 +295,11 @@ export default function IncidenciaDetailPage() {
         throw new Error(body.error ?? `Error ${res.status}`);
       }
 
-      console.log('[Afectar] éxito — recargando incidencia para quórum actualizado');
+      console.log('[Afectar] éxito — recargando afectados para quórum actualizado');
       toast.success(wasAdded ? 'Ya no apareces como afectado' : '¡Te has sumado a la incidencia!');
-      // Recargar incidencia para mostrar quórum actualizado
-      fetchIncidencia();
+      // Resync the local afectados subcollection so `yaSumado` matches the server.
+      // quorum.afectados_count is already live via onSnapshot on the incidencia doc.
+      fetchAfectados();
     } catch (err: any) {
       // Revertir update optimista
       setAfectados((prev) =>
@@ -478,7 +479,13 @@ export default function IncidenciaDetailPage() {
   }
 
   const currentStep = estadoCfg.step;
-  const totalAfectados = afectados.length + 1;
+  // Single source of truth: quorum.afectados_count is maintained atomically by the
+  // toggleAfectado service (delta ±1 inside a Firestore transaction). It already
+  // includes the creator (set to 1 at creation time).
+  // Fall back to afectados.length for legacy incidencias that pre-date the quorum field.
+  const totalAfectados =
+    incidencia.quorum?.afectados_count
+    ?? (afectados.length > 0 ? afectados.length : 1);
 
   return (
     <div className="pb-10">
@@ -665,7 +672,8 @@ export default function IncidenciaDetailPage() {
           {/* Barra de quórum — muestra si existe el campo quorum O si hay afectados */}
           {(() => {
             const q       = (incidencia as any).quorum;
-            const count   = q?.afectados_count ?? afectados.length;
+            // Mirror the same formula used for totalAfectados (single source of truth)
+            const count   = q?.afectados_count ?? (afectados.length > 0 ? afectados.length : 1);
             const umbral  = q?.umbral ?? 30;
             const alcanzado = q?.alcanzado ?? false;
             // Barra: mostramos cuántos afectados hay respecto a un estimado de vecinos

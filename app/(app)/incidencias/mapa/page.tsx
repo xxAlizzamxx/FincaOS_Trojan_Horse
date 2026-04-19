@@ -156,7 +156,14 @@ export default function MapaPage() {
                         <div className={cn('w-2.5 h-2.5 rounded-full shrink-0', SEMAFORO[inc.prioridad] ?? 'bg-gray-300')} />
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm text-finca-dark truncate">{inc.titulo}</p>
-                          <p className="text-xs text-muted-foreground capitalize">{inc.prioridad}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {inc.prioridad}
+                            {' · '}
+                            {(() => {
+                              const n = (inc as any).quorum?.afectados_count ?? 1;
+                              return `${n} afectado${n !== 1 ? 's' : ''}`;
+                            })()}
+                          </p>
                         </div>
                         <Badge className={cn('text-[10px] border-0 shrink-0', cfg.badge)}>
                           {cfg.label}
