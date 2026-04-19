@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Building2, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Comunidad } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ export default function InvitePage() {
   const [isLoggedIn, setIsLoggedIn]       = useState(false);
   const [yaEnComunidad, setYaEnComunidad] = useState(false);
   const [redirecting, setRedirecting]     = useState(false);
+  const [joined, setJoined]               = useState(false);
 
   /* ── 1. Verificar auth + si ya pertenece a una comunidad ── */
   useEffect(() => {
@@ -98,6 +99,36 @@ export default function InvitePage() {
     setVecinos(vecSnap.size);
     setLoading(false);
   }
+
+  /* ── 3. Auto-join: cuando usuario vuelve a /invite después del login ── */
+  useEffect(() => {
+    if (!isLoggedIn || yaEnComunidad || joined || !comunidad) return;
+
+    const autoJoin = async () => {
+      try {
+        const u = auth.currentUser;
+        if (!u) return;
+
+        setJoined(true);
+        setRedirecting(true);
+
+        // Actualizar perfil con comunidad_id
+        await updateDoc(doc(db, 'perfiles', u.uid), {
+          comunidad_id: comunidad.id,
+        });
+
+        // Redirigir a inicio
+        router.replace('/inicio');
+      } catch (err) {
+        console.error('[InvitePage] Error en auto-join:', err);
+        setJoined(false);
+        setRedirecting(false);
+        toast.error('Error al unirse a la comunidad');
+      }
+    };
+
+    autoJoin();
+  }, [isLoggedIn, yaEnComunidad, joined, comunidad]);
 
   /* ── Skeleton / redirigiendo ── */
   if (loading || redirecting) {
