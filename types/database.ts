@@ -82,7 +82,8 @@ export type AnalyticsEventName =
   | 'crear_mediacion'
   | 'pago_completado'
   | 'join_community'
-  | 'create_community';
+  | 'create_community'
+  | 'register_proveedor';
 
 export interface AnalyticsEvent {
   user_id:      string;
