@@ -222,7 +222,7 @@ export default function InicioPage() {
 
       <div>
         <Button className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 text-base font-medium shadow-md shadow-finca-coral/20" asChild>
-          <Link href="/nueva">
+          <Link href="/nueva/incidencia">
             <Plus className="w-5 h-5 mr-2" />
             Reportar incidencia
           </Link>
