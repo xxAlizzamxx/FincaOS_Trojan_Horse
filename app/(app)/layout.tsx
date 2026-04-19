@@ -26,7 +26,7 @@ function FullScreenSpinner() {
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, perfil, loading } = useAuth();
+  const { user, perfil, loading, perfilCargado } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -91,8 +91,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // ── Loading states — NEVER return null ────────────────────────────────────
 
-  // Still resolving Firebase auth
-  if (loading) return <FullScreenSpinner />;
+  // Wait for perfil resolution before making ANY routing decisions
+  if (loading || !perfilCargado) return <FullScreenSpinner />;
 
   // Logged in but role check not yet complete
   if (user && !roleChecked) return <FullScreenSpinner />;
