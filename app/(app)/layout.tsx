@@ -70,12 +70,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Redirect to onboarding when:
   //   • user is authenticated
   //   • role check is done and user is NOT a provider
-  //   • user has a perfil but it has no associated community yet
+  //   • EITHER: user has NO perfil yet (newly registered)
+  //   • OR: user has perfil but no community yet
   // The pathname check prevents an infinite redirect loop.
   useEffect(() => {
     if (loading || !roleChecked || !user || isProveedor) return;
     if (pathname === '/onboarding') return;
 
+    // 🔴 New user (no perfil in Firestore yet)
+    if (user && !perfil) {
+      router.replace('/onboarding');
+      return;
+    }
+
+    // User with perfil but no community
     if (perfil && !perfil.comunidad_id) {
       router.replace('/onboarding');
     }
