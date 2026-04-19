@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase/client';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { BottomTabBar } from '@/components/layout/BottomTabBar';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
@@ -12,6 +14,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, perfil, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+
+  // ── Role guard: if logged-in user is a provider, send them to their portal ──
+  // Runs once when auth resolves. A single doc read by ID is cheap and safe.
+  const [roleChecked,  setRoleChecked]  = useState(false);
+  const [isProveedor,  setIsProveedor]  = useState(false);
+  useEffect(() => {
+    if (loading || !user) return;
+    getDoc(doc(db, 'proveedores', user.uid))
+      .then((snap) => {
+        if (snap.exists()) {
+          // This user is a provider — keep spinner up and redirect
+          setIsProveedor(true);
+          router.replace('/proveedor/dashboard');
+        }
+      })
+      .catch(() => { /* network error: don't block the app */ })
+      .finally(() => setRoleChecked(true));
+  }, [user, loading, router]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -26,7 +46,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, perfil, loading, pathname, router]);
 
-  if (loading) {
+  // Show spinner while auth OR role check is in progress OR redirect is queued
+  if (loading || (user && !roleChecked) || isProveedor) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-8 h-8 rounded-full border-4 border-finca-coral border-t-transparent animate-spin" />
