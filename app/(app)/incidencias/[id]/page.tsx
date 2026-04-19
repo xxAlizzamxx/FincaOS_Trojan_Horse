@@ -163,19 +163,31 @@ export default function IncidenciaDetailPage() {
 
     return () => unsub();
   }, [incidenciaId]);
+  useEffect(() => { fetchAfectados(); fetchFotos(); }, [incidenciaId]);
 
-  useEffect(() => { fetchAfectados(); fetchFotos(); fetchPresupuestosRecibidos(); }, [incidenciaId]);
+  // Listen to presupuestos in real-time
+  useEffect(() => {
+    if (!incidenciaId) return;
+    
+    const unsubscribe = onSnapshot(
+      collection(db, 'incidencias', incidenciaId, 'presupuestos'),
+      (snap) => {
+        const presupuestos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        console.log('[Incidencia] Presupuestos actualizados:', presupuestos);
+        setPresupuestosRecibidos(presupuestos);
+      },
+      (err) => {
+        console.error('[Incidencia] Error escuchando presupuestos:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [incidenciaId]);
 
   async function fetchPresupuestosRecibidos() {
-    try {
-      const snap = await getDocs(
-        collection(db, 'incidencias', incidenciaId, 'presupuestos')
-      );
-      setPresupuestosRecibidos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    } catch {
-      // subcollection may not exist yet
-    }
+    // Deprecated - presupuestos are now loaded via onSnapshot
   }
+
 
   async function aceptarPresupuesto(pres: any) {
     if (!incidencia) return;
