@@ -37,12 +37,26 @@ export default function LoginPage() {
         return;
       }
 
+      // ── Invite code from localStorage (set by /invite/[codigo] when guest) ──
+      // Takes priority over the ?redirect= query param for invite flows.
+      const inviteCodigo =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('fincaos_invite_codigo')
+          : null;
+
+      // Helper: consume the stored code and return the invite URL
+      function consumeInvite(): string | null {
+        if (!inviteCodigo) return null;
+        localStorage.removeItem('fincaos_invite_codigo');
+        return `/invite/${inviteCodigo}`;
+      }
+
       // Usuario autenticado — verificar/crear perfil y redirigir
       try {
         const perfilSnap = await getDoc(doc(db, 'perfiles', firebaseUser.uid));
 
         if (!perfilSnap.exists()) {
-          // Primer login con Google — crear perfil
+          // Primer login con Google — crear perfil mínimo
           await setDoc(doc(db, 'perfiles', firebaseUser.uid), {
             comunidad_id: null,
             nombre_completo: firebaseUser.displayName || 'Sin nombre',
@@ -53,12 +67,17 @@ export default function LoginPage() {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
-          // Si viene de un invite link, volver a él para que pueda unirse
-          window.location.href = redirectTo ?? '/onboarding';
+          // New user → send to invite page (if pending) or onboarding
+          window.location.href = consumeInvite() ?? redirectTo ?? '/onboarding';
         } else {
           const data = perfilSnap.data();
+          // Existing user without a community → send to invite page if pending
+          if (inviteCodigo && !data?.comunidad_id) {
+            window.location.href = consumeInvite()!;
+            return;
+          }
+          // Normal redirect logic
           if (redirectTo) {
-            // Volver al destino original (ej. página de invitación)
             window.location.href = redirectTo;
           } else {
             window.location.href = data?.comunidad_id ? '/inicio' : '/onboarding';

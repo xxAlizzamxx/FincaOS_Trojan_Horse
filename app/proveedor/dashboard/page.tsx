@@ -35,7 +35,8 @@ import { toast } from 'sonner';
 interface ProveedorProfile {
   uid: string;
   nombre: string;
-  especialidad: string;
+  especialidad: string;     // legacy single-service field
+  servicios?: string[];     // new multi-service array (from /proveedor setup screen)
   zona: string;
   email: string;
   rating: number;
@@ -48,6 +49,7 @@ interface Incidencia {
   titulo: string;
   descripcion: string | null;
   categoria: string;
+  tipo_problema?: string;   // technical routing field — matches proveedor.servicios
   estado: string;
   estimacion_ia?: { min: number; max: number } | null;
   estimacion_min?: number | null;
@@ -165,12 +167,23 @@ export default function ProveedorDashboardPage() {
         id: d.id,
         ...(d.data() as Omit<Incidencia, 'id'>),
       }));
-      // Filter by category matching proveedor especialidad
+
+      // Build the service set for this provider.
+      // New providers have servicios[] from the setup screen.
+      // Legacy providers only have especialidad (string) — wrap it in an array.
+      const servicios: string[] =
+        proveedor.servicios && proveedor.servicios.length > 0
+          ? proveedor.servicios
+          : proveedor.especialidad
+          ? [proveedor.especialidad]
+          : [];
+
+      // Filter by tipo_problema matching one of the provider's services.
+      // Incidencias without tipo_problema are legacy — skip them (per spec).
       const filtered = all.filter(
-        (inc) =>
-          inc.categoria &&
-          inc.categoria.toLowerCase() === proveedor.especialidad.toLowerCase()
+        (inc) => inc.tipo_problema && servicios.includes(inc.tipo_problema)
       );
+
       setIncidencias(filtered);
     } catch {
       toast.error('Error al cargar incidencias');
@@ -324,7 +337,9 @@ export default function ProveedorDashboardPage() {
             )}
             {!loadingIncidencias && incidencias.length === 0 && (
               <p className="text-center text-muted-foreground py-8">
-                No hay incidencias disponibles para tu especialidad ({proveedor.especialidad}).
+                No hay incidencias disponibles para tus servicios (
+                {(proveedor.servicios?.length ? proveedor.servicios : [proveedor.especialidad]).join(', ')}
+                ).
               </p>
             )}
             {incidencias.map((inc) => (
@@ -332,8 +347,8 @@ export default function ProveedorDashboardPage() {
                 <CardContent className="pt-4 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-semibold text-sm">{inc.titulo}</p>
-                    <Badge variant="secondary" className="shrink-0 text-xs">
-                      {inc.categoria}
+                    <Badge variant="secondary" className="shrink-0 text-xs capitalize">
+                      {inc.tipo_problema ?? inc.categoria}
                     </Badge>
                   </div>
                   {inc.descripcion && (

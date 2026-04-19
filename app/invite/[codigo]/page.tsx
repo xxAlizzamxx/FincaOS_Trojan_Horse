@@ -33,6 +33,11 @@ export default function InvitePage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) {
+        // Persist the invite code so /login can restore the flow after auth.
+        // This survives page navigations and Google OAuth popups.
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('fincaos_invite_codigo', codigo);
+        }
         setIsLoggedIn(false);
         setYaEnComunidad(false);
         setAuthChecked(true);
@@ -196,7 +201,7 @@ export default function InvitePage() {
             <p className="text-center text-xs text-muted-foreground">
               ¿Ya tienes cuenta?{' '}
               <button
-                onClick={() => router.push(`/login?redirect=/invite/${codigo}`)}
+                onClick={() => router.push('/login')}
                 className="text-finca-coral font-medium hover:underline"
               >
                 Inicia sesión

@@ -151,6 +151,12 @@ export interface Incidencia {
   prioridad: PrioridadIncidencia;
   ubicacion: string | null;   // texto libre legacy — usar zona para lógica
   zona?: 'vivienda' | 'jardin' | 'zonas_comunes' | 'parking' | 'otro';
+  /**
+   * Technical routing field — used to match incidencias with proveedor.servicios.
+   * Separate from `categoria_id` which is the user-facing label.
+   * If absent (legacy incidencias), proveedores ignore this doc.
+   */
+  tipo_problema?: string;
   estimacion_min: number | null;
   estimacion_max: number | null;
   presupuesto_proveedor: number | null;   // presupuesto real del proveedor

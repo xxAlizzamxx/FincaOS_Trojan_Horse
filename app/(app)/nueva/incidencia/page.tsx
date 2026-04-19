@@ -27,6 +27,15 @@ const CATEGORIAS = [
   { id: 'otros',       nombre: 'Otros',         emoji: '📦' },
 ];
 
+// Technical routing options — used to match with proveedor.servicios.
+// Independent of CATEGORIAS (user-facing labels). Defaults to 'general'.
+const TIPO_PROBLEMA_OPTIONS = [
+  { value: 'electricidad', label: 'Electricidad', emoji: '⚡' },
+  { value: 'fontaneria',   label: 'Fontanería',   emoji: '🔧' },
+  { value: 'ascensores',   label: 'Ascensores',   emoji: '🛗' },
+  { value: 'general',      label: 'General',      emoji: '🔩' },
+] as const;
+
 const prioridades = [
   { value: 'baja',    label: 'Baja',    emoji: '🟢', color: 'border-green-300 bg-green-50 text-green-700'   },
   { value: 'normal',  label: 'Normal',  emoji: '🔵', color: 'border-blue-300 bg-blue-50 text-blue-700'     },
@@ -62,6 +71,7 @@ export default function NuevaIncidenciaPage() {
   const [prioridad, setPrioridad] = useState('normal');
   const [ubicacion, setUbicacion] = useState('Zona común');   // label para display
   const [zona, setZona]           = useState<Zona>('zonas_comunes'); // enum para Firestore
+  const [tipoProblema, setTipoProblema] = useState<string>('general'); // routing para proveedores
 
   async function fetchEstimacion(catNombre: string, desc: string, ubi: string) {
     setEstimando(true);
@@ -170,6 +180,7 @@ export default function NuevaIncidenciaPage() {
         prioridad,
         ubicacion,                       // texto libre legacy — para display
         zona:         normalizeZona(zona), // enum canónico — para BuildingMap y filtros
+        tipo_problema: tipoProblema,       // routing técnico — para matching con proveedores
         estimacion_min: est.min,
         estimacion_max: est.max,
         created_at:   ahora,
@@ -374,6 +385,34 @@ export default function NuevaIncidenciaPage() {
                 )}>
                 <span className="text-xl block mb-1">{u.emoji}</span>
                 <span className="text-xs font-medium">{u.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Tipo de problema (routing técnico para proveedores) ── */}
+        <div className="space-y-2">
+          <div>
+            <Label>Tipo de problema</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Ayuda a conectar con el proveedor adecuado
+            </p>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {TIPO_PROBLEMA_OPTIONS.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setTipoProblema(t.value)}
+                className={cn(
+                  'p-2.5 rounded-xl border text-center transition-all',
+                  tipoProblema === t.value
+                    ? 'border-finca-coral bg-finca-peach/30 text-finca-coral'
+                    : 'border-border bg-white text-muted-foreground hover:border-finca-salmon',
+                )}
+              >
+                <span className="text-lg block mb-0.5">{t.emoji}</span>
+                <span className="text-xs font-medium">{t.label}</span>
               </button>
             ))}
           </div>
