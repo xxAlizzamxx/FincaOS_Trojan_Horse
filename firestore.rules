@@ -276,8 +276,14 @@ service cloud.firestore {
 
     match /proveedores/{proveedorId} {
       allow read: if isAuth();
-      allow create: if isAuth() && request.auth.uid == proveedorId;
-      allow update: if isAuth() && request.auth.uid == proveedorId;
+      // Double lock: path UID must match auth UID, AND the uid field in the document
+      // must also match — prevents anyone writing a doc on behalf of another provider.
+      allow create: if request.auth != null
+                    && request.auth.uid == proveedorId
+                    && request.auth.uid == request.resource.data.uid;
+      allow update: if request.auth != null
+                    && request.auth.uid == proveedorId
+                    && request.auth.uid == resource.data.uid;
       // delete: Admin SDK only (never from client)
 
       match /reviews/{reviewId} {
