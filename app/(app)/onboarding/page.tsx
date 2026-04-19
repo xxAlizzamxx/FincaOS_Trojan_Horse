@@ -1,22 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Building2, UserPlus } from 'lucide-react';
-import { doc, setDoc, updateDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
-import { createPerfilBatch } from '@/lib/firebase/createPerfil';
 import { trackEvent } from '@/lib/analytics';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-export default function OnboardingPage() {
-  const router = useRouter();
+// ── Inner component (uses useSearchParams, needs Suspense) ────────────────────
+function OnboardingInner() {
   const searchParams = useSearchParams();
   const { perfil, user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -40,7 +39,11 @@ export default function OnboardingPage() {
     setLoading(true);
 
     try {
-      const q = query(collection(db, 'comunidades'), where('codigo', '==', codigoComunidad.toUpperCase()));
+      // 1. Buscar la comunidad por código
+      const q = query(
+        collection(db, 'comunidades'),
+        where('codigo', '==', codigoComunidad.toUpperCase()),
+      );
       const snap = await getDocs(q);
 
       if (snap.empty) {
@@ -51,9 +54,10 @@ export default function OnboardingPage() {
 
       const comunidadDoc = snap.docs[0];
 
-      // Batch atómico: actualiza perfil público + crea/actualiza perfil privado
-      await createPerfilBatch(
-        user.uid,
+      // 2. Actualizar solo el perfil público del usuario (merge seguro)
+      //    — perfiles_privados ya existe/se crea en useAuth, no tocar aquí.
+      await setDoc(
+        doc(db, 'perfiles', user.uid),
         {
           comunidad_id:    comunidadDoc.id,
           numero_piso:     piso || null,
@@ -67,16 +71,16 @@ export default function OnboardingPage() {
           created_at:      perfil?.created_at ?? new Date().toISOString(),
           updated_at:      new Date().toISOString(),
         },
-        { email: user.email ?? null },  // telefono queda null hasta que lo editen
+        { merge: true },
       );
 
-      // Analytics — sin PII
+      // Analytics (fire-and-forget)
       void trackEvent('join_community', user.uid, comunidadDoc.id);
 
       toast.success('¡Te has unido a la comunidad!');
       window.location.href = '/inicio';
     } catch (err: any) {
-      console.error('[Onboarding] Error al unirse:', err);
+      console.error('[Onboarding] Error al unirse:', err?.code ?? err);
       toast.error('Error al unirse a la comunidad. Inténtalo de nuevo.');
       setLoading(false);
     }
@@ -84,45 +88,48 @@ export default function OnboardingPage() {
 
   async function handleCrear(e: React.FormEvent) {
     e.preventDefault();
-    if (!nombreComunidad || !direccion || !perfil) return;
+    if (!nombreComunidad || !direccion || !user) return;
     setLoading(true);
 
     const codigo = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     try {
+      // 1. Crear la comunidad
       const comunidadRef = await addDoc(collection(db, 'comunidades'), {
-        nombre: nombreComunidad,
+        nombre:        nombreComunidad,
         direccion,
         codigo,
         num_viviendas: parseInt(numViviendas) || 0,
-        created_at: new Date().toISOString(),
+        created_at:    new Date().toISOString(),
       });
 
-      await createPerfilBatch(
-        perfil.id,
+      // 2. Actualizar solo el perfil público (merge seguro)
+      await setDoc(
+        doc(db, 'perfiles', user.uid),
         {
           comunidad_id:    comunidadRef.id,
           numero_piso:     piso || null,
           rol:             'presidente',
-          nombre_completo: perfil.nombre_completo,
-          avatar_url:      perfil.avatar_url ?? null,
+          nombre_completo: perfil?.nombre_completo ?? user.displayName ?? 'Usuario',
+          avatar_url:      perfil?.avatar_url ?? user.photoURL ?? null,
           coeficiente:     null,
           torre:           null,
           piso:            null,
           puerta:          null,
-          created_at:      perfil.created_at,
+          created_at:      perfil?.created_at ?? new Date().toISOString(),
           updated_at:      new Date().toISOString(),
         },
-        {},  // privado ya existe — solo actualizamos el público
+        { merge: true },
       );
 
-      // Analytics — sin PII
-      void trackEvent('create_community', perfil.id, comunidadRef.id);
+      // Analytics (fire-and-forget)
+      void trackEvent('create_community', user.uid, comunidadRef.id);
 
       toast.success(`Comunidad creada. Código: ${codigo}`);
       window.location.href = '/inicio';
-    } catch {
-      toast.error('Error al crear la comunidad');
+    } catch (err: any) {
+      console.error('[Onboarding] Error al crear:', err?.code ?? err);
+      toast.error('Error al crear la comunidad. Inténtalo de nuevo.');
     }
     setLoading(false);
   }
@@ -161,14 +168,30 @@ export default function OnboardingPage() {
                     className="uppercase text-center text-lg tracking-widest"
                     required
                   />
-                  <p className="text-xs text-muted-foreground">Pídele el código a un vecino o al administrador</p>
+                  <p className="text-xs text-muted-foreground">
+                    Pídele el código a un vecino o al administrador
+                  </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="piso-u">Piso / puerta <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                  <Input id="piso-u" placeholder="Ej: 2B" value={piso} onChange={(e) => setPiso(e.target.value)} />
+                  <Label htmlFor="piso-u">
+                    Piso / puerta <span className="text-muted-foreground text-xs">(opcional)</span>
+                  </Label>
+                  <Input
+                    id="piso-u"
+                    placeholder="Ej: 2B"
+                    value={piso}
+                    onChange={(e) => setPiso(e.target.value)}
+                  />
                 </div>
-                <Button type="submit" className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-11" disabled={loading || !codigoComunidad}>
-                  {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><UserPlus className="w-4 h-4 mr-2" />Unirme a la comunidad</>}
+                <Button
+                  type="submit"
+                  className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-11"
+                  disabled={loading || !codigoComunidad}
+                >
+                  {loading
+                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <><UserPlus className="w-4 h-4 mr-2" />Unirme a la comunidad</>
+                  }
                 </Button>
               </form>
             </TabsContent>
@@ -177,22 +200,56 @@ export default function OnboardingPage() {
               <form onSubmit={handleCrear} className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="nombre-c">Nombre del edificio</Label>
-                  <Input id="nombre-c" placeholder="Ej: Residencial Las Flores" value={nombreComunidad} onChange={(e) => setNombreComunidad(e.target.value)} required />
+                  <Input
+                    id="nombre-c"
+                    placeholder="Ej: Residencial Las Flores"
+                    value={nombreComunidad}
+                    onChange={(e) => setNombreComunidad(e.target.value)}
+                    required
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="dir">Dirección</Label>
-                  <Input id="dir" placeholder="Calle Mayor 15, Madrid" value={direccion} onChange={(e) => setDireccion(e.target.value)} required />
+                  <Input
+                    id="dir"
+                    placeholder="Calle Mayor 15, Madrid"
+                    value={direccion}
+                    onChange={(e) => setDireccion(e.target.value)}
+                    required
+                  />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="num-v">Nº viviendas <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                  <Input id="num-v" type="number" placeholder="Ej: 24" value={numViviendas} onChange={(e) => setNumViviendas(e.target.value)} />
+                  <Label htmlFor="num-v">
+                    Nº viviendas <span className="text-muted-foreground text-xs">(opcional)</span>
+                  </Label>
+                  <Input
+                    id="num-v"
+                    type="number"
+                    placeholder="Ej: 24"
+                    value={numViviendas}
+                    onChange={(e) => setNumViviendas(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="piso-c">Tu piso / puerta <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                  <Input id="piso-c" placeholder="Ej: 2B" value={piso} onChange={(e) => setPiso(e.target.value)} />
+                  <Label htmlFor="piso-c">
+                    Tu piso / puerta <span className="text-muted-foreground text-xs">(opcional)</span>
+                  </Label>
+                  <Input
+                    id="piso-c"
+                    placeholder="Ej: 2B"
+                    value={piso}
+                    onChange={(e) => setPiso(e.target.value)}
+                  />
                 </div>
-                <Button type="submit" className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-11" disabled={loading || !nombreComunidad || !direccion}>
-                  {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Building2 className="w-4 h-4 mr-2" />Crear comunidad</>}
+                <Button
+                  type="submit"
+                  className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-11"
+                  disabled={loading || !nombreComunidad || !direccion}
+                >
+                  {loading
+                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <><Building2 className="w-4 h-4 mr-2" />Crear comunidad</>
+                  }
                 </Button>
               </form>
             </TabsContent>
@@ -200,5 +257,18 @@ export default function OnboardingPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ── Page export (Suspense boundary for useSearchParams) ───────────────────────
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-4 border-finca-coral border-t-transparent animate-spin" />
+      </div>
+    }>
+      <OnboardingInner />
+    </Suspense>
   );
 }
