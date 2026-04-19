@@ -99,21 +99,38 @@ export default function ProveedorDashboardPage() {
   const [valoraciones, setValoraciones] = useState<Valoracion[]>([]);
   const [loadingValoraciones, setLoadingValoraciones] = useState(false);
 
-  // Auth check
+  // Auth + role check
+  // Order of checks:
+  //   1. Not logged in              → /proveedor/login
+  //   2. Logged in, has proveedores doc  → OK, this is a provider
+  //   3. Logged in, has perfiles doc     → /inicio  (vecino/admin — wrong portal)
+  //   4. Neither doc exists          → /proveedor/login (incomplete registration)
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
         router.replace('/proveedor/login');
         return;
       }
-      const snap = await getDoc(doc(db, 'proveedores', firebaseUser.uid));
-      if (!snap.exists()) {
-        router.replace('/proveedor/login');
+
+      // Primary check: is this user a provider?
+      const provSnap = await getDoc(doc(db, 'proveedores', firebaseUser.uid));
+      if (provSnap.exists()) {
+        setUser(firebaseUser);
+        setProveedor(provSnap.data() as ProveedorProfile);
+        setAuthLoading(false);
         return;
       }
-      setUser(firebaseUser);
-      setProveedor(snap.data() as ProveedorProfile);
-      setAuthLoading(false);
+
+      // Secondary check: is this a vecino/admin who wandered in?
+      const perfilSnap = await getDoc(doc(db, 'perfiles', firebaseUser.uid));
+      if (perfilSnap.exists()) {
+        // Authenticated vecino/admin — send them to their home, not here
+        router.replace('/inicio');
+        return;
+      }
+
+      // Unknown user — send to provider login
+      router.replace('/proveedor/login');
     });
     return () => unsub();
   }, [router]);
