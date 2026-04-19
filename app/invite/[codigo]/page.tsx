@@ -6,7 +6,6 @@ import Image from 'next/image';
 import { Building2, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase/client';
 import { Comunidad } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -31,7 +30,16 @@ export default function InvitePage() {
 
   /* ── 1. Verificar auth + si ya pertenece a una comunidad ── */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    let cancelled = false;
+
+    (async () => {
+      // Wait for Firebase to finish restoring the session from IndexedDB.
+      // Without this, onAuthStateChanged fires with `null` on hard reload before
+      // the session is restored, causing a redirect loop with /login.
+      await auth.authStateReady();
+      if (cancelled) return;
+
+      const u = auth.currentUser;
       if (!u) {
         if (typeof window !== 'undefined') {
           localStorage.setItem('finca_invite_code', codigo);
@@ -44,6 +52,7 @@ export default function InvitePage() {
 
       try {
         const perfilSnap = await getDoc(doc(db, 'perfiles', u.uid));
+        if (cancelled) return;
         if (perfilSnap.exists() && perfilSnap.data().comunidad_id) {
           /* ✋ Usuario ya está en una comunidad → redirigir a /inicio */
           setYaEnComunidad(true);
@@ -56,11 +65,12 @@ export default function InvitePage() {
         console.error('[InvitePage] Error leyendo perfil:', err);
       }
 
+      if (cancelled) return;
       setYaEnComunidad(false);
       setAuthChecked(true);
-    });
+    })();
 
-    return () => unsub();
+    return () => { cancelled = true; };
   }, []);
 
   /* ── 2. Cargar datos de la comunidad ── */
