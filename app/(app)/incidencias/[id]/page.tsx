@@ -14,7 +14,7 @@ import { es } from 'date-fns/locale';
 import { getAuth } from 'firebase/auth';
 import {
   collection, query, where, orderBy, limit, getDocs,
-  getDoc, addDoc, deleteDoc, updateDoc, doc, onSnapshot,
+  getDoc, addDoc, deleteDoc, updateDoc, writeBatch, doc, onSnapshot,
   QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
 import { Input } from '@/components/ui/input';
@@ -64,6 +64,10 @@ export default function IncidenciaDetailPage() {
   const [presupuestoInput, setPresupuestoInput] = useState('');
   const [proveedorInput, setProveedorInput] = useState('');
   const [guardandoPresupuesto, setGuardandoPresupuesto] = useState(false);
+
+  /* Presupuestos recibidos (admin) */
+  const [presupuestosRecibidos, setPresupuestosRecibidos] = useState<any[]>([]);
+  const [aceptandoPresupuesto, setAceptandoPresupuesto] = useState(false);
 
   /* Historial expandido */
   const [historialAbierto, setHistorialAbierto] = useState(false);
@@ -160,7 +164,65 @@ export default function IncidenciaDetailPage() {
     return () => unsub();
   }, [incidenciaId]);
 
-  useEffect(() => { fetchAfectados(); fetchFotos(); }, [incidenciaId]);
+  useEffect(() => { fetchAfectados(); fetchFotos(); fetchPresupuestosRecibidos(); }, [incidenciaId]);
+
+  async function fetchPresupuestosRecibidos() {
+    try {
+      const snap = await getDocs(
+        collection(db, 'incidencias', incidenciaId, 'presupuestos')
+      );
+      setPresupuestosRecibidos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch {
+      // subcollection may not exist yet
+    }
+  }
+
+  async function aceptarPresupuesto(pres: any) {
+    if (!incidencia) return;
+    setAceptandoPresupuesto(true);
+    try {
+      const batch = writeBatch(db);
+
+      // Update incidencia
+      batch.update(doc(db, 'incidencias', incidencia.id), {
+        estado: 'presupuestada',
+        proveedor_asignado: pres.proveedor_id,
+        presupuesto_proveedor: pres.monto,
+        proveedor_nombre: pres.proveedor_nombre ?? null,
+        updated_at: new Date().toISOString(),
+      });
+
+      // Accept this presupuesto, reject all others
+      presupuestosRecibidos.forEach((p) => {
+        batch.update(
+          doc(db, 'incidencias', incidencia.id, 'presupuestos', p.id),
+          { estado: p.id === pres.id ? 'aceptado' : 'rechazado' }
+        );
+      });
+
+      await batch.commit();
+      toast.success('Presupuesto aceptado');
+      fetchPresupuestosRecibidos();
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al aceptar presupuesto');
+    } finally {
+      setAceptandoPresupuesto(false);
+    }
+  }
+
+  async function rechazarPresupuesto(presId: string) {
+    if (!incidencia) return;
+    try {
+      await updateDoc(
+        doc(db, 'incidencias', incidencia.id, 'presupuestos', presId),
+        { estado: 'rechazado' }
+      );
+      toast.success('Presupuesto rechazado');
+      fetchPresupuestosRecibidos();
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al rechazar presupuesto');
+    }
+  }
 
   // fetchComentarios separado (comentarios no tienen onSnapshot para evitar reads excesivos)
   async function fetchIncidencia() {
@@ -850,6 +912,61 @@ export default function IncidenciaDetailPage() {
                   </Button>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Presupuestos recibidos (admin) ── */}
+        {esAdmin && presupuestosRecibidos.length > 0 && (
+          <Card className="border-0 shadow-sm border-l-4 border-l-indigo-400">
+            <CardContent className="p-4 space-y-3">
+              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">
+                Presupuestos recibidos ({presupuestosRecibidos.length})
+              </p>
+              <div className="space-y-2">
+                {presupuestosRecibidos.map((pres) => (
+                  <div
+                    key={pres.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-border p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-finca-dark truncate">
+                        {pres.proveedor_nombre ?? 'Proveedor'}
+                      </p>
+                      <p className="text-lg font-bold text-finca-coral">{pres.monto}€</p>
+                      {pres.mensaje && (
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{pres.mensaje}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1.5 shrink-0">
+                      {pres.estado === 'aceptado' ? (
+                        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">Aceptado</span>
+                      ) : pres.estado === 'rechazado' ? (
+                        <span className="text-xs font-medium text-red-500 bg-red-50 px-2 py-1 rounded-full">Rechazado</span>
+                      ) : (
+                        <>
+                          <Button
+                            size="sm"
+                            className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white"
+                            disabled={aceptandoPresupuesto}
+                            onClick={() => aceptarPresupuesto(pres)}
+                          >
+                            Aceptar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs text-red-500 border-red-200 hover:bg-red-50"
+                            onClick={() => rechazarPresupuesto(pres.id)}
+                          >
+                            Rechazar
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}

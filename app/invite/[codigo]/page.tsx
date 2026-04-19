@@ -33,14 +33,10 @@ export default function InvitePage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) {
-        // Persist the invite code so /login can restore the flow after auth.
-        // This survives page navigations and Google OAuth popups.
         if (typeof window !== 'undefined') {
-          localStorage.setItem('fincaos_invite_codigo', codigo);
+          localStorage.setItem('finca_invite_code', codigo);
         }
-        setIsLoggedIn(false);
-        setYaEnComunidad(false);
-        setAuthChecked(true);
+        router.push('/login');
         return;
       }
 

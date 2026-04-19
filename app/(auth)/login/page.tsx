@@ -38,17 +38,15 @@ export default function LoginPage() {
       }
 
       // ── Invite code from localStorage (set by /invite/[codigo] when guest) ──
-      // Takes priority over the ?redirect= query param for invite flows.
-      const inviteCodigo =
+      const inviteCode =
         typeof window !== 'undefined'
-          ? localStorage.getItem('fincaos_invite_codigo')
+          ? localStorage.getItem('finca_invite_code')
           : null;
 
-      // Helper: consume the stored code and return the invite URL
       function consumeInvite(): string | null {
-        if (!inviteCodigo) return null;
-        localStorage.removeItem('fincaos_invite_codigo');
-        return `/invite/${inviteCodigo}`;
+        if (!inviteCode) return null;
+        localStorage.removeItem('finca_invite_code');
+        return `/invite/${inviteCode}`;
       }
 
       // Usuario autenticado — verificar/crear perfil y redirigir
@@ -70,13 +68,12 @@ export default function LoginPage() {
           // New user → send to invite page (if pending) or onboarding
           window.location.href = consumeInvite() ?? redirectTo ?? '/onboarding';
         } else {
-          const data = perfilSnap.data();
-          // Existing user without a community → send to invite page if pending
-          if (inviteCodigo && !data?.comunidad_id) {
+          // Invite code takes priority for ALL users
+          if (inviteCode) {
             window.location.href = consumeInvite()!;
             return;
           }
-          // Normal redirect logic
+          const data = perfilSnap.data();
           if (redirectTo) {
             window.location.href = redirectTo;
           } else {

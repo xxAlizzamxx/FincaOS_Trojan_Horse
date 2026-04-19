@@ -246,7 +246,19 @@ export default function NuevaIncidenciaPage() {
         console.error('[FIRESTORE WRITE FAILED] crearNotificacionComunidad:', err?.code, err?.message);
       });
 
-      // 5. Sonido
+      // 5. Push notification a la comunidad
+      fetch('/api/notificaciones/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comunidad_id: perfil.comunidad_id,
+          title: '🔧 Nueva incidencia reportada',
+          body: titulo.trim(),
+          url: `/incidencias/${ref.id}`,
+        }),
+      }).catch(() => {});
+
+      // 6. Sonido
       try { play('incidencia_creada'); } catch (err) {
         console.warn('[CREATE INCIDENCIA] play() ignorado:', err);
       }

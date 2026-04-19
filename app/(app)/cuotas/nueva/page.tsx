@@ -77,6 +77,18 @@ export default function NuevaCuotaPage() {
       });
       await batch.commit();
 
+      // Push notification
+      fetch('/api/notificaciones/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comunidad_id: cid,
+          title: '💰 Nueva cuota de comunidad',
+          body: `${nombre.trim()} — ${montoNum}€`,
+          url: '/cuotas',
+        }),
+      }).catch(() => {});
+
       router.push('/cuotas');
     } catch (err) {
       console.error('Error creating cuota:', err);

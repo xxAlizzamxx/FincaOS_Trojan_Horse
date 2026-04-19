@@ -12,9 +12,9 @@ import {
   getDoc,
   getDocs,
   collection,
+  collectionGroup,
   query,
   where,
-  addDoc,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
@@ -61,10 +61,15 @@ interface Incidencia {
 interface Presupuesto {
   id: string;
   idIncidencia: string;
-  precio: number;
-  comentario: string;
+  proveedor_id?: string;
+  proveedor_nombre?: string;
+  monto: number;
+  mensaje: string;
   estado: string;
-  createdAt: string;
+  created_at: any;
+  // legacy fields (top-level collection)
+  precio?: number;
+  comentario?: string;
 }
 
 interface Valoracion {
@@ -197,13 +202,14 @@ export default function ProveedorDashboardPage() {
     setLoadingPresupuestos(true);
     try {
       const q = query(
-        collection(db, 'presupuestos'),
-        where('proveedorId', '==', user.uid)
+        collectionGroup(db, 'presupuestos'),
+        where('proveedor_id', '==', user.uid)
       );
       const snap = await getDocs(q);
       const data: Presupuesto[] = snap.docs.map((d) => ({
         id: d.id,
-        ...(d.data() as Omit<Presupuesto, 'id'>),
+        idIncidencia: d.ref.parent.parent?.id ?? '',
+        ...(d.data() as Omit<Presupuesto, 'id' | 'idIncidencia'>),
       }));
       setPresupuestos(data);
     } catch {
@@ -242,22 +248,30 @@ export default function ProveedorDashboardPage() {
     }
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'presupuestos'), {
-        idIncidencia: selectedIncidencia.id,
-        proveedorId: user.uid,
-        proveedorNombre: proveedor.nombre,
-        precio: Number(precio),
-        comentario,
-        estado: 'pendiente',
-        createdAt: new Date().toISOString(),
+      const token = await user.getIdToken();
+      const res = await fetch('/api/proveedor/presupuesto', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          incidencia_id: selectedIncidencia.id,
+          monto: Number(precio),
+          mensaje: comentario,
+        }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Error ${res.status}`);
+      }
       toast.success('Presupuesto enviado');
       setModalOpen(false);
       setPrecio('');
       setComentario('');
       setSelectedIncidencia(null);
-    } catch {
-      toast.error('Error al enviar el presupuesto');
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al enviar el presupuesto');
     } finally {
       setSubmitting(false);
     }

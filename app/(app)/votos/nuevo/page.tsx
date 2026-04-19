@@ -78,6 +78,16 @@ export default function NuevaVotacionPage() {
         related_id: ref.id,
         link:       `/votos`,
       });
+      fetch('/api/notificaciones/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comunidad_id: perfil.comunidad_id,
+          title: '🗳️ Nueva votación abierta',
+          body: titulo.trim(),
+          url: '/votos',
+        }),
+      }).catch(() => {});
       setEnviado(true);
     } catch {
       toast.error('Error al crear la votación');

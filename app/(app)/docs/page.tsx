@@ -218,6 +218,16 @@ export default function DocsPage() {
         related_id: '',
         link:       '/docs',
       });
+      fetch('/api/notificaciones/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comunidad_id: perfil.comunidad_id,
+          title: '📄 Nuevo documento disponible',
+          body: nombre,
+          url: '/docs',
+        }),
+      }).catch(() => {});
       toast.success('Documento subido correctamente');
       setSheetOpen(false);
       resetSheet();
