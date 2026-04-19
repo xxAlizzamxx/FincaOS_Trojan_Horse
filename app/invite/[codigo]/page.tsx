@@ -151,9 +151,9 @@ export default function InvitePage() {
           comunidad_id: comunidad.id,
         });
 
-        console.log('[InvitePage] Perfil updated, redirecting to /inicio');
-        // Redirigir a inicio
-        router.replace('/inicio');
+        console.log('[InvitePage] Perfil updated, doing hard reload to /inicio');
+        // Hard reload para asegurar que perfil se carga correctamente desde Firestore
+        window.location.href = '/inicio';
       } catch (err) {
         console.error('[InvitePage] Error en auto-join:', err);
         setJoined(false);
