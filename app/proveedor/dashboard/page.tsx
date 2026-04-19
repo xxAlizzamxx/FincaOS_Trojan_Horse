@@ -149,15 +149,32 @@ export default function ProveedorDashboardPage() {
     });
     return () => unsub();
   }, [router]);
-
   // Load data when tab changes
   useEffect(() => {
     if (!user || !proveedor) return;
     if (activeTab === 'disponibles') loadIncidencias();
-    if (activeTab === 'presupuestos') loadPresupuestos();
     if (activeTab === 'valoraciones') loadValoraciones();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, user, proveedor]);
+
+  // Setup presupuestos listener when tab is active
+  useEffect(() => {
+    if (activeTab !== 'presupuestos' || !user) return;
+    
+    console.log('[ProveedorDashboard] Setting up presupuestos listener');
+    let unsubscribe: (() => void) | undefined;
+    
+    (async () => {
+      unsubscribe = await loadPresupuestos();
+    })();
+
+    return () => {
+      if (unsubscribe) {
+        console.log('[ProveedorDashboard] Cleaning up presupuestos listener');
+        unsubscribe();
+      }
+    };
+  }, [activeTab, user]);
 
   async function loadIncidencias() {
     if (!proveedor) return;
@@ -197,25 +214,33 @@ export default function ProveedorDashboardPage() {
     }
   }
 
+
   async function loadPresupuestos() {
     if (!user) return;
     setLoadingPresupuestos(true);
-    try {
-      const q = query(
-        collectionGroup(db, 'presupuestos'),
-        where('proveedor_id', '==', user.uid)
-      );
-      const snap = await getDocs(q);
+    
+    const q = query(
+      collectionGroup(db, 'presupuestos'),
+      where('proveedor_id', '==', user.uid)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snap) => {
+      console.log('[ProveedorDashboard] Presupuestos actualizados:', snap.docs.length);
       const data: Presupuesto[] = snap.docs.map((d) => ({
         id: d.id,
         idIncidencia: d.ref.parent.parent?.id ?? '',
         ...(d.data() as Omit<Presupuesto, 'id' | 'idIncidencia'>),
       }));
       setPresupuestos(data);
-    } catch {
-      toast.error('Error al cargar presupuestos');
-    } finally {
       setLoadingPresupuestos(false);
+    }, (err) => {
+      console.error('[ProveedorDashboard] Error presupuestos:', err);
+      toast.error('Error al cargar presupuestos');
+      setLoadingPresupuestos(false);
+    });
+
+    return unsubscribe;
+  }
     }
   }
 
