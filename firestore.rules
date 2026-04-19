@@ -135,6 +135,21 @@ service cloud.firestore {
         allow create: if isAuth() && request.auth.uid == userId;
         allow delete: if isAuth() && request.auth.uid == userId;
       }
+
+      // Presupuestos de proveedores (subcolección)
+      match /presupuestos/{proveedorId} {
+        // Proveedor puede leer solo sus propios presupuestos
+        // Admin/presidente puede leer todos los presupuestos de la incidencia
+        allow read:   if isAuth() && (
+          request.auth.uid == proveedorId
+          || profile().rol in ['admin', 'presidente']
+        );
+        // Proveedor (vía API) crea su propio presupuesto
+        // Admin SDK writes handled server-side
+        allow create: if isAuth() && request.auth.uid == proveedorId;
+        // Admin/presidente puede actualizar estado (aceptado/rechazado)
+        allow update: if isAuth() && profile().rol in ['admin', 'presidente'];
+      }
     }
 
     // ── Comentarios ───────────────────────────────────────────────────────
@@ -329,6 +344,14 @@ service cloud.firestore {
       allow create: if isAdminOfCommunity(request.resource.data.comunidadId);
       allow update: if isAdminOfCommunity(resource.data.comunidadId);
       allow delete: if isAdminOfCommunity(resource.data.comunidadId);
+    }
+
+    // ── FCM Tokens (para notificaciones push) ─────────────────────────────
+
+    match /usuarios/{userId} {
+      match /tokens/{token} {
+        allow read, write: if isAuth() && request.auth.uid == userId;
+      }
     }
 
     // ── Push subscriptions ────────────────────────────────────────────────
