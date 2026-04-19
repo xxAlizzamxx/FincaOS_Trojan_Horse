@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import {
   doc,
+  onSnapshot,
   getDoc,
   getDocs,
   collection,
@@ -240,8 +241,6 @@ export default function ProveedorDashboardPage() {
     });
 
     return unsubscribe;
-  }
-    }
   }
 
   async function loadValoraciones() {
