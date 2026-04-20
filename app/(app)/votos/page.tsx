@@ -106,7 +106,9 @@ export default function VotosPage() {
           v.id !== votacionId ? v : {
             ...v,
             opciones: v.opciones.map((o) =>
-              o.id === opcionId ? { ...o, votos: o.votos + 1 } : o
+              o.id === opcionId
+                ? { ...o, votos: o.votos + 1, peso_total: (o.peso_total || 0) + coef }
+                : o
             ),
           }
         )
