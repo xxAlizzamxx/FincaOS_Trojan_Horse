@@ -37,7 +37,11 @@ export default function RootLayout({
         <Providers>
           {children}
         </Providers>
-        <Toaster richColors position="top-center" toastOptions={{ className: 'max-w-lg mx-auto' }} />
+        <Toaster
+          position="top-center"
+          closeButton
+          toastOptions={{ className: 'max-w-lg mx-auto' }}
+        />
         <ServiceWorkerRegister />
       </body>
     </html>
