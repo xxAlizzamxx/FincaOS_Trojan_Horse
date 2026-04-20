@@ -301,6 +301,11 @@ export default function ProveedorDashboardPage() {
     }
   }
 
+  async function handleRechazarIncidencia(incidenciaId: string) {
+    setIncidencias((prev) => prev.filter((inc) => inc.id !== incidenciaId));
+    toast.success('Solicitud rechazada');
+  }
+
   async function handleSignOut() {
     await firebaseSignOut(auth);
     router.replace('/proveedor/login');
@@ -412,66 +417,76 @@ export default function ProveedorDashboardPage() {
                       />
                     </div>
                   )}
-                  <Dialog
-                    open={modalOpen && selectedIncidencia?.id === inc.id}
-                    onOpenChange={(open) => {
-                      setModalOpen(open);
-                      if (!open) {
-                        setSelectedIncidencia(null);
-                        setPrecio('');
-                        setComentario('');
-                      }
-                    }}
-                  >
-                    <DialogTrigger asChild>
-                      <Button
-                        size="sm"
-                        className="bg-finca-coral hover:bg-finca-coral/90 text-white"
-                        onClick={() => {
-                          setSelectedIncidencia(inc);
-                          setModalOpen(true);
-                        }}
-                      >
-                        Enviar presupuesto
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Enviar presupuesto</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4 pt-2">
-                        <p className="text-sm text-muted-foreground">{inc.titulo}</p>
-                        <div className="space-y-1">
-                          <Label htmlFor="precio">Precio (€)</Label>
-                          <Input
-                            id="precio"
-                            type="number"
-                            min={0}
-                            value={precio}
-                            onChange={(e) => setPrecio(e.target.value)}
-                            placeholder="0"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="comentario">Comentario</Label>
-                          <Textarea
-                            id="comentario"
-                            value={comentario}
-                            onChange={(e) => setComentario(e.target.value)}
-                            placeholder="Describe brevemente tu propuesta…"
-                            rows={3}
-                          />
-                        </div>
+                  <div className="flex gap-2">
+                    <Dialog
+                      open={modalOpen && selectedIncidencia?.id === inc.id}
+                      onOpenChange={(open) => {
+                        setModalOpen(open);
+                        if (!open) {
+                          setSelectedIncidencia(null);
+                          setPrecio('');
+                          setComentario('');
+                        }
+                      }}
+                    >
+                      <DialogTrigger asChild>
                         <Button
-                          className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
-                          onClick={handleEnviarPresupuesto}
-                          disabled={submitting}
+                          size="sm"
+                          className="flex-1 bg-finca-coral hover:bg-finca-coral/90 text-white"
+                          onClick={() => {
+                            setSelectedIncidencia(inc);
+                            setModalOpen(true);
+                          }}
                         >
-                          {submitting ? 'Enviando…' : 'Enviar presupuesto'}
+                          Enviar presupuesto
                         </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Enviar presupuesto</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 pt-2">
+                          <p className="text-sm text-muted-foreground">{inc.titulo}</p>
+                          <div className="space-y-1">
+                            <Label htmlFor="precio">Precio (€)</Label>
+                            <Input
+                              id="precio"
+                              type="number"
+                              min={0}
+                              value={precio}
+                              onChange={(e) => setPrecio(e.target.value)}
+                              placeholder="0"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="comentario">Comentario</Label>
+                            <Textarea
+                              id="comentario"
+                              value={comentario}
+                              onChange={(e) => setComentario(e.target.value)}
+                              placeholder="Describe brevemente tu propuesta…"
+                              rows={3}
+                            />
+                          </div>
+                          <Button
+                            className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
+                            onClick={handleEnviarPresupuesto}
+                            disabled={submitting}
+                          >
+                            {submitting ? 'Enviando…' : 'Enviar presupuesto'}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-600 hover:bg-red-50 border-red-200"
+                      onClick={() => handleRechazarIncidencia(inc.id)}
+                    >
+                      Rechazar
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
