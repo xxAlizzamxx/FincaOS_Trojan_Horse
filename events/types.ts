@@ -54,6 +54,7 @@ export type IncidenciaStatusChangedEvent = BaseEvent<'incidencia.status_changed'
   changedBy:    string;
   titulo?:      string;
   comunidadId?: string;
+  incidenciaAutorId?: string;  // ID del autor de la incidencia (para notificaciones)
 }>;
 
 export type QuorumReachedEvent = BaseEvent<'incidencia.quorum_reached', {
@@ -70,6 +71,7 @@ export type CommentCreatedEvent = BaseEvent<'comment.created', {
   autorNombre?:  string;
   contenido?:    string;
   comunidadId?:  string;
+  incidenciaAutorId?: string;  // ID del autor de la incidencia (para notificaciones)
 }>;
 
 export type PaymentUpdatedEvent = BaseEvent<'payment.updated', {

@@ -5,6 +5,7 @@
  *  1. Structured logging (all events) — compatible with Vercel Logs / Datadog
  *  2. Analytics writes to Firestore `analytics_events` (server-side, via Admin SDK)
  *     Only non-sensitive data: IDs, contadores, booleans. NUNCA PII ni contenido.
+ *  3. Individual notifications to `notificaciones` collection for in-app campanita
  *
  * Privacy guarantee: no email, no name, no message content stored in analytics.
  */
@@ -12,6 +13,8 @@
 import { eventBus }      from './emitter';
 import { sendSmartAlert } from '@/lib/email';
 import { notifyEvent } from '@/lib/firebase/notifications';
+import { getAdminDb } from '@/lib/firebase/admin';
+import { serverTimestamp } from 'firebase-admin/firestore';
 import type { AnalyticsEventName } from '@/types/database';
 
 /* ── Analytics writer (server-side, Admin SDK) ──────────────────────────── */
@@ -29,7 +32,6 @@ async function analyticsWrite(
 ): Promise<void> {
   if (!userId) return;  // no registrar eventos sin actor
   try {
-    const { getAdminDb } = await import('@/lib/firebase/admin');
     const db = getAdminDb();
     await db.collection('analytics_events').add({
       user_id:      userId,
@@ -40,6 +42,67 @@ async function analyticsWrite(
     });
   } catch {
     // Fallo silencioso — analytics no puede romper el flujo de negocio
+  }
+}
+
+/* ── Individual notifications (in-app campanita) ────────────────────────── */
+
+/**
+ * Crea notificación individual en la colección `notificaciones` para un usuario.
+ * Fire-and-forget: nunca bloquea.
+ */
+async function notificarUsuarioIndividual(
+  usuarioId: string,
+  titulo: string,
+  mensaje: string,
+  tipo: string,
+  url: string,
+): Promise<void> {
+  try {
+    const db = getAdminDb();
+    await db.collection('notificaciones').add({
+      usuario_id: usuarioId,
+      titulo,
+      mensaje,
+      tipo,
+      leida: false,
+      created_at: serverTimestamp(),
+      url,
+    });
+  } catch {
+    // Fallo silencioso
+  }
+}
+
+/**
+ * Notifica a múltiples usuarios
+ */
+async function notificarUsuarios(
+  usuarioIds: string[],
+  titulo: string,
+  mensaje: string,
+  tipo: string,
+  url: string,
+): Promise<void> {
+  if (usuarioIds.length === 0) return;
+  try {
+    const db = getAdminDb();
+    const batch = db.batch();
+    usuarioIds.forEach((uid) => {
+      const ref = db.collection('notificaciones').doc();
+      batch.set(ref, {
+        usuario_id: uid,
+        titulo,
+        mensaje,
+        tipo,
+        leida: false,
+        created_at: serverTimestamp(),
+        url,
+      });
+    });
+    await batch.commit();
+  } catch {
+    // Fallo silencioso
   }
 }
 
@@ -147,7 +210,7 @@ export function registerDefaultHandlers(): void {
 
       void notifyEvent(
         e.payload.comunidadId,
-        'incidencia',
+        'estado',
         `Estado actualizado: ${stateLabel}`,
         `${e.payload.titulo}`,
         e.payload.incidenciaId,
@@ -159,6 +222,27 @@ export function registerDefaultHandlers(): void {
           pushBody: e.payload.titulo,
         },
       );
+
+      // Individual notification in-app — notificar al autor de la incidencia
+      if (e.payload.incidenciaAutorId && e.payload.incidenciaAutorId !== e.payload.changedBy) {
+        const stateLabel = {
+          pendiente: 'Pendiente',
+          en_revision: 'En revisión',
+          presupuestada: 'Presupuestada',
+          aprobada: 'Aprobada',
+          en_ejecucion: 'En ejecución',
+          resuelta: 'Resuelta',
+          cerrada: 'Cerrada',
+        }[e.payload.to] || e.payload.to;
+
+        void notificarUsuarioIndividual(
+          e.payload.incidenciaAutorId,
+          `🔄 Estado: ${stateLabel}`,
+          `Tu incidencia "${e.payload.titulo}" cambió de estado a "${stateLabel}"`,
+          'estado',
+          `/incidencias/${e.payload.incidenciaId}`,
+        );
+      }
     }
   });
 
@@ -174,8 +258,7 @@ export function registerDefaultHandlers(): void {
       incidencia_id: e.payload.incidenciaId,
     });
 
-    // Create community notification for new comment
-    // Push only to incident author (not spam everyone)
+    // Community notification for new comment
     if (e.payload.comunidadId) {
       void notifyEvent(
         e.payload.comunidadId,
@@ -189,8 +272,19 @@ export function registerDefaultHandlers(): void {
           pushNotify: true,
           pushTitle: `💬 ${e.payload.autorNombre}`,
           pushBody: 'Nuevo comentario en una incidencia',
-          targetUserIds: [], // Will be set by notification system based on incident author
+          targetUserIds: e.payload.incidenciaAutorId ? [e.payload.incidenciaAutorId] : [],
         },
+      );
+    }
+
+    // Individual notification in-app (campanita) — notificar al autor de la incidencia
+    if (e.payload.incidenciaAutorId && e.payload.incidenciaAutorId !== e.actor_id) {
+      void notificarUsuarioIndividual(
+        e.payload.incidenciaAutorId,
+        '💬 Nuevo comentario',
+        `${e.payload.autorNombre} comentó en tu incidencia`,
+        'comentario',
+        `/incidencias/${e.payload.incidenciaId}`,
       );
     }
   });

@@ -368,6 +368,7 @@ export default function IncidenciaDetailPage() {
           changedBy: perfil.id,
           titulo: incidencia.titulo,
           comunidadId: incidencia.comunidad_id,
+          incidenciaAutorId: incidencia.autor_id,
         },
       });
 
@@ -465,6 +466,7 @@ export default function IncidenciaDetailPage() {
           autorNombre: perfil.nombre_completo,
           contenido: nuevoComentario.trim(),
           comunidadId: incidencia?.comunidad_id,
+          incidenciaAutorId: incidencia?.autor_id,
         },
       });
     } catch {

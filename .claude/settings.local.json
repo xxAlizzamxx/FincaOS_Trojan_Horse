@@ -40,7 +40,11 @@
       "Bash(vercel --version)",
       "Bash(npx vercel:*)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:v for k,v in d.get\\('dependencies',{}\\).items\\(\\)}, indent=2\\)\\)\")",
-      "Bash(node -e \"const d=require\\('./package.json'\\); const deps={...d.dependencies,...d.devDependencies}; Object.keys\\(deps\\).sort\\(\\).forEach\\(k=>console.log\\(k+': '+deps[k]\\)\\)\")"
+      "Bash(node -e \"const d=require\\('./package.json'\\); const deps={...d.dependencies,...d.devDependencies}; Object.keys\\(deps\\).sort\\(\\).forEach\\(k=>console.log\\(k+': '+deps[k]\\)\\)\")",
+      "Bash(npm run *)",
+      "Read(//tmp/**)",
+      "Bash(vercel deploy *)",
+      "Bash(vercel list *)"
     ]
   }
 }
