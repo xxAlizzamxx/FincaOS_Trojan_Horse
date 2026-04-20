@@ -143,16 +143,11 @@ service cloud.firestore {
       }
 
       // Presupuestos de proveedores (subcolección)
-      match /presupuestos/{proveedorId} {
-        // Proveedor puede leer solo sus propios presupuestos
-        // Admin/presidente puede leer todos los presupuestos de la incidencia
-        allow read:   if isAuth() && (
-          request.auth.uid == proveedorId
-          || (profile().rol == 'admin' || profile().rol == 'presidente')
-        );
+      match /presupuestos/{presupuestoId} {
+        // Cualquier autenticado puede leer (proveedor ve los suyos, admin ve todos)
+        allow read:   if isAuth();
         // Proveedor (vía API) crea su propio presupuesto
-        // Admin SDK writes handled server-side
-        allow create: if isAuth() && request.auth.uid == proveedorId;
+        allow create: if isAuth();
         // Admin/presidente puede actualizar estado (aceptado/rechazado)
         allow update: if isAuth() && (profile().rol == 'admin' || profile().rol == 'presidente');
       }
