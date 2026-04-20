@@ -11,6 +11,7 @@
 
 import { eventBus }      from './emitter';
 import { sendSmartAlert } from '@/lib/email';
+import { notifyEvent } from '@/lib/firebase/notifications';
 import type { AnalyticsEventName } from '@/types/database';
 
 /* ── Analytics writer (server-side, Admin SDK) ──────────────────────────── */
@@ -96,7 +97,7 @@ export function registerDefaultHandlers(): void {
       request_id: e.request_id, timestamp: e.timestamp,
     }));
 
-    // Email alert — fire-and-forget; dedup built into sendAdminNotification
+    // Email alert — fire-and-forget; dedup built into sendSmartAlert
     void sendSmartAlert({
       type:         'quorum_reached',
       comunidad_id: e.payload.comunidadId,
@@ -105,6 +106,23 @@ export function registerDefaultHandlers(): void {
         afectados:  e.payload.afectados,
       },
     });
+
+    // Community notification + push for quorum reached
+    void notifyEvent(
+      e.payload.comunidadId,
+      'incidencia',
+      '⚠️ Quórum alcanzado',
+      `La incidencia "${e.payload.titulo}" ha alcanzado el quórum (${e.payload.afectados} afectados)`,
+      e.payload.incidenciaId,
+      `/incidencias/${e.payload.incidenciaId}`,
+      'system',
+      {
+        pushNotify: true,
+        pushTitle: '⚠️ Quórum alcanzado',
+        pushBody: e.payload.titulo,
+        sendEmail: true,
+      },
+    );
   });
 
   eventBus.on('incidencia.status_changed', (e) => {
@@ -114,6 +132,34 @@ export function registerDefaultHandlers(): void {
       from: e.payload.from, to: e.payload.to, changed_by: e.payload.changedBy,
       request_id: e.request_id, timestamp: e.timestamp,
     }));
+
+    // Create community notification for status change
+    if (e.payload.comunidadId && e.payload.titulo) {
+      const stateLabel = {
+        pendiente: 'Pendiente',
+        en_revision: 'En revisión',
+        presupuestada: 'Presupuestada',
+        aprobada: 'Aprobada',
+        en_ejecucion: 'En ejecución',
+        resuelta: 'Resuelta',
+        cerrada: 'Cerrada',
+      }[e.payload.to] || e.payload.to;
+
+      void notifyEvent(
+        e.payload.comunidadId,
+        'incidencia',
+        `Estado actualizado: ${stateLabel}`,
+        `${e.payload.titulo}`,
+        e.payload.incidenciaId,
+        `/incidencias/${e.payload.incidenciaId}`,
+        e.payload.changedBy,
+        {
+          pushNotify: true,
+          pushTitle: `🔄 ${stateLabel}`,
+          pushBody: e.payload.titulo,
+        },
+      );
+    }
   });
 
   eventBus.on('comment.created', (e) => {
@@ -122,10 +168,31 @@ export function registerDefaultHandlers(): void {
       comentario_id: e.payload.comentarioId, incidencia_id: e.payload.incidenciaId,
       actor_id: e.actor_id, request_id: e.request_id, timestamp: e.timestamp,
     }));
+
     // Sin contenido del comentario — solo el ID de la incidencia
     void analyticsWrite('crear_comentario', e.actor_id, e.comunidad_id, {
       incidencia_id: e.payload.incidenciaId,
     });
+
+    // Create community notification for new comment
+    // Push only to incident author (not spam everyone)
+    if (e.payload.comunidadId) {
+      void notifyEvent(
+        e.payload.comunidadId,
+        'comentario',
+        `Nuevo comentario en "${e.payload.incidenciaId}"`,
+        `${e.payload.autorNombre} comentó en una incidencia`,
+        e.payload.incidenciaId,
+        `/incidencias/${e.payload.incidenciaId}`,
+        e.actor_id,
+        {
+          pushNotify: true,
+          pushTitle: `💬 ${e.payload.autorNombre}`,
+          pushBody: 'Nuevo comentario en una incidencia',
+          targetUserIds: [], // Will be set by notification system based on incident author
+        },
+      );
+    }
   });
 
   eventBus.on('payment.updated', (e) => {

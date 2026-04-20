@@ -106,3 +106,105 @@ export async function notificarMediadores(
   );
   await Promise.all(promises);
 }
+
+// ── Rate limiting & deduplication ──────────────────────────────────────────
+// In-memory cache for notification deduplication (30-second TTL)
+const notificationDedup = new Map<string, number>();
+
+/** Clear expired dedup entries (keep cache from growing indefinitely) */
+function clearExpiredDedup(now: number = Date.now()) {
+  for (const [key, timestamp] of Array.from(notificationDedup.entries())) {
+    if (now - timestamp > 35_000) { // Clear after 35s (just past 30s TTL)
+      notificationDedup.delete(key);
+    }
+  }
+}
+
+/** Check if notification can be sent (deduplication & rate limiting) */
+function canNotify(key: string, windowMs: number = 30_000): boolean {
+  const now = Date.now();
+  clearExpiredDedup(now);
+
+  const lastTime = notificationDedup.get(key);
+  if (!lastTime) return true;
+  return now - lastTime > windowMs;
+}
+
+/** Record that notification was sent (for deduplication) */
+function recordNotification(key: string) {
+  notificationDedup.set(key, Date.now());
+}
+
+/**
+ * Unified notification function: creates community notification + optional email/push
+ * Implements rate limiting (max 1 per event type/entity per 30s)
+ */
+export async function notifyEvent(
+  comunidadId: string,
+  type: TipoNotificacion,
+  title: string,
+  body: string,
+  relatedId: string,
+  link: string,
+  createdBy: string = 'system',
+  options?: {
+    sendEmail?: boolean;
+    emailSubject?: string;
+    pushNotify?: boolean;
+    pushTitle?: string;
+    pushBody?: string;
+    targetUserIds?: string[]; // for push only to specific users
+  },
+): Promise<void> {
+  // Rate limiting key: {comunidad}:{type}:{relatedId}
+  const dedupKey = `${comunidadId}:${type}:${relatedId}`;
+
+  if (!canNotify(dedupKey)) {
+    console.log('[notifyEvent] Rate limit hit:', dedupKey);
+    return;
+  }
+
+  recordNotification(dedupKey);
+
+  try {
+    // Create community notification (fire-and-forget)
+    crearNotificacionComunidad(comunidadId, {
+      tipo: type,
+      titulo: title,
+      mensaje: body,
+      created_by: createdBy,
+      related_id: relatedId,
+      link: link,
+    }).catch((err) => {
+      console.error('[notifyEvent] Error creating community notification:', err);
+    });
+
+    // Send push notifications if requested
+    if (options?.pushNotify) {
+      const pushPayload = {
+        comunidadId,
+        titulo: options.pushTitle || title,
+        body: options.pushBody || body,
+        targetUserIds: options.targetUserIds,
+      };
+
+      fetch('/api/notificaciones/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pushPayload),
+      }).catch((err) => {
+        console.error('[notifyEvent] Error sending push notification:', err);
+      });
+    }
+
+    // Send email if requested
+    if (options?.sendEmail) {
+      // Email sending is handled by event handlers in /events/handlers.ts
+      // This flag just indicates intention; actual email sent via API/cron
+      console.log('[notifyEvent] Email notification requested for:', comunidadId);
+    }
+  } catch (err) {
+    console.error('[notifyEvent] Error:', err);
+    // Don't throw — notifications are fire-and-forget
+  }
+}

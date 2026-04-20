@@ -1,12 +1,18 @@
 /**
  * POST /api/notificaciones/push
  *
- * Sends FCM push notifications to all members of a community.
+ * Sends FCM push notifications to community members or specific users.
  *
- * Body: { comunidad_id, title, body, url? }
+ * Body: {
+ *   comunidad_id: string,
+ *   title: string,
+ *   body: string,
+ *   url?: string,
+ *   targetUserIds?: string[]  // If provided, only send to these users; otherwise send to all
+ * }
  *
  * Flow:
- *   1. Load all perfiles with comunidad_id == comunidad_id
+ *   1. If targetUserIds provided, get only those users; else get all community members
  *   2. Load their FCM tokens from usuarios/{uid}/tokens/
  *   3. Send via Firebase Admin messaging.sendEachForMulticast()
  */
@@ -36,33 +42,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { comunidad_id, title, body: msgBody, url = '/inicio' } = body as {
+    const { comunidad_id, title, body: msgBody, url = '/inicio', targetUserIds } = body as {
       comunidad_id: string;
       title: string;
       body: string;
       url?: string;
+      targetUserIds?: string[];
     };
 
     const db = getAdminDb();
 
-    // 1. Get all community members
-    const perfilesSnap = await db
-      .collection('perfiles')
-      .where('comunidad_id', '==', comunidad_id)
-      .get();
+    // 1. Get community members (all or filtered by targetUserIds)
+    let userIds: string[];
+    if (targetUserIds && targetUserIds.length > 0) {
+      userIds = targetUserIds;
+    } else {
+      const perfilesSnap = await db
+        .collection('perfiles')
+        .where('comunidad_id', '==', comunidad_id)
+        .get();
 
-    if (perfilesSnap.empty) {
+      if (perfilesSnap.empty) {
+        return NextResponse.json({ ok: true, sent: 0 });
+      }
+      userIds = perfilesSnap.docs.map((doc) => doc.id);
+    }
+
+    if (userIds.length === 0) {
       return NextResponse.json({ ok: true, sent: 0 });
     }
 
-    // 2. Collect FCM tokens
+    // 2. Collect FCM tokens for the target users
     const tokens: string[] = [];
     await Promise.all(
-      perfilesSnap.docs.map(async (perfilDoc) => {
+      userIds.map(async (userId) => {
         try {
           const tokensSnap = await db
             .collection('usuarios')
-            .doc(perfilDoc.id)
+            .doc(userId)
             .collection('tokens')
             .get();
           tokensSnap.docs.forEach((t) => {

@@ -37,6 +37,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AvatarVecino } from '@/components/ui/avatar-vecino';
+import { eventBus } from '@/events/emitter';
 
 export default function IncidenciaDetailPage() {
   const params = useParams();
@@ -184,11 +185,6 @@ export default function IncidenciaDetailPage() {
     return () => unsubscribe();
   }, [incidenciaId]);
 
-  async function fetchPresupuestosRecibidos() {
-    // Deprecated - presupuestos are now loaded via onSnapshot
-  }
-
-
   async function aceptarPresupuesto(pres: any) {
     if (!incidencia) return;
     setAceptandoPresupuesto(true);
@@ -214,7 +210,7 @@ export default function IncidenciaDetailPage() {
 
       await batch.commit();
       toast.success('Presupuesto aceptado');
-      fetchPresupuestosRecibidos();
+      // onSnapshot listener will automatically update presupuestos
     } catch (err: any) {
       toast.error(err.message ?? 'Error al aceptar presupuesto');
     } finally {
@@ -230,43 +226,72 @@ export default function IncidenciaDetailPage() {
         { estado: 'rechazado' }
       );
       toast.success('Presupuesto rechazado');
-      fetchPresupuestosRecibidos();
+      // onSnapshot listener will automatically update presupuestos
     } catch (err: any) {
       toast.error(err.message ?? 'Error al rechazar presupuesto');
     }
   }
 
-  // fetchComentarios separado (comentarios no tienen onSnapshot para evitar reads excesivos)
-  async function fetchIncidencia() {
+  // ── Real-time listener for comments ──
+  useEffect(() => {
+    if (!incidenciaId) return;
+
     const comQ = query(
       collection(db, 'comentarios'),
       where('incidencia_id', '==', incidenciaId),
       orderBy('created_at', 'asc'),
     );
-    const comSnap = await getDocs(comQ);
-    const comItems = comSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() })) as any[];
 
-    const enrichedComs = await Promise.all(
-      comItems.map(async (com) => {
-        if (com.autor_id) {
-          const autorSnap = await getDoc(doc(db, 'perfiles', com.autor_id));
-          if (autorSnap.exists()) {
-            const a = autorSnap.data();
-            com.autor = {
-              id:              autorSnap.id,
-              nombre_completo: a.nombre_completo,
-              avatar_url:      a.avatar_url ?? null,
-              rol:             a.rol        ?? 'vecino',
-              numero_piso:     a.numero_piso ?? null,
-            };
+    let isMounted = true;
+
+    const unsubscribe = onSnapshot(
+      comQ,
+      async (snap) => {
+        if (!isMounted) return;
+
+        try {
+          const comItems = snap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() })) as any[];
+
+          // Enrich comments with author profile data (sequential to avoid too many parallel reads)
+          const enrichedComs: any[] = [];
+          for (const com of comItems) {
+            if (com.autor_id) {
+              try {
+                const autorSnap = await getDoc(doc(db, 'perfiles', com.autor_id));
+                if (autorSnap.exists()) {
+                  const a = autorSnap.data();
+                  com.autor = {
+                    id:              autorSnap.id,
+                    nombre_completo: a.nombre_completo,
+                    avatar_url:      a.avatar_url ?? null,
+                    rol:             a.rol        ?? 'vecino',
+                    numero_piso:     a.numero_piso ?? null,
+                  };
+                }
+              } catch (err) {
+                console.error('[Comentarios] Error enriqueciendo autor:', err);
+              }
+            }
+            enrichedComs.push(com);
           }
+
+          if (isMounted) {
+            setComentarios(enrichedComs as Comentario[]);
+          }
+        } catch (err) {
+          console.error('[Incidencia] Error procesando comentarios:', err);
         }
-        return com;
-      }),
+      },
+      (err) => {
+        console.error('[Incidencia] Error escuchando comentarios:', err);
+      }
     );
 
-    setComentarios(enrichedComs as Comentario[]);
-  }
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [incidenciaId]);
 
   async function fetchFotos() {
     const q = query(collection(db, 'incidencias_fotos'), where('incidencia_id', '==', incidenciaId), orderBy('created_at', 'asc'));
@@ -330,8 +355,24 @@ export default function IncidenciaDetailPage() {
         );
       }
 
+      // Emit status change event for notification system
+      eventBus.emit({
+        type: 'incidencia.status_changed',
+        timestamp: new Date().toISOString(),
+        actor_id: perfil.id,
+        comunidad_id: incidencia.comunidad_id,
+        payload: {
+          incidenciaId: incidencia.id,
+          from: estadoActual,
+          to: nuevo,
+          changedBy: perfil.id,
+          titulo: incidencia.titulo,
+          comunidadId: incidencia.comunidad_id,
+        },
+      });
+
       toast.success(`Estado actualizado: ${ESTADO_CONFIG[nuevo]?.label}`);
-      fetchIncidencia();
+      // onSnapshot listener will automatically update incidencia data
     } catch (err: any) {
       toast.error(err.message ?? 'Error al cambiar el estado');
     } finally {
@@ -393,13 +434,15 @@ export default function IncidenciaDetailPage() {
     if (!nuevoComentario.trim() || !perfil) return;
     setEnviando(true);
     try {
-      await addDoc(collection(db, 'comentarios'), {
+      const docRef = await addDoc(collection(db, 'comentarios'), {
         incidencia_id: incidenciaId,
         autor_id: perfil.id,
         contenido: nuevoComentario.trim(),
         created_at: new Date().toISOString(),
       });
       setNuevo('');
+
+      // onSnapshot listener will automatically update comentarios
       if (incidencia && incidencia.autor_id !== perfil.id && perfil.comunidad_id) {
         notificarUsuario(
           incidencia.autor_id, perfil.comunidad_id, 'comentario',
@@ -408,7 +451,22 @@ export default function IncidenciaDetailPage() {
           `/incidencias/${incidencia.id}`,
         );
       }
-      fetchIncidencia();
+
+      // Emit comment.created event for notification system
+      eventBus.emit({
+        type: 'comment.created',
+        timestamp: new Date().toISOString(),
+        actor_id: perfil.id,
+        comunidad_id: incidencia?.comunidad_id,
+        payload: {
+          incidenciaId,
+          comentarioId: docRef.id,
+          autorId: perfil.id,
+          autorNombre: perfil.nombre_completo,
+          contenido: nuevoComentario.trim(),
+          comunidadId: incidencia?.comunidad_id,
+        },
+      });
     } catch {
       toast.error('Error al enviar el comentario');
     }
@@ -419,16 +477,21 @@ export default function IncidenciaDetailPage() {
   async function marcarResuelta() {
     if (!perfil || !incidencia || valoracion === 0) return;
     setResolviendo(true);
-    await updateDoc(doc(db, 'incidencias', incidencia.id), {
-      estado: 'resuelta',
-      resuelta_at: new Date().toISOString(),
-      valoracion,
-      updated_at: new Date().toISOString(),
-    });
-    toast.success('Incidencia marcada como resuelta');
-    setMostrarResolver(false);
-    fetchIncidencia();
-    setResolviendo(false);
+    try {
+      await updateDoc(doc(db, 'incidencias', incidencia.id), {
+        estado: 'resuelta',
+        resuelta_at: new Date().toISOString(),
+        valoracion,
+        updated_at: new Date().toISOString(),
+      });
+      toast.success('Incidencia marcada como resuelta');
+      setMostrarResolver(false);
+      // onSnapshot listener will automatically update incidencia data
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al marcar como resuelta');
+    } finally {
+      setResolviendo(false);
+    }
   }
 
   /* ── Stripe payment (autor / vecino) ── */
@@ -910,14 +973,21 @@ export default function IncidenciaDetailPage() {
                     disabled={!presupuestoInput || guardandoPresupuesto}
                     onClick={async () => {
                       setGuardandoPresupuesto(true);
-                      await updateDoc(doc(db, 'incidencias', incidencia.id), {
-                        presupuesto_proveedor: parseFloat(presupuestoInput),
-                        proveedor_nombre: proveedorInput.trim() || null,
-                        updated_at: new Date().toISOString(),
-                      });
-                      toast.success('Presupuesto guardado');
-                      fetchIncidencia();
-                      setGuardandoPresupuesto(false);
+                      try {
+                        await updateDoc(doc(db, 'incidencias', incidencia.id), {
+                          presupuesto_proveedor: parseFloat(presupuestoInput),
+                          proveedor_nombre: proveedorInput.trim() || null,
+                          updated_at: new Date().toISOString(),
+                        });
+                        toast.success('Presupuesto guardado');
+                        setPresupuestoInput('');
+                        setProveedorInput('');
+                        // onSnapshot listener will automatically update incidencia data
+                      } catch (err: any) {
+                        toast.error(err.message ?? 'Error al guardar presupuesto');
+                      } finally {
+                        setGuardandoPresupuesto(false);
+                      }
                     }}
                   >
                     {guardandoPresupuesto ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar presupuesto'}

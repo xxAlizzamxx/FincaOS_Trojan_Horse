@@ -3,14 +3,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Auth helpers ──────────────────────────────────────────────────────
-
     function isAuth() {
       return request.auth != null;
     }
 
-    // Reads the caller's profile ONCE — all callers must be authenticated.
-    // Cache the result in a local variable to avoid multiple get() calls.
     function profile() {
       return get(/databases/$(database)/documents/perfiles/$(request.auth.uid)).data;
     }

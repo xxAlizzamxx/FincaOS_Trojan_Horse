@@ -103,7 +103,9 @@ export type TipoNotificacion =
   | 'incidencia'
   | 'votacion'
   | 'anuncio'
-  | 'documento';
+  | 'documento'
+  | 'comentario'
+  | 'estado';
 
 export interface NotificacionComunidad {
   id         : string;
