@@ -60,23 +60,31 @@ export default function IncidenciasPage() {
         items.map(async (inc: any) => {
           let autor = null;
           if (inc.autor_id) {
-            const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
-            if (autorSnap.exists()) {
-              const data = autorSnap.data();
-              autor = {
-                nombre_completo: data.nombre_completo,
-                avatar_url:      data.avatar_url ?? null,
-                rol:             data.rol        ?? 'vecino',
-                numero_piso:     data.numero_piso ?? null,
-              };
+            try {
+              const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
+              if (autorSnap.exists()) {
+                const data = autorSnap.data();
+                autor = {
+                  nombre_completo: data.nombre_completo,
+                  avatar_url:      data.avatar_url ?? null,
+                  rol:             data.rol        ?? 'vecino',
+                  numero_piso:     data.numero_piso ?? null,
+                };
+              }
+            } catch (e) {
+              console.warn('[Incidencias] autor ilegible', inc.autor_id, e);
             }
           }
           let categoria = null;
           if (inc.categoria_id) {
-            const catSnap = await getDoc(doc(db, 'categorias_incidencia', inc.categoria_id));
-            if (catSnap.exists()) {
-              const data = catSnap.data();
-              categoria = { nombre: data.nombre, icono: data.icono };
+            try {
+              const catSnap = await getDoc(doc(db, 'categorias_incidencia', inc.categoria_id));
+              if (catSnap.exists()) {
+                const data = catSnap.data();
+                categoria = { nombre: data.nombre, icono: data.icono };
+              }
+            } catch (e) {
+              console.warn('[Incidencias] categoria ilegible', inc.categoria_id, e);
             }
           }
           return { ...inc, autor, categoria } as Incidencia;

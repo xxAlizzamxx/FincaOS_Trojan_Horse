@@ -74,7 +74,12 @@ service cloud.firestore {
 
       match /notificaciones/{notifId} {
         allow read:   if isAuth() && belongsToCommunity(comunidadId);
-        // Writes only via Admin SDK (server-side); no client rule needed.
+        // Create desde cliente: cualquier miembro de la comunidad puede emitir
+        // una notificación, pero created_by debe ser su propio uid.
+        allow create: if isAuth()
+                      && belongsToCommunity(comunidadId)
+                      && request.resource.data.created_by == request.auth.uid;
+        // Updates/deletes solo vía Admin SDK.
       }
     }
 
@@ -86,8 +91,12 @@ service cloud.firestore {
     match /perfiles/{userId} {
       // Readable by any authenticated member of the SAME community.
       // Falls back to self-read for users without a community yet (onboarding).
+      // `resource == null` permite que getDoc sobre un perfil eliminado devuelva
+      // exists=false en vez de permission-denied (rompe Promise.all al enriquecer
+      // incidencias/anuncios cuyo autor_id apunta a un vecino ya borrado).
       allow read: if isAuth()
-                  && (request.auth.uid == userId
+                  && (resource == null
+                      || request.auth.uid == userId
                       || (resource.data.comunidad_id != null
                           && resource.data.comunidad_id == profile().comunidad_id));
       allow create: if isAuth() && request.auth.uid == userId;

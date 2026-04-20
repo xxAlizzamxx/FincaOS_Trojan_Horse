@@ -10,18 +10,18 @@ import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { Incidencia } from '@/types/database';
 
-const PRIORIDAD_STRIPE: Record<string, string> = {
-  baja:    'bg-green-400',
-  normal:  'bg-blue-400',
-  alta:    'bg-orange-400',
+const PRIORIDAD_DOT: Record<string, string> = {
+  baja:    'bg-green-500',
+  normal:  'bg-blue-500',
+  alta:    'bg-orange-500',
   urgente: 'bg-red-500',
 };
 
 const PRIORIDAD_BADGE: Record<string, string> = {
-  baja:    'bg-green-100 text-green-700',
-  normal:  'bg-blue-100 text-blue-700',
-  alta:    'bg-orange-100 text-orange-700',
-  urgente: 'bg-red-100 text-red-700',
+  baja:    'bg-green-50  text-green-700  ring-1 ring-green-200',
+  normal:  'bg-blue-50   text-blue-700   ring-1 ring-blue-200',
+  alta:    'bg-orange-50 text-orange-700 ring-1 ring-orange-200',
+  urgente: 'bg-red-50    text-red-700    ring-1 ring-red-200',
 };
 
 interface Props {
@@ -40,32 +40,40 @@ export function IncidenciaCard({
   onToggle,
 }: Props) {
   const cfg         = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG.pendiente;
-  const afectados   = Math.max(1, inc.quorum?.afectados_count ?? 0); // Math.max(1) = safety net para incidencias legacy sin quorum
+  const afectados   = Math.max(1, inc.quorum?.afectados_count ?? 0);
   const umbral      = inc.quorum?.umbral ?? 30;
   const pct         = totalVecinos > 0 ? Math.round((afectados / totalVecinos) * 100) : 0;
   const qAlcanzado  = inc.quorum?.alcanzado ?? false;
-  // Cuánto de la barra se rellena (normalizado al umbral para que llegue al 100% justo al alcanzar)
   const barWidth    = Math.min(100, umbral > 0 ? (pct / umbral) * 100 : 0);
 
-  const cardContent = (
-    <Card className={cn(
-      'border-0 shadow-sm transition-all duration-200',
-      'hover:shadow-md hover:-translate-y-0.5',
-      seleccionada && 'ring-2 ring-finca-coral shadow-md',
-      qAlcanzado && 'border-l-4 border-l-red-500',
-    )}>
-      {/* Barra de prioridad superior */}
-      <div className={cn('h-0.5 w-full rounded-t-xl', PRIORIDAD_STRIPE[inc.prioridad])} />
+  const barColor =
+    qAlcanzado                  ? 'bg-red-500'     :
+    pct > umbral * 0.7          ? 'bg-orange-400'  :
+                                  'bg-finca-coral';
 
+  const pctColor =
+    qAlcanzado                  ? 'text-red-600'    :
+    pct > umbral * 0.7          ? 'text-orange-600' :
+                                  'text-muted-foreground';
+
+  const cardContent = (
+    <Card
+      className={cn(
+        'group relative overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm',
+        'transition-all duration-200 hover:shadow-md hover:border-border',
+        seleccionada && 'ring-2 ring-finca-coral border-transparent shadow-md',
+        qAlcanzado   && 'border-red-200 bg-red-50/40',
+      )}
+    >
       <CardContent className="p-4 space-y-3">
-        {/* Fila 1: estado + quórum alert + fecha */}
+        {/* Header — estado + quórum alert + fecha */}
         <div className="flex items-center gap-2">
-          <Badge className={cn('text-[10px] border-0 shrink-0', cfg.badge)}>
+          <Badge className={cn('text-[10px] border-0 font-medium shrink-0', cfg.badge)}>
             {cfg.label}
           </Badge>
           {qAlcanzado && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full shrink-0">
-              <AlertTriangle className="w-2.5 h-2.5" />
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-red-600 shrink-0">
+              <AlertTriangle className="w-3 h-3" />
               Quórum
             </span>
           )}
@@ -74,51 +82,44 @@ export function IncidenciaCard({
           </span>
         </div>
 
-        {/* Fila 2: título */}
-        <p className="text-base font-semibold text-finca-dark leading-snug line-clamp-2 tracking-tight">
+        {/* Título */}
+        <p className="text-[15px] font-semibold text-finca-dark leading-snug line-clamp-2 tracking-tight">
           {inc.titulo}
         </p>
 
-        {/* Fila 3: barra de quórum */}
-        <div className="space-y-1">
+        {/* Quórum */}
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1 text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
               <Users className="w-3 h-3" />
               <span>{afectados} afectado{afectados !== 1 ? 's' : ''}</span>
             </div>
-            <span className={cn(
-              'font-medium tabular-nums',
-              qAlcanzado ? 'text-red-600' :
-              pct > umbral * 0.7 ? 'text-orange-600' :
-              'text-muted-foreground'
-            )}>
-              {pct}% / {umbral}%
+            <span className={cn('font-semibold tabular-nums', pctColor)}>
+              {pct}%{' '}
+              <span className="text-muted-foreground/60 font-normal">/ {umbral}%</span>
             </span>
           </div>
-          <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
             <div
-              className={cn(
-                'h-full rounded-full transition-all duration-700',
-                qAlcanzado ? 'bg-red-500' :
-                pct > umbral * 0.7 ? 'bg-orange-400' :
-                'bg-finca-coral'
-              )}
+              className={cn('h-full rounded-full transition-all duration-700', barColor)}
               style={{ width: `${barWidth}%` }}
             />
           </div>
         </div>
 
-        {/* Fila 4: acciones + prioridad */}
-        <div className="flex items-center pt-0.5">
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        {/* Footer — acción + prioridad */}
+        <div className="flex items-center justify-between pt-2 border-t border-border/40">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <MessageSquare className="w-3.5 h-3.5" />
             Comentar
           </span>
-          <span className="flex-1" />
-          <span className={cn(
-            'text-[10px] px-2 py-0.5 rounded-full font-medium capitalize',
-            PRIORIDAD_BADGE[inc.prioridad]
-          )}>
+          <span
+            className={cn(
+              'inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full font-medium capitalize',
+              PRIORIDAD_BADGE[inc.prioridad],
+            )}
+          >
+            <span className={cn('w-1.5 h-1.5 rounded-full', PRIORIDAD_DOT[inc.prioridad])} />
             {inc.prioridad}
           </span>
         </div>

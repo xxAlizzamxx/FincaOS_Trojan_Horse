@@ -124,9 +124,16 @@ export default function IncidenciaDetailPage() {
       if (!enrichmentRef.current ||
           enrichmentRef.current._autorId !== incData.autor_id ||
           enrichmentRef.current._categoriaId !== incData.categoria_id) {
+        // safeGet: try/catch por doc para que un perfil huérfano (de otra
+        // comunidad o eliminado) no rompa el callback del onSnapshot con
+        // Uncaught permission-denied.
+        const safeGet = async (path: [string, string]) => {
+          try { return await getDoc(doc(db, path[0], path[1])); }
+          catch (e) { console.warn('[Incidencia] doc ilegible', path, e); return null; }
+        };
         const [autorSnap, catSnap] = await Promise.all([
-          incData.autor_id     ? getDoc(doc(db, 'perfiles',              incData.autor_id))     : Promise.resolve(null),
-          incData.categoria_id ? getDoc(doc(db, 'categorias_incidencia', incData.categoria_id)) : Promise.resolve(null),
+          incData.autor_id     ? safeGet(['perfiles',              incData.autor_id])     : Promise.resolve(null),
+          incData.categoria_id ? safeGet(['categorias_incidencia', incData.categoria_id]) : Promise.resolve(null),
         ]);
 
         let autor = null;
@@ -166,10 +173,14 @@ export default function IncidenciaDetailPage() {
   }, [incidenciaId]);
   useEffect(() => { fetchAfectados(); fetchFotos(); }, [incidenciaId]);
 
-  // Listen to presupuestos in real-time
+  // Listen to presupuestos in real-time (solo admin/presidente — la regla
+  // niega la lectura a vecinos y provocaba permission-denied en consola).
   useEffect(() => {
+    // Regla Firestore: presupuestos solo legibles por admin/presidente.
     if (!incidenciaId) return;
-    
+    const rol = perfil?.rol;
+    if (rol !== 'admin' && rol !== 'presidente') return;
+
     const unsubscribe = onSnapshot(
       collection(db, 'incidencias', incidenciaId, 'presupuestos'),
       (snap) => {
@@ -183,7 +194,7 @@ export default function IncidenciaDetailPage() {
     );
 
     return () => unsubscribe();
-  }, [incidenciaId]);
+  }, [incidenciaId, perfil?.rol]);
 
   async function aceptarPresupuesto(pres: any) {
     if (!incidencia) return;
