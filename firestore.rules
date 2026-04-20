@@ -89,16 +89,17 @@ service cloud.firestore {
     // Sensitive fields (email, telefono) live in perfiles_privados, not here.
 
     match /perfiles/{userId} {
-      // Readable by any authenticated member of the SAME community.
-      // Falls back to self-read for users without a community yet (onboarding).
-      // `resource == null` permite que getDoc sobre un perfil eliminado devuelva
-      // exists=false en vez de permission-denied (rompe Promise.all al enriquecer
-      // incidencias/anuncios cuyo autor_id apunta a un vecino ya borrado).
+      // Readable by:
+      // 1. The user themselves
+      // 2. Members of the SAME community
+      // 3. Admins/presidentes (even from different communities)
+      // 4. Deleted profiles return false (not exists) instead of permission-denied
       allow read: if isAuth()
                   && (resource == null
                       || request.auth.uid == userId
                       || (resource.data.comunidad_id != null
-                          && resource.data.comunidad_id == profile().comunidad_id));
+                          && resource.data.comunidad_id == profile().comunidad_id)
+                      || (profile().rol == 'admin' || profile().rol == 'presidente'));
       allow create: if isAuth() && request.auth.uid == userId;
       allow update: if isAuth()
                     && (request.auth.uid == userId
@@ -144,12 +145,16 @@ service cloud.firestore {
 
       // Presupuestos de proveedores (subcolección)
       match /presupuestos/{presupuestoId} {
-        // Cualquier autenticado puede leer (proveedor ve los suyos, admin ve todos)
-        allow read:   if isAuth();
+        // Proveedor puede leer solo sus propios presupuestos
+        // Admin/presidente de la comunidad puede leer todos los presupuestos
+        allow read:   if isAuth() && (
+          request.auth.uid == resource.data.proveedor_id
+          || isAdminOfCommunity(get(/databases/$(database)/documents/incidencias/$(incidenciaId)).data.comunidad_id)
+        );
         // Proveedor (vía API) crea su propio presupuesto
-        allow create: if isAuth();
+        allow create: if isAuth() && request.auth.uid == resource.data.proveedor_id;
         // Admin/presidente puede actualizar estado (aceptado/rechazado)
-        allow update: if isAuth() && (profile().rol == 'admin' || profile().rol == 'presidente');
+        allow update: if isAuth() && isAdminOfCommunity(get(/databases/$(database)/documents/incidencias/$(incidenciaId)).data.comunidad_id);
       }
     }
 
