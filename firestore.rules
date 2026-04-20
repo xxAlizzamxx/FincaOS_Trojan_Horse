@@ -19,7 +19,7 @@ service cloud.firestore {
     function isAdminOfCommunity(comunidadId) {
       let p = profile();
       return isAuth()
-          && p.rol in ['admin', 'presidente']
+          && (p.rol == 'admin' || p.rol == 'presidente')
           && p.comunidad_id == comunidadId;
     }
 
@@ -34,7 +34,7 @@ service cloud.firestore {
       let p = profile();
       return isAuth()
           && p.comunidad_id == comunidadId
-          && p.rol in ['admin', 'presidente', 'mediador'];
+          && (p.rol == 'admin' || p.rol == 'presidente' || p.rol == 'mediador');
     }
 
     // ── Internal system collections (Admin SDK only) ──────────────────────
@@ -93,7 +93,7 @@ service cloud.firestore {
       allow create: if isAuth() && request.auth.uid == userId;
       allow update: if isAuth()
                     && (request.auth.uid == userId
-                        || profile().rol in ['admin', 'presidente'])
+                        || (profile().rol == 'admin' || profile().rol == 'presidente'))
                     // Prevent client from writing sensitive fields to public profile
                     && !('email'    in request.resource.data)
                     && !('plan'     in request.resource.data)
@@ -139,13 +139,13 @@ service cloud.firestore {
         // Admin/presidente puede leer todos los presupuestos de la incidencia
         allow read:   if isAuth() && (
           request.auth.uid == proveedorId
-          || profile().rol in ['admin', 'presidente']
+          || (profile().rol == 'admin' || profile().rol == 'presidente')
         );
         // Proveedor (vía API) crea su propio presupuesto
         // Admin SDK writes handled server-side
         allow create: if isAuth() && request.auth.uid == proveedorId;
         // Admin/presidente puede actualizar estado (aceptado/rechazado)
-        allow update: if isAuth() && profile().rol in ['admin', 'presidente'];
+        allow update: if isAuth() && (profile().rol == 'admin' || profile().rol == 'presidente');
       }
     }
 
@@ -177,11 +177,11 @@ service cloud.firestore {
 
     match /anuncios/{anuncioId} {
       allow read:   if isAuth();
-      allow create: if isAuth() && profile().rol in ['admin', 'presidente'];
+      allow create: if isAuth() && (profile().rol == 'admin' || profile().rol == 'presidente');
       allow update: if isAdminOfCommunity(resource.data.comunidad_id);
       allow delete: if isAuth()
                     && (resource.data.autor_id == request.auth.uid
-                        || profile().rol in ['admin', 'presidente']);
+                        || (profile().rol == 'admin' || profile().rol == 'presidente'));
     }
 
     // ── Documentos ───────────────────────────────────────────────────────
@@ -229,9 +229,9 @@ service cloud.firestore {
       allow delete: if isAdminOfCommunity(resource.data.comunidad_id);
 
       match /pagos/{userId} {
-        allow read:   if isAuth() && (request.auth.uid == userId || profile().rol in ['admin', 'presidente']);
+        allow read:   if isAuth() && (request.auth.uid == userId || (profile().rol == 'admin' || profile().rol == 'presidente'));
         allow create: if isAuth();
-        allow update: if isAuth() && profile().rol in ['admin', 'presidente'];
+        allow update: if isAuth() && (profile().rol == 'admin' || profile().rol == 'presidente');
       }
     }
 
@@ -278,7 +278,7 @@ service cloud.firestore {
       // FIX: admin OR the uploader can delete
       allow delete: if isAuth()
                     && (resource.data.autor_id == request.auth.uid
-                        || profile().rol in ['admin', 'presidente']);
+                        || (profile().rol == 'admin' || profile().rol == 'presidente'));
     }
 
     // ── Proveedores ───────────────────────────────────────────────────────
@@ -320,7 +320,7 @@ service cloud.firestore {
       allow create: if isAuth();
       allow update: if isAuth() && (
         resource.data.proveedorId == request.auth.uid
-        || profile().rol in ['admin', 'presidente']
+        || (profile().rol == 'admin' || profile().rol == 'presidente')
       );
     }
 
@@ -377,7 +377,7 @@ service cloud.firestore {
       // Only the user who made the payment or an admin can read
       allow read:  if isAuth()
                    && (resource.data.usuario_id == request.auth.uid
-                       || profile().rol in ['admin', 'presidente']);
+                       || (profile().rol == 'admin' || profile().rol == 'presidente'));
       // Pagos are created by the server (Admin SDK) — no client create rule needed.
       allow write: if false;
     }
