@@ -8,7 +8,8 @@ service cloud.firestore {
     }
 
     function profile() {
-      return get(/databases/$(database)/documents/perfiles/$(request.auth.uid)).data;
+      let p = get(/databases/$(database)/documents/perfiles/$(request.auth.uid));
+      return p == null ? {} : p.data;
     }
 
     function belongsToCommunity(comunidadId) {
