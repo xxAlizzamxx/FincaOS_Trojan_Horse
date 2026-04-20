@@ -79,12 +79,18 @@ export default function InicioPage() {
         (d: QueryDocumentSnapshot<DocumentData>) => d.data(),
       );
 
-      // Fetch autor y categoria en paralelo (evita N+1 queries)
+      // Fetch autor y categoria en paralelo (evita N+1 queries).
+      // Usamos allSettled + try/catch por doc para que una lectura fallida
+      // (p.ej. perfil de un vecino ya eliminado) no tumbe todo el enriquecimiento.
+      const safeGet = async (path: [string, string]) => {
+        try { return await getDoc(doc(db, path[0], path[1])); }
+        catch (e) { console.warn('[Inicio] doc ilegible', path, e); return null; }
+      };
       await Promise.all(
         incs.map(async (inc) => {
           const [autorSnap, catSnap] = await Promise.all([
-            inc.autor_id    ? getDoc(doc(db, 'perfiles',              inc.autor_id))                       : Promise.resolve(null),
-            inc.categoria_id ? getDoc(doc(db, 'categorias_incidencia', String(inc.categoria_id))) : Promise.resolve(null),
+            inc.autor_id     ? safeGet(['perfiles',              inc.autor_id])               : Promise.resolve(null),
+            inc.categoria_id ? safeGet(['categorias_incidencia', String(inc.categoria_id)])   : Promise.resolve(null),
           ]);
           if (autorSnap?.exists())  inc.autor     = { id: autorSnap.id,  ...autorSnap.data()  } as Incidencia['autor'];
           if (catSnap?.exists())    inc.categoria = { id: catSnap.id,    ...catSnap.data()    } as Incidencia['categoria'];
