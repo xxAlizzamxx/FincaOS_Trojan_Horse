@@ -14,7 +14,7 @@ import { eventBus }      from './emitter';
 import { sendSmartAlert } from '@/lib/email';
 import { notifyEvent } from '@/lib/firebase/notifications';
 import { getAdminDb } from '@/lib/firebase/admin';
-import { serverTimestamp } from 'firebase-admin/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
 import type { AnalyticsEventName } from '@/types/database';
 
 /* ── Analytics writer (server-side, Admin SDK) ──────────────────────────── */
@@ -66,7 +66,7 @@ async function notificarUsuarioIndividual(
       mensaje,
       tipo,
       leida: false,
-      created_at: serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
       url,
     });
   } catch {
@@ -96,7 +96,7 @@ async function notificarUsuarios(
         mensaje,
         tipo,
         leida: false,
-        created_at: serverTimestamp(),
+        created_at: FieldValue.serverTimestamp(),
         url,
       });
     });
