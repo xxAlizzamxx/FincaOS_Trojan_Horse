@@ -276,10 +276,10 @@ export default function AdminIncidenciasPage() {
                         <span>{(inc.autor as any)?.nombre_completo}</span>
                         <span>· {format(new Date(inc.created_at), "d MMM yyyy", { locale: es })}</span>
                       </div>
-                      {inc.estimacion_min && inc.estimacion_max && (
+                      {inc.estimacion_min != null && inc.estimacion_max != null && (
                         <p className="text-xs text-muted-foreground mt-1">
                           Est. IA: <span className="font-medium text-finca-dark">{inc.estimacion_min}€ – {inc.estimacion_max}€</span>
-                          {(inc as any).presupuesto_proveedor && (
+                          {(inc as any).presupuesto_proveedor != null && (
                             <>
                               {' · '}Proveedor: <span className={cn(
                                 'font-medium',

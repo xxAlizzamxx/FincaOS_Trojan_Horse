@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { askGemini } from '@/lib/gemini';
 import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
+// Reasonable bounds for community property repairs in Spain (IVA included)
+const MIN_ESTIMATE_EUR = 30;      // absolute minimum for any professional visit
+const MAX_ESTIMATE_EUR = 15_000;  // cap — above this needs admin manual review
+const clamp = (n: number) => Math.max(MIN_ESTIMATE_EUR, Math.min(MAX_ESTIMATE_EUR, Math.round(n)));
+
 const SYSTEM_PROMPT = `Eres un experto en reparaciones y mantenimiento de comunidades de propietarios en España.
 Tu tarea es estimar el rango de coste de una reparación y clasificar su urgencia basándote en la categoría, descripción y ubicación.
 
@@ -43,8 +48,8 @@ Estima el rango de coste de esta reparación en euros.`;
     const prioridad = validPrioridades.includes(data.prioridad) ? data.prioridad : 'normal';
 
     return NextResponse.json({
-      min: Math.round(data.min),
-      max: Math.round(data.max),
+      min: clamp(data.min),
+      max: clamp(data.max),
       prioridad,
       explicacion: data.explicacion || '',
     });

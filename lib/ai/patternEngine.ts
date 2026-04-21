@@ -17,7 +17,8 @@
  *   - Anti-spam — per-zone 24h cooldown stored inside ai_insights
  */
 
-import { getAdminDb }  from '@/lib/firebase/admin';
+import { getAdminDb }    from '@/lib/firebase/admin';
+import { normalizeZona } from '@/lib/incidencias/mapZona';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 
@@ -121,15 +122,23 @@ export function extractPatterns(
   generado_at: string,
 ): PatternEngineResult {
   // ── Count open incidencias per zone ───────────────────────────────────────
-  // Using String() coercion (not `typeof === 'string'`) so numeric zona values
-  // are never silently skipped — that was the source of the off-by-one bug.
+  // Primary:  inc.zona  (enum stored since the field was added to the form)
+  // Fallback: normalizeZona(inc.ubicacion) for legacy docs created before
+  //           the zona field existed — this is the fix for the "0 patterns"
+  //           bug where all existing incidencias were silently skipped.
   const byZona: Record<string, number> = {};
 
   for (const inc of incidencias) {
-    const raw  = inc.zona;
-    // Skip docs with no zona field at all (null / undefined)
-    if (raw == null) continue;
-    const zona = String(raw).trim();
+    let zona: string | null = null;
+
+    if (inc.zona != null) {
+      // New incidencias: zona is already the canonical enum value
+      zona = String(inc.zona).trim() || null;
+    } else if (inc.ubicacion != null) {
+      // Legacy incidencias: derive zone from free-text ubicacion field
+      zona = normalizeZona(String(inc.ubicacion));
+    }
+
     if (!zona) continue;
     byZona[zona] = (byZona[zona] ?? 0) + 1;
   }
