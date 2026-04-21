@@ -3,7 +3,9 @@
  *
  * Vercel Cron Job — proactive AI pattern detection across ALL communities.
  *
- * Schedule (vercel.json): every 6 hours — cron "0 0,6,12,18 * * *"
+ * Schedule (vercel.json): daily at midnight — cron "0 0 * * *"
+ * NOTE: Vercel Hobby plan only allows daily cron jobs (once per day max).
+ * For higher frequency (e.g. every 6 hours), upgrade to Vercel Pro.
  *
  * Per community:
  *   1. Read open incidencias from the last 60 days
