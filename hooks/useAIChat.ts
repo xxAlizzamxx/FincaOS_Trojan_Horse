@@ -21,18 +21,26 @@ function isIncidentReport(message: string): boolean {
   return INCIDENT_KEYWORDS.test(message);
 }
 
-const COSTOS_BASE: Record<string, number> = {
-  agua:          120000,
-  gas:           250000,
-  electricidad:  180000,
-  ruido:          50000,
-  tuberia:        90000,
-  ascensor:      200000,
-  seguridad:     100000,
-  puerta:         70000,
-  ventana:        60000,
-  plaga:          60000,
-  general:       100000,
+const COST_TABLE: Record<string, number> = {
+  gas:          120000,
+  agua:          80000,
+  electricidad: 150000,
+  ascensor:     250000,
+  ruido:         30000,
+  seguridad:    100000,
+  tuberia:       80000,
+  puerta:        60000,
+  ventana:       60000,
+  plaga:         60000,
+  general:       60000,
+};
+
+const MULTIPLIER: Record<string, number> = {
+  baja:    1,
+  media:   1,
+  normal:  1,
+  alta:    1.1,
+  urgente: 1.2,
 };
 
 // Single source of truth for incident type — all other functions consume this
@@ -68,35 +76,33 @@ function getPriority(tipo: string): string {
 }
 
 function estimateCost(tipo: string, prioridad: string): number {
-  const base = COSTOS_BASE[tipo] ?? COSTOS_BASE.general;
-  if (prioridad === 'urgente' || prioridad === 'alta') return Math.round(base * 1.2);
-  if (prioridad === 'normal') return base;
-  return base;
+  const base = COST_TABLE[tipo] ?? COST_TABLE.general;
+  return Math.round(base * (MULTIPLIER[prioridad] ?? 1));
 }
 
 function getRecommendation(tipo: string): string {
   switch (tipo) {
     case 'gas':
-      return '⚠️ Evacuar el área inmediatamente y evitar encender dispositivos eléctricos. Llamar a la empresa de gas.';
+      return 'Evacuar la zona y evitar el uso de interruptores eléctricos. Llamar a la empresa de gas de inmediato.';
     case 'agua':
     case 'tuberia':
-      return '💧 Cerrar la llave de paso si es posible para evitar daños mayores.';
+      return 'Cerrar la llave principal si es posible y evitar contacto con zonas mojadas.';
     case 'electricidad':
-      return '⚡ Cortar la energía desde el tablero principal por seguridad. No tocar cables expuestos.';
+      return 'No manipular cables y cortar la energía desde el panel principal.';
     case 'ascensor':
-      return '🛗 Evitar su uso y reportar a mantenimiento inmediatamente. Colocar aviso visible.';
+      return 'Evitar el uso del ascensor hasta revisión técnica. Colocar aviso visible.';
     case 'ruido':
-      return '🔊 Registrar los horarios del ruido para facilitar la gestión administrativa.';
+      return 'Registrar horarios del ruido y contactar al responsable o administración.';
     case 'seguridad':
-      return '🔒 Informar al administrador y no manipular la cerradura o área afectada.';
+      return 'Informar al administrador y no manipular la cerradura o área afectada.';
     case 'puerta':
-      return '🚪 No forzar el mecanismo. Esperar revisión del personal técnico.';
+      return 'No forzar el mecanismo. Esperar revisión del personal técnico.';
     case 'ventana':
-      return '🪟 Si hay riesgo de caída de vidrios, acordonar el área por seguridad.';
+      return 'Si hay riesgo de caída de vidrios, acordonar el área por seguridad.';
     case 'plaga':
-      return '🐛 Evitar contacto directo y no usar pesticidas sin autorización del administrador.';
+      return 'Evitar contacto directo y no usar pesticidas sin autorización del administrador.';
     default:
-      return 'ℹ️ Se recomienda esperar la revisión del personal técnico.';
+      return 'Reportado a administración para revisión técnica.';
   }
 }
 
@@ -142,34 +148,49 @@ function getSuggestedCause(tipo: string): string {
   }
 }
 
+function getThreshold(categoria_id: string): number {
+  return categoria_id === 'gas' ? 2 : 3;
+}
+
 async function analyzePatterns(
   comunidadId: string,
-  categoria: string,
+  categoria_id: string,
   zona: string
 ): Promise<{ detected: boolean; count: number; level: 'medium' | 'high' | null }> {
   try {
-    const last24h = Date.now() - 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const last24h = now - 24 * 60 * 60 * 1000;
 
     const snap = await getDocs(
       query(
         collection(db, 'incidencias'),
         where('comunidad_id', '==', comunidadId),
-        where('categoria_id', '==', categoria),
+        where('categoria_id', '==', categoria_id),
         where('zona', '==', zona),
         orderBy('created_at', 'desc'),
         limit(20),
       )
     );
 
-    const recent = snap.docs.filter((d) => {
-      const ca = d.data().created_at;
-      const ms = ca?.toMillis?.() ?? (typeof ca === 'string' ? new Date(ca).getTime() : 0);
-      return ms >= last24h;
+    const filtered = snap.docs.filter((d) => {
+      const data = d.data();
+      if (!data.created_at) return false;
+      // Handle both Firestore Timestamp and ISO string
+      const time: number = typeof data.created_at.toDate === 'function'
+        ? data.created_at.toDate().getTime()
+        : new Date(data.created_at).getTime();
+      return (
+        data.categoria_id === categoria_id &&
+        data.zona === zona &&
+        data.comunidad_id === comunidadId &&
+        time >= last24h
+      );
     });
 
-    const count = recent.length;
-    const threshold = categoria === 'gas' ? 2 : 4;
-    console.log('Patrón detectado:', count, 'threshold:', threshold, categoria, zona);
+    const count = filtered.length;
+    const threshold = getThreshold(categoria_id);
+    console.log('Pattern count:', count);
+    console.log('Threshold:', threshold);
 
     if (count >= threshold + 1) return { detected: true, count, level: 'high' };
     if (count >= threshold)     return { detected: true, count, level: 'medium' };
@@ -258,7 +279,7 @@ export function useAIChat() {
           const actionMessage: AIMessage = {
             id: actionMessageId,
             role: 'assistant',
-            content: `✅ ¡Incidencia registrada!\n\n📍 Zona: ${zona}\n⚠️ Prioridad: ${prioridad}\n💰 Costo estimado: $${costoEstimado.toLocaleString('es-CO')}\n\n📌 Recomendación:\n${recomendacion}\n\n🆔 ID: ${incidenciaId.slice(0, 12)}...`,
+            content: `✅ Incidencia creada\n\n💰 Costo estimado: $${costoEstimado.toLocaleString('es-CO')}\n⚠️ Prioridad: ${prioridad}\n\n💡 Recomendación:\n${recomendacion}`,
             isActionMessage: true,
             data: { id: incidenciaId },
           };
@@ -321,10 +342,10 @@ export function useAIChat() {
                 return addDoc(collection(db, 'alertas_globales'), {
                   categoria_id,
                   zona,
-                  mensaje: alertMsg,
                   comunidad_id: perfil.comunidad_id,
-                  createdAt: serverTimestamp(),
+                  mensaje: alertMsg,
                   activa: true,
+                  created_at: serverTimestamp(),
                 });
               }).catch(() => {});
 

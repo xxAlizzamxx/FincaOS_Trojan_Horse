@@ -11,7 +11,7 @@ interface Alerta {
   categoria_id: string;
   zona: string;
   mensaje: string;
-  createdAt: string;
+  created_at?: string;
 }
 
 export function AlertaGlobalBanner() {
