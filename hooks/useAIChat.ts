@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { collection, addDoc, setDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, setDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { useAuth } from '@/hooks/useAuth';
@@ -70,12 +70,55 @@ function extractIncidentDetails(message: string) {
   return { categoria_id, tipo_problema, prioridad, zona };
 }
 
+function getSuggestedCause(tipo: string): string {
+  switch (tipo) {
+    case 'gas':       return 'posible fuga en tubería o válvula';
+    case 'agua':      return 'posible daño en tuberías o presión';
+    case 'ruido':     return 'posible falla mecánica o vibración';
+    case 'electricidad': return 'posible sobrecarga o corto circuito';
+    case 'fontaneria': return 'posible daño en tuberías o presión';
+    default:          return 'problema recurrente en infraestructura';
+  }
+}
+
+async function analyzePatterns(
+  comunidadId: string,
+  tipo: string,
+  zona?: string
+): Promise<{ detected: boolean; count: number; level: 'medium' | 'high' | null }> {
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const constraints = [
+      where('comunidad_id', '==', comunidadId),
+      where('tipo_problema', '==', tipo),
+    ];
+    if (zona) constraints.push(where('zona', '==', zona));
+
+    const snap = await getDocs(query(collection(db, 'incidencias'), ...constraints));
+
+    // Filter by last 24h manually (avoids composite index requirement)
+    const recent = snap.docs.filter((d) => {
+      const ca = d.data().created_at;
+      const dateStr = ca?.toDate ? ca.toDate().toISOString() : ca;
+      return typeof dateStr === 'string' && dateStr >= since;
+    });
+
+    const count = recent.length;
+    if (count >= 5) return { detected: true, count, level: 'high' };
+    if (count >= 3) return { detected: true, count, level: 'medium' };
+    return { detected: false, count, level: null };
+  } catch {
+    return { detected: false, count: 0, level: null };
+  }
+}
+
 export function useAIChat() {
   const { perfil } = useAuth();
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastMessageIdRef = useRef(0);
+  const triggeredPatternsRef = useRef<Set<string>>(new Set());
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -170,6 +213,27 @@ export function useAIChat() {
           }).catch((err) => {
             console.error('[FIRESTORE WRITE FAILED] notification:', err?.message ?? err);
           });
+
+          // Proactive pattern analysis (fire-and-forget, never blocks chat)
+          const patternKey = `${tipo_problema}:${zona}`;
+          if (!triggeredPatternsRef.current.has(patternKey)) {
+            analyzePatterns(perfil.comunidad_id, tipo_problema, zona).then((pattern) => {
+              if (!pattern.detected) return;
+              triggeredPatternsRef.current.add(patternKey);
+              const cause = getSuggestedCause(tipo_problema);
+              const levelEmoji = pattern.level === 'high' ? '🔴' : '🟡';
+              const proactiveId = `msg-${++lastMessageIdRef.current}`;
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: proactiveId,
+                  role: 'assistant',
+                  content: `${levelEmoji} He detectado ${pattern.count} incidencias similares en las últimas 24h.\nPosible causa: ${cause}.\nRecomendación: revisar infraestructura o contactar mantenimiento en ${zona || 'la comunidad'}.`,
+                  isProactive: true,
+                },
+              ]);
+            }).catch(() => {});
+          }
         } else {
           // Generic helpful response
           const assistantMessageId = `msg-${++lastMessageIdRef.current}`;
