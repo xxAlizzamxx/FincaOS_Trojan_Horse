@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { collection, addDoc, setDoc, doc, getDocs, query, where, orderBy, limit, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, setDoc, doc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { useAuth } from '@/hooks/useAuth';
@@ -161,30 +161,23 @@ async function analyzePatterns(
     const now = Date.now();
     const last24h = now - 24 * 60 * 60 * 1000;
 
+    // No orderBy — avoids composite index requirement. Filter client-side.
     const snap = await getDocs(
       query(
         collection(db, 'incidencias'),
         where('comunidad_id', '==', comunidadId),
         where('categoria_id', '==', categoria_id),
         where('zona', '==', zona),
-        orderBy('created_at', 'desc'),
-        limit(20),
       )
     );
 
     const filtered = snap.docs.filter((d) => {
       const data = d.data();
       if (!data.created_at) return false;
-      // Handle both Firestore Timestamp and ISO string
       const time: number = typeof data.created_at.toDate === 'function'
         ? data.created_at.toDate().getTime()
         : new Date(data.created_at).getTime();
-      return (
-        data.categoria_id === categoria_id &&
-        data.zona === zona &&
-        data.comunidad_id === comunidadId &&
-        time >= last24h
-      );
+      return time >= last24h;
     });
 
     const count = filtered.length;

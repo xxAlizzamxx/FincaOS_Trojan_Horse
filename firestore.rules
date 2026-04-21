@@ -352,6 +352,16 @@ service cloud.firestore {
       allow delete: if isAdminOfCommunity(resource.data.comunidadId);
     }
 
+    // ── Alertas globales (IA pattern detection) ───────────────────────────
+    // Any community member can read alerts for their community.
+    // Any authenticated user can create or dismiss (activa=false) an alert.
+
+    match /alertas_globales/{alertaId} {
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAuth() && belongsToCommunity(request.resource.data.comunidad_id);
+      allow update: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+    }
+
     // ── FCM Tokens (para notificaciones push) ─────────────────────────────
 
     match /usuarios/{userId} {
