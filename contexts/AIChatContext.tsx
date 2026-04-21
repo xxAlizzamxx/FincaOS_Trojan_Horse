@@ -1,17 +1,14 @@
 'use client';
 
-import { createContext, useContext, ReactNode, useState, useCallback } from 'react';
+import { createContext, useContext, ReactNode } from 'react';
+import { useAIChat, type AIMessage } from '@/hooks/useAIChat';
 
-export interface AIMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: Date;
-}
+export type { AIMessage };
 
 interface AIChatContextType {
   messages: AIMessage[];
   loading: boolean;
+  error: string | null;
   sendMessage: (content: string) => Promise<void>;
   clearMessages: () => void;
 }
@@ -19,50 +16,9 @@ interface AIChatContextType {
 const AIChatContext = createContext<AIChatContextType | null>(null);
 
 export function AIChatProvider({ children }: { children: ReactNode }) {
-  const [messages, setMessages] = useState<AIMessage[]>([]);
-  const [loading, setLoading] = useState(false);
+  const aiChat = useAIChat();
 
-  const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim()) return;
-    
-    const userMsg: AIMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'user',
-      content: content.trim(),
-      timestamp: new Date(),
-    };
-    
-    setMessages(prev => [...prev, userMsg]);
-    setLoading(true);
-
-    try {
-      // Simulate AI response for now
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      const aiMsg: AIMessage = {
-        id: `msg-${Date.now()}-ai`,
-        role: 'assistant',
-        content: 'Got it. I\'ll help you with that.',
-        timestamp: new Date(),
-      };
-      
-      setMessages(prev => [...prev, aiMsg]);
-    } catch (err) {
-      console.error('Error sending message:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const clearMessages = useCallback(() => {
-    setMessages([]);
-  }, []);
-
-  return (
-    <AIChatContext.Provider value={{ messages, loading, sendMessage, clearMessages }}>
-      {children}
-    </AIChatContext.Provider>
-  );
+  return <AIChatContext.Provider value={aiChat}>{children}</AIChatContext.Provider>;
 }
 
 export function useAIChatContext() {
