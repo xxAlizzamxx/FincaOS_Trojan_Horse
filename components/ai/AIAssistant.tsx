@@ -3,9 +3,13 @@
 import { useState } from 'react';
 import { FloatingAIButton } from './FloatingAIButton';
 import { AIChatPanel } from './AIChatPanel';
+import { useAuth } from '@/hooks/useAuth';
 
 export function AIAssistant() {
   const [isOpen, setIsOpen] = useState(false);
+  const { perfil } = useAuth();
+
+  if (!perfil) return null;
 
   return (
     <>

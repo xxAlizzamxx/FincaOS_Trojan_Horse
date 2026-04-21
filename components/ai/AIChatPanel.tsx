@@ -56,7 +56,7 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
         style={{ zIndex: 9999 }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200 bg-white">
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-4 border-b border-gray-200 bg-white">
           <div>
             <h3 className="font-semibold text-gray-900 text-sm">Asistente IA</h3>
             <p className="text-xs text-gray-500">Reporta incidencias al instante</p>
@@ -97,7 +97,7 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
                 <div className="flex justify-start">
                   <div className="bg-gray-100 text-gray-900 rounded-lg px-3 py-2 flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-sm">Thinking...</span>
+                    <span className="text-sm">Analizando...</span>
                   </div>
                 </div>
               )}
@@ -107,7 +107,7 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
         </div>
 
         {/* Input */}
-        <div className="border-t border-gray-200 p-3 bg-white">
+        <div className="flex-shrink-0 border-t border-gray-200 p-3 bg-white">
           <div className="flex gap-2">
             <input
               ref={inputRef}
