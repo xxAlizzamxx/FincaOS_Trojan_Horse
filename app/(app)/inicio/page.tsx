@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, TrendingUp, ChevronRight, Plus, Share2, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  collection, query, where, orderBy, limit, getDocs, doc, getDoc,
+  collection, query, where, orderBy, limit, getDocs, doc, getDoc, onSnapshot,
   QuerySnapshot, DocumentData, QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
@@ -53,6 +53,41 @@ export default function InicioPage() {
     fetchData();
   }, [comunidadId, authLoading]);
 
+  // Real-time listener for incidencias
+  useEffect(() => {
+    if (!comunidadId) return;
+
+    const q = query(
+      collection(db, 'incidencias'),
+      where('comunidad_id', '==', comunidadId),
+      orderBy('created_at', 'desc'),
+      limit(5),
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const items = snap.docs.map((d) => {
+        const data = d.data();
+        if (data.created_at?.toDate) data.created_at = data.created_at.toDate().toISOString();
+        if (data.updated_at?.toDate) data.updated_at = data.updated_at.toDate().toISOString();
+        return { id: d.id, ...data } as Incidencia;
+      });
+
+      // Enrich with categoria names (fire-and-forget)
+      Promise.all(
+        items.map(async (inc) => {
+          if (inc.categoria_id && !inc.categoria) {
+            try {
+              const catSnap = await getDoc(doc(db, 'categorias_incidencia', String(inc.categoria_id)));
+              if (catSnap.exists()) inc.categoria = { id: catSnap.id, ...catSnap.data() } as Incidencia['categoria'];
+            } catch {}
+          }
+        }),
+      ).then(() => setIncidencias([...items]));
+    });
+
+    return () => unsub();
+  }, [comunidadId]);
+
   async function fetchData() {
     try {
       const rol = perfil?.rol;
@@ -60,18 +95,14 @@ export default function InicioPage() {
 
       console.log('[Inicio] fetchData — comunidadId:', comunidadId, 'rol:', rol);
 
-      const [incSnap, anuncSnap, allIncSnap, vecinosSnap] = await Promise.all([
-        getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(5))) as Promise<QuerySnapshot<DocumentData>>,
+      const [anuncSnap, allIncSnap, vecinosSnap] = await Promise.all([
         getDocs(query(collection(db, 'anuncios'),   where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3))) as Promise<QuerySnapshot<DocumentData>>,
         getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId))) as Promise<QuerySnapshot<DocumentData>>,
         getDocs(query(collection(db, 'perfiles'),   where('comunidad_id', '==', comunidadId))) as Promise<QuerySnapshot<DocumentData>>,
       ]);
 
-      console.log('[Inicio] incidencias:', incSnap.size, '| anuncios:', anuncSnap.size, '| allIncs:', allIncSnap.size);
+      console.log('[Inicio] anuncios:', anuncSnap.size, '| allIncs:', allIncSnap.size);
 
-      const incs: Incidencia[] = incSnap.docs.map(
-        (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Incidencia),
-      );
       const anuncs: Anuncio[] = anuncSnap.docs.map(
         (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Anuncio),
       );
@@ -79,25 +110,6 @@ export default function InicioPage() {
         (d: QueryDocumentSnapshot<DocumentData>) => d.data(),
       );
 
-      // Fetch autor y categoria en paralelo (evita N+1 queries).
-      // Usamos allSettled + try/catch por doc para que una lectura fallida
-      // (p.ej. perfil de un vecino ya eliminado) no tumbe todo el enriquecimiento.
-      const safeGet = async (path: [string, string]) => {
-        try { return await getDoc(doc(db, path[0], path[1])); }
-        catch (e) { console.warn('[Inicio] doc ilegible', path, e); return null; }
-      };
-      await Promise.all(
-        incs.map(async (inc) => {
-          const [autorSnap, catSnap] = await Promise.all([
-            inc.autor_id     ? safeGet(['perfiles',              inc.autor_id])               : Promise.resolve(null),
-            inc.categoria_id ? safeGet(['categorias_incidencia', String(inc.categoria_id)])   : Promise.resolve(null),
-          ]);
-          if (autorSnap?.exists())  inc.autor     = { id: autorSnap.id,  ...autorSnap.data()  } as Incidencia['autor'];
-          if (catSnap?.exists())    inc.categoria = { id: catSnap.id,    ...catSnap.data()    } as Incidencia['categoria'];
-        }),
-      );
-
-      setIncidencias(incs);
       setAnuncios(anuncs);
 
       const abiertas = allIncs.filter(

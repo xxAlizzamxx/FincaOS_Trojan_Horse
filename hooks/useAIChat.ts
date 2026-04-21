@@ -21,42 +21,54 @@ function isIncidentReport(message: string): boolean {
   return INCIDENT_KEYWORDS.test(message);
 }
 
+function getPriority(text: string): string {
+  const t = text.toLowerCase();
+  if (t.match(/gas|incendio|fuego|fire|explosion/)) return 'urgente';
+  if (t.match(/agua|fuga|leak|flood|inundacion|electrico|electrical|daño|damage/)) return 'alta';
+  if (t.match(/ruido|noise|loud|ruidoso|pest|plaga/)) return 'normal';
+  return 'alta';
+}
+
+function estimateCost(text: string): number {
+  const t = text.toLowerCase();
+  if (t.match(/gas|fuego|incendio/)) return 500000;
+  if (t.match(/agua|fuga|leak|flood|inundacion/)) return 150000;
+  if (t.match(/electrico|electrical/)) return 200000;
+  if (t.match(/ruido|noise/)) return 50000;
+  if (t.match(/pest|plaga/)) return 80000;
+  return 100000;
+}
+
 function extractIncidentDetails(message: string) {
   const lowerMsg = message.toLowerCase();
 
   let categoria_id = 'otros';
   let tipo_problema = 'general';
-  let prioridad = 'normal';
   let zona = 'vivienda';
 
-  // Determine category and type
   if (lowerMsg.match(/leak|filtracion|agua|humidity|humedad|flood|inundacion/)) {
     categoria_id = 'filtraciones';
     tipo_problema = 'fontaneria';
-    prioridad = lowerMsg.includes('water') || lowerMsg.includes('flood') ? 'alta' : 'normal';
   } else if (lowerMsg.match(/noise|ruido|loud|ruidoso/)) {
     categoria_id = 'ruido';
     tipo_problema = 'ruido';
-    prioridad = 'normal';
   } else if (lowerMsg.match(/smell|olor|gas/)) {
     categoria_id = 'otros';
-    tipo_problema = 'general';
-    prioridad = 'urgente';
-  } else if (lowerMsg.match(/broken|rotura|damage|daño|electrical|electrico|fire|fuego/)) {
+    tipo_problema = 'gas';
+  } else if (lowerMsg.match(/broken|rotura|damage|daño|fire|fuego/)) {
     categoria_id = 'daños';
     tipo_problema = 'general';
-    prioridad = lowerMsg.includes('fire') || lowerMsg.includes('fuego') ? 'urgente' : 'alta';
+  } else if (lowerMsg.match(/electrical|electrico/)) {
+    categoria_id = 'daños';
+    tipo_problema = 'electricidad';
   } else if (lowerMsg.match(/heating|calefaccion/)) {
     categoria_id = 'otros';
     tipo_problema = 'general';
-    prioridad = 'normal';
   } else if (lowerMsg.match(/pest|plaga/)) {
     categoria_id = 'plagas';
     tipo_problema = 'general';
-    prioridad = 'alta';
   }
 
-  // Determine zone
   if (lowerMsg.match(/parking|garaje|garage/)) {
     zona = 'parking';
   } else if (lowerMsg.match(/hallway|pasillo|common|comun|garden|jardin|patio/)) {
@@ -67,7 +79,7 @@ function extractIncidentDetails(message: string) {
     zona = 'vivienda';
   }
 
-  return { categoria_id, tipo_problema, prioridad, zona };
+  return { categoria_id, tipo_problema, prioridad: getPriority(message), zona };
 }
 
 function getSuggestedCause(tipo: string): string {
@@ -142,7 +154,7 @@ export function useAIChat() {
 
       try {
         if (!perfil?.id || !perfil?.comunidad_id) {
-          throw new Error('User not authenticated');
+          throw new Error('No has iniciado sesión');
         }
 
         const isIncident = isIncidentReport(content);
@@ -154,6 +166,7 @@ export function useAIChat() {
 
           const titulo = content.substring(0, 100);
           const now = new Date().toISOString();
+          const costoEstimado = estimateCost(content);
 
           // Create incident in Firestore
           const incidenciaRef = await addDoc(collection(db, 'incidencias'), {
@@ -168,7 +181,7 @@ export function useAIChat() {
             ubicacion: zona,
             estado: 'pendiente',
             estimacion_min: 0,
-            estimacion_max: 0,
+            estimacion_max: costoEstimado,
             created_at: now,
             updated_at: now,
             resuelta_at: null,
@@ -188,7 +201,7 @@ export function useAIChat() {
           const actionMessage: AIMessage = {
             id: actionMessageId,
             role: 'assistant',
-            content: `✅ Incident created successfully!\n\n📍 Location: ${zona}\n⚠️ Priority: ${prioridad}\n🆔 Incident ID: ${incidenciaId.slice(0, 12)}...`,
+            content: `✅ ¡Incidencia registrada!\n\n📍 Zona: ${zona}\n⚠️ Prioridad: ${prioridad}\n💰 Costo estimado: $${costoEstimado.toLocaleString('es-CO')}\n🆔 ID: ${incidenciaId.slice(0, 12)}...`,
             isActionMessage: true,
             data: { id: incidenciaId },
           };
@@ -205,7 +218,7 @@ export function useAIChat() {
 
           crearNotificacionComunidad(perfil.comunidad_id, {
             tipo: 'incidencia',
-            titulo: `New incident reported: ${titulo}`,
+            titulo: `Nueva incidencia reportada: ${titulo}`,
             mensaje: content.substring(0, 200),
             created_by: perfil.id,
             related_id: incidenciaId,
@@ -241,7 +254,7 @@ export function useAIChat() {
             id: assistantMessageId,
             role: 'assistant',
             content:
-              '👋 Hi! I can help you report incidents in your community. Try describing a problem like: "water leak in bathroom", "strange noise in hallway", or "gas smell in kitchen".',
+              '👋 ¡Hola! Puedo ayudarte a reportar incidencias en tu comunidad. Describe el problema, por ejemplo: "hay una fuga de agua en el baño", "huele a gas en el pasillo" o "ruido extraño en el parking".',
           };
 
           setMessages((prev) => [...prev, assistantMessage]);
