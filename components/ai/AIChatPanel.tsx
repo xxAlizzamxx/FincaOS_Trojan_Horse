@@ -58,8 +58,8 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200 bg-white">
           <div>
-            <h3 className="font-semibold text-gray-900 text-sm">AI Assistant</h3>
-            <p className="text-xs text-gray-500">Report issues instantly</p>
+            <h3 className="font-semibold text-gray-900 text-sm">Asistente IA</h3>
+            <p className="text-xs text-gray-500">Reporta incidencias al instante</p>
           </div>
           <button
             onClick={onClose}
@@ -75,8 +75,8 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="text-5xl mb-4">🤖</div>
-              <p className="text-sm font-semibold text-gray-900">AI Assistant</p>
-              <p className="text-xs text-gray-500 mt-1">Describe any issues and I'll help</p>
+              <p className="text-sm font-semibold text-gray-900">Asistente IA</p>
+              <p className="text-xs text-gray-500 mt-1">Hola 👋 Soy tu asistente inteligente. Puedes reportar incidencias y yo las gestionaré automáticamente.</p>
             </div>
           ) : (
             <>
@@ -112,7 +112,7 @@ export function AIChatPanel({ isOpen, onClose }: AIChatPanelProps) {
             <input
               ref={inputRef}
               type="text"
-              placeholder="Describe the problem..."
+              placeholder="Describe el problema..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}

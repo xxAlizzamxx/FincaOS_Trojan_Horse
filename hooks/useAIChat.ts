@@ -21,65 +21,63 @@ function isIncidentReport(message: string): boolean {
   return INCIDENT_KEYWORDS.test(message);
 }
 
-function getPriority(text: string): string {
+// Single source of truth for incident type — all other functions consume this
+function detectTipo(text: string): string {
   const t = text.toLowerCase();
-  if (t.match(/gas|incendio|fuego|fire|explosion/)) return 'urgente';
-  if (t.match(/agua|fuga|leak|flood|inundacion|electrico|electrical|daño|damage/)) return 'alta';
-  if (t.match(/ruido|noise|loud|ruidoso|pest|plaga/)) return 'normal';
-  return 'alta';
+  if (t.match(/gas|fuga de gas|huele a gas/)) return 'gas';
+  if (t.match(/agua|fuga|filtración|filtracion|humedad|inundacion|flood|leak/)) return 'agua';
+  if (t.match(/ruido|sonido|bulla|noise|loud/)) return 'ruido';
+  if (t.match(/electri[ck]|luz|corto|sobrecarga/)) return 'electricidad';
+  if (t.match(/plaga|insecto|rata|cucaracha|pest/)) return 'plaga';
+  return 'general';
 }
 
-function estimateCost(text: string): number {
-  const t = text.toLowerCase();
-  if (t.match(/gas|fuego|incendio/)) return 500000;
-  if (t.match(/agua|fuga|leak|flood|inundacion/)) return 150000;
-  if (t.match(/electrico|electrical/)) return 200000;
-  if (t.match(/ruido|noise/)) return 50000;
-  if (t.match(/pest|plaga/)) return 80000;
-  return 100000;
+function getPriority(tipo: string): string {
+  switch (tipo) {
+    case 'gas':          return 'urgente';
+    case 'agua':         return 'alta';
+    case 'electricidad': return 'alta';
+    case 'plaga':        return 'alta';
+    case 'ruido':        return 'normal';
+    default:             return 'normal';
+  }
+}
+
+function estimateCost(tipo: string): number {
+  switch (tipo) {
+    case 'gas':          return 500000;
+    case 'agua':         return 150000;
+    case 'electricidad': return 200000;
+    case 'plaga':        return 80000;
+    case 'ruido':        return 50000;
+    default:             return 100000;
+  }
 }
 
 function extractIncidentDetails(message: string) {
   const lowerMsg = message.toLowerCase();
+  const tipo_problema = detectTipo(message);
 
-  let categoria_id = 'otros';
-  let tipo_problema = 'general';
+  const CATEGORIA_MAP: Record<string, string> = {
+    gas:          'otros',
+    agua:         'filtraciones',
+    ruido:        'ruido',
+    electricidad: 'daños',
+    plaga:        'plagas',
+    general:      'otros',
+  };
+
   let zona = 'vivienda';
+  if (lowerMsg.match(/parking|garaje|garage/)) zona = 'parking';
+  else if (lowerMsg.match(/pasillo|common|comun|garden|jardin|patio|hallway/)) zona = 'zonas_comunes';
+  else if (lowerMsg.match(/sotano|tejado|atico|basement|roof|attic/)) zona = 'zonas_comunes';
 
-  if (lowerMsg.match(/leak|filtracion|agua|humidity|humedad|flood|inundacion/)) {
-    categoria_id = 'filtraciones';
-    tipo_problema = 'fontaneria';
-  } else if (lowerMsg.match(/noise|ruido|loud|ruidoso/)) {
-    categoria_id = 'ruido';
-    tipo_problema = 'ruido';
-  } else if (lowerMsg.match(/smell|olor|gas/)) {
-    categoria_id = 'otros';
-    tipo_problema = 'gas';
-  } else if (lowerMsg.match(/broken|rotura|damage|daño|fire|fuego/)) {
-    categoria_id = 'daños';
-    tipo_problema = 'general';
-  } else if (lowerMsg.match(/electrical|electrico/)) {
-    categoria_id = 'daños';
-    tipo_problema = 'electricidad';
-  } else if (lowerMsg.match(/heating|calefaccion/)) {
-    categoria_id = 'otros';
-    tipo_problema = 'general';
-  } else if (lowerMsg.match(/pest|plaga/)) {
-    categoria_id = 'plagas';
-    tipo_problema = 'general';
-  }
-
-  if (lowerMsg.match(/parking|garaje|garage/)) {
-    zona = 'parking';
-  } else if (lowerMsg.match(/hallway|pasillo|common|comun|garden|jardin|patio/)) {
-    zona = 'zonas_comunes';
-  } else if (lowerMsg.match(/basement|sotano|roof|tejado|attic|atico/)) {
-    zona = 'zonas_comunes';
-  } else if (lowerMsg.match(/apartment|piso|flat|home|house|casa|vivienda|room|habitacion/)) {
-    zona = 'vivienda';
-  }
-
-  return { categoria_id, tipo_problema, prioridad: getPriority(message), zona };
+  return {
+    categoria_id: CATEGORIA_MAP[tipo_problema] ?? 'otros',
+    tipo_problema,
+    prioridad: getPriority(tipo_problema),
+    zona,
+  };
 }
 
 function getSuggestedCause(tipo: string): string {
@@ -166,7 +164,7 @@ export function useAIChat() {
 
           const titulo = content.substring(0, 100);
           const now = new Date().toISOString();
-          const costoEstimado = estimateCost(content);
+          const costoEstimado = estimateCost(tipo_problema);
 
           // Create incident in Firestore
           const incidenciaRef = await addDoc(collection(db, 'incidencias'), {
@@ -260,7 +258,7 @@ export function useAIChat() {
           setMessages((prev) => [...prev, assistantMessage]);
         }
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
         setError(errorMessage);
 
         const errorMessageId = `msg-${++lastMessageIdRef.current}`;
