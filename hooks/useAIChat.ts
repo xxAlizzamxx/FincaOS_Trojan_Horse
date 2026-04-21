@@ -43,18 +43,17 @@ const MULTIPLIER: Record<string, number> = {
   urgente: 1.2,
 };
 
-// Single source of truth for incident type — all other functions consume this
 function detectTipo(text: string): string {
   const t = text.toLowerCase();
-  if (t.includes('gas'))                                          return 'gas';
-  if (t.includes('ascensor'))                                     return 'ascensor';
-  if (t.includes('electric') || t.includes('luz') || t.includes('corto')) return 'electricidad';
-  if (t.includes('seguridad') || t.includes('robo') || t.includes('cerradura')) return 'seguridad';
-  if (t.includes('puerta'))                                       return 'puerta';
-  if (t.includes('ventana'))                                      return 'ventana';
-  if (t.includes('tuberia') || t.includes('tubería'))             return 'tuberia';
+  if (t.includes('gas'))                                                                             return 'gas';
+  if (t.includes('ascensor'))                                                                        return 'ascensor';
+  if (t.includes('electric') || t.includes('luz') || t.includes('corto'))                          return 'electricidad';
+  if (t.includes('seguridad') || t.includes('robo') || t.includes('cerradura'))                    return 'seguridad';
+  if (t.includes('puerta'))                                                                          return 'puerta';
+  if (t.includes('ventana'))                                                                         return 'ventana';
+  if (t.includes('tuberia') || t.includes('tubería'))                                               return 'tuberia';
   if (t.includes('agua') || t.includes('fuga') || t.includes('filtración') || t.includes('filtracion') || t.includes('humedad') || t.includes('inundacion') || t.includes('leak')) return 'agua';
-  if (t.includes('ruido') || t.includes('sonido') || t.includes('bulla') || t.includes('noise')) return 'ruido';
+  if (t.includes('ruido') || t.includes('sonido') || t.includes('bulla') || t.includes('noise'))  return 'ruido';
   if (t.includes('plaga') || t.includes('insecto') || t.includes('rata') || t.includes('cucaracha')) return 'plaga';
   return 'general';
 }
@@ -110,6 +109,7 @@ function extractIncidentDetails(message: string) {
   const lowerMsg = message.toLowerCase();
   const tipo_problema = detectTipo(message);
 
+  // categoria_id maps to the coarse Firestore category used by the rest of the app
   const CATEGORIA_MAP: Record<string, string> = {
     gas:          'otros',
     agua:         'filtraciones',
@@ -139,29 +139,31 @@ function extractIncidentDetails(message: string) {
 
 function getSuggestedCause(tipo: string): string {
   switch (tipo) {
-    case 'gas':       return 'posible fuga en tubería o válvula';
-    case 'agua':      return 'posible daño en tuberías o presión';
-    case 'ruido':     return 'posible falla mecánica o vibración';
+    case 'gas':          return 'posible fuga en tubería o válvula';
+    case 'agua':         return 'posible daño en tuberías o presión';
+    case 'ruido':        return 'posible falla mecánica o vibración';
     case 'electricidad': return 'posible sobrecarga o corto circuito';
-    case 'fontaneria': return 'posible daño en tuberías o presión';
-    default:          return 'problema recurrente en infraestructura';
+    default:             return 'problema recurrente en infraestructura';
   }
 }
 
-function getThreshold(categoria_id: string): number {
-  return categoria_id === 'gas' ? 2 : 3;
+// Use tipo_problema (fine-grained) for threshold — gas-specific incidents need lower bar
+function getThreshold(tipo_problema: string): number {
+  return tipo_problema === 'gas' ? 2 : 4;
 }
 
 async function analyzePatterns(
   comunidadId: string,
   categoria_id: string,
-  zona: string
+  zona: string,
+  tipo_problema: string,
 ): Promise<{ detected: boolean; count: number; level: 'medium' | 'high' | null }> {
   try {
-    const now = Date.now();
-    const last24h = now - 24 * 60 * 60 * 1000;
+    const last24h = Date.now() - 24 * 60 * 60 * 1000;
 
-    // No orderBy — avoids composite index requirement. Filter client-side.
+    console.log(`[AI PATTERN] Querying: categoria=${categoria_id} zona=${zona} comunidad=${comunidadId}`);
+
+    // Only basic where clauses — no orderBy, no composite index required
     const snap = await getDocs(
       query(
         collection(db, 'incidencias'),
@@ -171,25 +173,78 @@ async function analyzePatterns(
       )
     );
 
+    console.log(`[AI PATTERN] Raw docs fetched: ${snap.size}`);
+
     const filtered = snap.docs.filter((d) => {
       const data = d.data();
       if (!data.created_at) return false;
-      const time: number = typeof data.created_at.toDate === 'function'
-        ? data.created_at.toDate().getTime()
-        : new Date(data.created_at).getTime();
+      let time: number;
+      if (typeof data.created_at.toDate === 'function') {
+        time = data.created_at.toDate().getTime();
+      } else if (typeof data.created_at === 'string') {
+        time = new Date(data.created_at).getTime();
+      } else {
+        return false;
+      }
       return time >= last24h;
     });
 
     const count = filtered.length;
-    const threshold = getThreshold(categoria_id);
-    console.log('Pattern count:', count);
-    console.log('Threshold:', threshold);
+    const threshold = getThreshold(tipo_problema);
+
+    console.log(`[AI PATTERN] categoria: ${categoria_id} zona: ${zona} count: ${count} threshold: ${threshold}`);
 
     if (count >= threshold + 1) return { detected: true, count, level: 'high' };
     if (count >= threshold)     return { detected: true, count, level: 'medium' };
     return { detected: false, count, level: null };
-  } catch {
+  } catch (err) {
+    console.error('[AI PATTERN] analyzePatterns failed:', err);
     return { detected: false, count: 0, level: null };
+  }
+}
+
+async function createAlertIfNeeded(
+  comunidadId: string,
+  categoria_id: string,
+  zona: string,
+  mensaje: string,
+  nivel: 'medium' | 'high',
+): Promise<void> {
+  // Step 1: check for existing active alert (fail-safe — if check fails, still attempt creation)
+  let duplicateExists = false;
+  try {
+    const existing = await getDocs(
+      query(
+        collection(db, 'alertas_globales'),
+        where('comunidad_id', '==', comunidadId),
+        where('categoria_id', '==', categoria_id),
+        where('zona', '==', zona),
+        where('activa', '==', true),
+      )
+    );
+    duplicateExists = !existing.empty;
+    console.log(`[AI ALERT] Duplicate check: ${duplicateExists ? 'DUPLICATE FOUND, skipping' : 'no duplicate'}`);
+  } catch (err) {
+    console.warn('[AI ALERT] Duplicate check failed (will attempt creation anyway):', err);
+  }
+
+  if (duplicateExists) return;
+
+  // Step 2: create the alert
+  try {
+    console.log('[AI ALERT] Creating alert in alertas_globales...');
+    await addDoc(collection(db, 'alertas_globales'), {
+      comunidad_id: comunidadId,
+      categoria_id,
+      zona,
+      mensaje,
+      nivel,
+      activa: true,
+      created_at: serverTimestamp(),
+    });
+    console.log('[AI ALERT] Alert created successfully');
+  } catch (err) {
+    console.error('[ALERTA CREATE ERROR]', err);
   }
 }
 
@@ -211,13 +266,7 @@ export function useAIChat() {
       if (!content.trim()) return;
 
       const userMessageId = `msg-${++lastMessageIdRef.current}`;
-      const userMessage: AIMessage = {
-        id: userMessageId,
-        role: 'user',
-        content: content.trim(),
-      };
-
-      setMessages((prev) => [...prev, userMessage]);
+      setMessages((prev) => [...prev, { id: userMessageId, role: 'user', content: content.trim() }]);
       setLoading(true);
       setError(null);
 
@@ -229,16 +278,13 @@ export function useAIChat() {
         const isIncident = isIncidentReport(content);
 
         if (isIncident) {
-          // Extract incident details
-          const { categoria_id, tipo_problema, prioridad, zona } =
-            extractIncidentDetails(content);
-
+          const { categoria_id, tipo_problema, prioridad, zona } = extractIncidentDetails(content);
           const titulo = content.substring(0, 100);
           const now = new Date().toISOString();
           const costoEstimado = estimateCost(tipo_problema, prioridad);
           const recomendacion = getRecommendation(tipo_problema);
 
-          // Create incident in Firestore
+          // Create incident
           const incidenciaRef = await addDoc(collection(db, 'incidencias'), {
             comunidad_id: perfil.comunidad_id,
             autor_id: perfil.id,
@@ -268,23 +314,23 @@ export function useAIChat() {
 
           const incidenciaId = incidenciaRef.id;
 
-          const actionMessageId = `msg-${++lastMessageIdRef.current}`;
-          const actionMessage: AIMessage = {
-            id: actionMessageId,
-            role: 'assistant',
-            content: `✅ Incidencia creada\n\n💰 Costo estimado: $${costoEstimado.toLocaleString('es-CO')}\n⚠️ Prioridad: ${prioridad}\n\n💡 Recomendación:\n${recomendacion}`,
-            isActionMessage: true,
-            data: { id: incidenciaId },
-          };
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-${++lastMessageIdRef.current}`,
+              role: 'assistant',
+              content: `✅ Incidencia creada\n\n💰 Costo estimado: $${costoEstimado.toLocaleString('es-CO')}\n⚠️ Prioridad: ${prioridad}\n\n💡 Recomendación:\n${recomendacion}`,
+              isActionMessage: true,
+              data: { id: incidenciaId },
+            },
+          ]);
 
-          setMessages((prev) => [...prev, actionMessage]);
-
-          // Fire-and-forget secondary operations
+          // Fire-and-forget: afectados + community notification
           setDoc(
             doc(db, 'incidencias', incidenciaId, 'afectados', perfil.id),
-            { coeficiente: 1, added_at: now, es_autor: true }
+            { coeficiente: 1, added_at: now, es_autor: true },
           ).catch((err) => {
-            console.error('[FIRESTORE WRITE FAILED] afectados subcollection:', err?.code, err?.message);
+            console.error('[FIRESTORE WRITE FAILED] afectados:', err?.code, err?.message);
           });
 
           crearNotificacionComunidad(perfil.comunidad_id, {
@@ -298,94 +344,87 @@ export function useAIChat() {
             console.error('[FIRESTORE WRITE FAILED] notification:', err?.message ?? err);
           });
 
-          // Proactive pattern analysis (fire-and-forget, never blocks chat)
+          // Pattern analysis — fire-and-forget, never blocks chat
           const patternKey = `${categoria_id}-${zona}`;
           if (!triggeredPatternsRef.current.has(patternKey)) {
-            analyzePatterns(perfil.comunidad_id, categoria_id, zona).then(async (pattern) => {
-              if (!pattern.detected) return;
-              triggeredPatternsRef.current.add(patternKey);
+            console.log(`[AI PATTERN] Starting analysis for key: ${patternKey}`);
 
-              const levelEmoji = pattern.level === 'high' ? '🔴' : '🟡';
-              const cause = getSuggestedCause(tipo_problema);
-              const alertMsg = `⚠️ Se han detectado múltiples incidencias de ${categoria_id} en ${zona}. Posible problema recurrente. Se recomienda revisión preventiva.`;
+            analyzePatterns(perfil.comunidad_id, categoria_id, zona, tipo_problema)
+              .then(async (pattern) => {
+                console.log('[AI PATTERN] Result:', pattern);
 
-              // Show proactive chat message
-              const proactiveId = `msg-${++lastMessageIdRef.current}`;
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: proactiveId,
-                  role: 'assistant',
-                  content: `${levelEmoji} He detectado ${pattern.count} incidencias similares (${categoria_id}) en ${zona} en las últimas 24h.\nPosible causa: ${cause}.\n${alertMsg}`,
-                  isProactive: true,
-                },
-              ]);
+                if (!pattern.detected) return;
 
-              // Persist global alert in Firestore (skip if active duplicate exists)
-              getDocs(
-                query(
-                  collection(db, 'alertas_globales'),
-                  where('categoria_id', '==', categoria_id),
-                  where('zona', '==', zona),
-                  where('activa', '==', true),
-                  where('comunidad_id', '==', perfil.comunidad_id),
-                )
-              ).then((existing) => {
-                if (!existing.empty) return;
-                return addDoc(collection(db, 'alertas_globales'), {
-                  categoria_id,
-                  zona,
-                  comunidad_id: perfil.comunidad_id,
-                  mensaje: alertMsg,
-                  activa: true,
-                  created_at: serverTimestamp(),
+                // Mark as triggered to avoid re-triggering in same session
+                triggeredPatternsRef.current.add(patternKey);
+
+                const levelEmoji = pattern.level === 'high' ? '🔴' : '🟡';
+                const cause = getSuggestedCause(tipo_problema);
+                const alertMsg = `Se han detectado ${pattern.count} incidencias de ${categoria_id} en zona "${zona}" en las últimas 24h. Posible causa: ${cause}. Se recomienda revisión preventiva.`;
+
+                // Show proactive chat message
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `msg-${++lastMessageIdRef.current}`,
+                    role: 'assistant',
+                    content: `${levelEmoji} Patrón detectado: ${pattern.count} incidencias de ${categoria_id} en ${zona} (últimas 24h).\nPosible causa: ${cause}.\n💡 ${getRecommendation(tipo_problema)}`,
+                    isProactive: true,
+                  },
+                ]);
+
+                // Persist alert (with duplicate check)
+                if (perfil?.comunidad_id) {
+                  await createAlertIfNeeded(
+                    perfil.comunidad_id,
+                    categoria_id,
+                    zona,
+                    alertMsg,
+                    pattern.level!,
+                  );
+                }
+
+                // Email — non-blocking
+                console.log('[EMAIL ALERT TRIGGERED]', { categoria_id, zona });
+                fetch('/api/alerta-email', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ categoria: categoria_id, zona, mensaje: alertMsg }),
+                }).catch((err) => {
+                  console.error('[EMAIL ALERT ERROR]', err);
                 });
-              }).catch(() => {});
-
-              // Send email notification (fire-and-forget)
-              fetch('/api/alerta-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ categoria: categoria_id, zona, mensaje: alertMsg }),
-              }).catch(() => {});
-            }).catch(() => {});
+              })
+              .catch((err) => {
+                console.error('[AI PATTERN] Unexpected error in pattern chain:', err);
+              });
           }
         } else {
-          // Generic helpful response
-          const assistantMessageId = `msg-${++lastMessageIdRef.current}`;
-          const assistantMessage: AIMessage = {
-            id: assistantMessageId,
-            role: 'assistant',
-            content:
-              '👋 ¡Hola! Puedo ayudarte a reportar incidencias en tu comunidad. Describe el problema, por ejemplo: "hay una fuga de agua en el baño", "huele a gas en el pasillo" o "ruido extraño en el parking".',
-          };
-
-          setMessages((prev) => [...prev, assistantMessage]);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-${++lastMessageIdRef.current}`,
+              role: 'assistant',
+              content: '👋 ¡Hola! Puedo ayudarte a reportar incidencias en tu comunidad. Describe el problema, por ejemplo: "hay una fuga de agua en el baño", "huele a gas en el pasillo" o "ruido extraño en el parking".',
+            },
+          ]);
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
         setError(errorMessage);
-
-        const errorMessageId = `msg-${++lastMessageIdRef.current}`;
-        const errorMsg: AIMessage = {
-          id: errorMessageId,
-          role: 'system',
-          content: `❌ Error: ${errorMessage}`,
-        };
-
-        setMessages((prev) => [...prev, errorMsg]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg-${++lastMessageIdRef.current}`,
+            role: 'system',
+            content: `❌ Error: ${errorMessage}`,
+          },
+        ]);
       } finally {
         setLoading(false);
       }
     },
-    [perfil]
+    [perfil],
   );
 
-  return {
-    messages,
-    loading,
-    error,
-    sendMessage,
-    clearMessages,
-  };
+  return { messages, loading, error, sendMessage, clearMessages };
 }

@@ -11,7 +11,8 @@ interface Alerta {
   categoria_id: string;
   zona: string;
   mensaje: string;
-  created_at?: string;
+  nivel?: 'medium' | 'high';
+  created_at?: unknown;
 }
 
 export function AlertaGlobalBanner() {
@@ -21,23 +22,34 @@ export function AlertaGlobalBanner() {
   useEffect(() => {
     if (!perfil?.comunidad_id) return;
 
+    console.log('[ALERT BANNER] Subscribing to alertas_globales for comunidad:', perfil.comunidad_id);
+
     const q = query(
       collection(db, 'alertas_globales'),
       where('activa', '==', true),
       where('comunidad_id', '==', perfil.comunidad_id),
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      setAlertas(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() } as Alerta)),
-      );
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Alerta));
+        console.log('[ALERT BANNER] Snapshot received, active alerts:', data.length);
+        setAlertas(data);
+      },
+      (error) => {
+        console.error('[ALERT SNAPSHOT ERROR]', error.code, error.message);
+      },
+    );
 
     return () => unsub();
   }, [perfil?.comunidad_id]);
 
   const dismiss = (id: string) => {
-    updateDoc(doc(db, 'alertas_globales', id), { activa: false }).catch(() => {});
+    console.log('[ALERT BANNER] Dismissing alert:', id);
+    updateDoc(doc(db, 'alertas_globales', id), { activa: false }).catch((err) => {
+      console.error('[ALERT BANNER] Dismiss failed:', err);
+    });
   };
 
   if (alertas.length === 0) return null;
