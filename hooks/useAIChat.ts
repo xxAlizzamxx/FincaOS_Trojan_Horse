@@ -21,18 +21,18 @@ function isIncidentReport(message: string): boolean {
   return INCIDENT_KEYWORDS.test(message);
 }
 
-const COST_TABLE: Record<string, number> = {
-  gas:          120000,
-  agua:          80000,
-  tuberia:       90000,
-  electricidad: 150000,
-  ascensor:     250000,
-  ruido:         30000,
-  seguridad:    100000,
-  puerta:        70000,
-  ventana:       60000,
-  plaga:         60000,
-  default:       60000,
+const COSTOS_BASE: Record<string, number> = {
+  agua:          120000,
+  gas:           250000,
+  electricidad:  180000,
+  ruido:          50000,
+  tuberia:        90000,
+  ascensor:      200000,
+  seguridad:     100000,
+  puerta:         70000,
+  ventana:        60000,
+  plaga:          60000,
+  general:       100000,
 };
 
 // Single source of truth for incident type — all other functions consume this
@@ -67,8 +67,11 @@ function getPriority(tipo: string): string {
   }
 }
 
-function estimateCost(tipo: string): number {
-  return COST_TABLE[tipo] ?? COST_TABLE.default;
+function estimateCost(tipo: string, prioridad: string): number {
+  const base = COSTOS_BASE[tipo] ?? COSTOS_BASE.general;
+  if (prioridad === 'urgente' || prioridad === 'alta') return Math.round(base * 1.2);
+  if (prioridad === 'normal') return base;
+  return base;
 }
 
 function getRecommendation(tipo: string): string {
@@ -141,24 +144,24 @@ function getSuggestedCause(tipo: string): string {
 
 async function analyzePatterns(
   comunidadId: string,
-  tipo: string,
-  zona?: string
+  categoria: string,
+  zona: string
 ): Promise<{ detected: boolean; count: number; level: 'medium' | 'high' | null }> {
   try {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const last24h = Date.now() - 24 * 60 * 60 * 1000;
     const constraints = [
       where('comunidad_id', '==', comunidadId),
-      where('tipo_problema', '==', tipo),
+      where('categoria_id', '==', categoria),
+      where('zona', '==', zona),
     ];
-    if (zona) constraints.push(where('zona', '==', zona));
 
     const snap = await getDocs(query(collection(db, 'incidencias'), ...constraints));
 
-    // Filter by last 24h manually (avoids composite index requirement)
     const recent = snap.docs.filter((d) => {
       const ca = d.data().created_at;
-      const dateStr = ca?.toDate ? ca.toDate().toISOString() : ca;
-      return typeof dateStr === 'string' && dateStr >= since;
+      // Handle both Firestore Timestamp and ISO string
+      const ms = ca?.toMillis?.() ?? (typeof ca === 'string' ? new Date(ca).getTime() : 0);
+      return ms >= last24h;
     });
 
     const count = recent.length;
@@ -212,7 +215,7 @@ export function useAIChat() {
 
           const titulo = content.substring(0, 100);
           const now = new Date().toISOString();
-          const costoEstimado = estimateCost(tipo_problema);
+          const costoEstimado = estimateCost(tipo_problema, prioridad);
           const recomendacion = getRecommendation(tipo_problema);
 
           // Create incident in Firestore
@@ -276,23 +279,44 @@ export function useAIChat() {
           });
 
           // Proactive pattern analysis (fire-and-forget, never blocks chat)
-          const patternKey = `${tipo_problema}:${zona}`;
+          const patternKey = `${categoria_id}-${zona}`;
           if (!triggeredPatternsRef.current.has(patternKey)) {
-            analyzePatterns(perfil.comunidad_id, tipo_problema, zona).then((pattern) => {
+            analyzePatterns(perfil.comunidad_id, categoria_id, zona).then(async (pattern) => {
               if (!pattern.detected) return;
               triggeredPatternsRef.current.add(patternKey);
-              const cause = getSuggestedCause(tipo_problema);
+
               const levelEmoji = pattern.level === 'high' ? '🔴' : '🟡';
+              const cause = getSuggestedCause(tipo_problema);
+              const alertMsg = `⚠️ Se han detectado múltiples incidencias de ${categoria_id} en ${zona}. Posible problema recurrente. Se recomienda revisión preventiva.`;
+
+              // Show proactive chat message
               const proactiveId = `msg-${++lastMessageIdRef.current}`;
               setMessages((prev) => [
                 ...prev,
                 {
                   id: proactiveId,
                   role: 'assistant',
-                  content: `${levelEmoji} He detectado ${pattern.count} incidencias similares en las últimas 24h.\nPosible causa: ${cause}.\nRecomendación: revisar infraestructura o contactar mantenimiento en ${zona || 'la comunidad'}.`,
+                  content: `${levelEmoji} He detectado ${pattern.count} incidencias similares (${categoria_id}) en ${zona} en las últimas 24h.\nPosible causa: ${cause}.\n${alertMsg}`,
                   isProactive: true,
                 },
               ]);
+
+              // Persist global alert in Firestore
+              addDoc(collection(db, 'alertas_globales'), {
+                categoria: categoria_id,
+                zona,
+                mensaje: alertMsg,
+                comunidad_id: perfil.comunidad_id,
+                createdAt: new Date().toISOString(),
+                activa: true,
+              }).catch(() => {});
+
+              // Send email notification (fire-and-forget)
+              fetch('/api/alerta-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ categoria: categoria_id, zona, mensaje: alertMsg }),
+              }).catch(() => {});
             }).catch(() => {});
           }
         } else {

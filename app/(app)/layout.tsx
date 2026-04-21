@@ -8,6 +8,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { BottomTabBar } from '@/components/layout/BottomTabBar';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 import { PageTransition } from '@/components/animation/PageTransition';
+import { AlertaGlobalBanner } from '@/components/ai/AlertaGlobalBanner';
 import { useAuth } from '@/hooks/useAuth';
 
 // ── Public routes ─────────────────────────────────────────────────────────────
@@ -125,6 +126,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // ── Full app layout ────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <AlertaGlobalBanner />
       <AppHeader />
       <PushNotificationPrompt />
       <main className="flex-1 overflow-y-auto pb-safe max-w-lg mx-auto w-full">
