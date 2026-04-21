@@ -21,36 +21,79 @@ function isIncidentReport(message: string): boolean {
   return INCIDENT_KEYWORDS.test(message);
 }
 
+const COST_TABLE: Record<string, number> = {
+  gas:          120000,
+  agua:          80000,
+  tuberia:       90000,
+  electricidad: 150000,
+  ascensor:     250000,
+  ruido:         30000,
+  seguridad:    100000,
+  puerta:        70000,
+  ventana:       60000,
+  plaga:         60000,
+  default:       60000,
+};
+
 // Single source of truth for incident type — all other functions consume this
 function detectTipo(text: string): string {
   const t = text.toLowerCase();
-  if (t.match(/gas|fuga de gas|huele a gas/)) return 'gas';
-  if (t.match(/agua|fuga|filtración|filtracion|humedad|inundacion|flood|leak/)) return 'agua';
-  if (t.match(/ruido|sonido|bulla|noise|loud/)) return 'ruido';
-  if (t.match(/electri[ck]|luz|corto|sobrecarga/)) return 'electricidad';
-  if (t.match(/plaga|insecto|rata|cucaracha|pest/)) return 'plaga';
+  if (t.includes('gas'))                                          return 'gas';
+  if (t.includes('ascensor'))                                     return 'ascensor';
+  if (t.includes('electric') || t.includes('luz') || t.includes('corto')) return 'electricidad';
+  if (t.includes('seguridad') || t.includes('robo') || t.includes('cerradura')) return 'seguridad';
+  if (t.includes('puerta'))                                       return 'puerta';
+  if (t.includes('ventana'))                                      return 'ventana';
+  if (t.includes('tuberia') || t.includes('tubería'))             return 'tuberia';
+  if (t.includes('agua') || t.includes('fuga') || t.includes('filtración') || t.includes('filtracion') || t.includes('humedad') || t.includes('inundacion') || t.includes('leak')) return 'agua';
+  if (t.includes('ruido') || t.includes('sonido') || t.includes('bulla') || t.includes('noise')) return 'ruido';
+  if (t.includes('plaga') || t.includes('insecto') || t.includes('rata') || t.includes('cucaracha')) return 'plaga';
   return 'general';
 }
 
 function getPriority(tipo: string): string {
   switch (tipo) {
     case 'gas':          return 'urgente';
-    case 'agua':         return 'alta';
     case 'electricidad': return 'alta';
+    case 'seguridad':    return 'alta';
+    case 'ascensor':     return 'alta';
+    case 'agua':         return 'alta';
+    case 'tuberia':      return 'alta';
     case 'plaga':        return 'alta';
     case 'ruido':        return 'normal';
+    case 'puerta':       return 'normal';
+    case 'ventana':      return 'normal';
     default:             return 'normal';
   }
 }
 
 function estimateCost(tipo: string): number {
+  return COST_TABLE[tipo] ?? COST_TABLE.default;
+}
+
+function getRecommendation(tipo: string): string {
   switch (tipo) {
-    case 'gas':          return 500000;
-    case 'agua':         return 150000;
-    case 'electricidad': return 200000;
-    case 'plaga':        return 80000;
-    case 'ruido':        return 50000;
-    default:             return 100000;
+    case 'gas':
+      return '⚠️ Evacuar el área inmediatamente y evitar encender dispositivos eléctricos. Llamar a la empresa de gas.';
+    case 'agua':
+    case 'tuberia':
+      return '💧 Cerrar la llave de paso si es posible para evitar daños mayores.';
+    case 'electricidad':
+      return '⚡ Cortar la energía desde el tablero principal por seguridad. No tocar cables expuestos.';
+    case 'ascensor':
+      return '🛗 Evitar su uso y reportar a mantenimiento inmediatamente. Colocar aviso visible.';
+    case 'ruido':
+      return '🔊 Registrar los horarios del ruido para facilitar la gestión administrativa.';
+    case 'seguridad':
+      return '🔒 Informar al administrador y no manipular la cerradura o área afectada.';
+    case 'puerta':
+      return '🚪 No forzar el mecanismo. Esperar revisión del personal técnico.';
+    case 'ventana':
+      return '🪟 Si hay riesgo de caída de vidrios, acordonar el área por seguridad.';
+    case 'plaga':
+      return '🐛 Evitar contacto directo y no usar pesticidas sin autorización del administrador.';
+    default:
+      return 'ℹ️ Se recomienda esperar la revisión del personal técnico.';
   }
 }
 
@@ -61,8 +104,13 @@ function extractIncidentDetails(message: string) {
   const CATEGORIA_MAP: Record<string, string> = {
     gas:          'otros',
     agua:         'filtraciones',
+    tuberia:      'filtraciones',
     ruido:        'ruido',
     electricidad: 'daños',
+    ascensor:     'otros',
+    seguridad:    'otros',
+    puerta:       'daños',
+    ventana:      'daños',
     plaga:        'plagas',
     general:      'otros',
   };
@@ -165,6 +213,7 @@ export function useAIChat() {
           const titulo = content.substring(0, 100);
           const now = new Date().toISOString();
           const costoEstimado = estimateCost(tipo_problema);
+          const recomendacion = getRecommendation(tipo_problema);
 
           // Create incident in Firestore
           const incidenciaRef = await addDoc(collection(db, 'incidencias'), {
@@ -180,6 +229,7 @@ export function useAIChat() {
             estado: 'pendiente',
             estimacion_min: 0,
             estimacion_max: costoEstimado,
+            recomendacion,
             created_at: now,
             updated_at: now,
             resuelta_at: null,
@@ -199,7 +249,7 @@ export function useAIChat() {
           const actionMessage: AIMessage = {
             id: actionMessageId,
             role: 'assistant',
-            content: `✅ ¡Incidencia registrada!\n\n📍 Zona: ${zona}\n⚠️ Prioridad: ${prioridad}\n💰 Costo estimado: $${costoEstimado.toLocaleString('es-CO')}\n🆔 ID: ${incidenciaId.slice(0, 12)}...`,
+            content: `✅ ¡Incidencia registrada!\n\n📍 Zona: ${zona}\n⚠️ Prioridad: ${prioridad}\n💰 Costo estimado: $${costoEstimado.toLocaleString('es-CO')}\n\n📌 Recomendación:\n${recomendacion}\n\n🆔 ID: ${incidenciaId.slice(0, 12)}...`,
             isActionMessage: true,
             data: { id: incidenciaId },
           };
