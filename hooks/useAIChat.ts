@@ -165,8 +165,9 @@ export function useAIChat() {
           crearNotificacionComunidad(user.comunidad_id, {
             tipo: 'incidencia',
             titulo: `New incident reported: ${titulo}`,
-            descripcion: content,
-            relatedId: incidenciaId,
+            mensaje: content.substring(0, 200),
+            created_by: user.id,
+            related_id: incidenciaId,
             link: `/incidencias/${incidenciaId}`,
           }).catch((err) => {
             console.error('[FIRESTORE WRITE FAILED] notification:', err?.message ?? err);
