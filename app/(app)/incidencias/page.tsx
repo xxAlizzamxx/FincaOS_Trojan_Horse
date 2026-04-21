@@ -54,7 +54,13 @@ export default function IncidenciasPage() {
       console.log('[Incidencias] encontradas:', snap.size, '| vecinos:', vecinosSnap.size);
       setTotalVecinos(vecinosSnap.size);
 
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const items = snap.docs.map(d => {
+        const data = d.data();
+        // Normalize Firestore Timestamps to ISO strings
+        if (data.created_at?.toDate) data.created_at = data.created_at.toDate().toISOString();
+        if (data.updated_at?.toDate) data.updated_at = data.updated_at.toDate().toISOString();
+        return { id: d.id, ...data };
+      });
 
       const enriched = await Promise.all(
         items.map(async (inc: any) => {
