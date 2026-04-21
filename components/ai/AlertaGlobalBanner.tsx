@@ -8,7 +8,7 @@ import { X } from 'lucide-react';
 
 interface Alerta {
   id: string;
-  categoria: string;
+  categoria_id: string;
   zona: string;
   mensaje: string;
   createdAt: string;

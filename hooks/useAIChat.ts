@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { collection, addDoc, setDoc, doc, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, setDoc, doc, getDocs, query, where, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { useAuth } from '@/hooks/useAuth';
@@ -149,24 +149,30 @@ async function analyzePatterns(
 ): Promise<{ detected: boolean; count: number; level: 'medium' | 'high' | null }> {
   try {
     const last24h = Date.now() - 24 * 60 * 60 * 1000;
-    const constraints = [
-      where('comunidad_id', '==', comunidadId),
-      where('categoria_id', '==', categoria),
-      where('zona', '==', zona),
-    ];
 
-    const snap = await getDocs(query(collection(db, 'incidencias'), ...constraints));
+    const snap = await getDocs(
+      query(
+        collection(db, 'incidencias'),
+        where('comunidad_id', '==', comunidadId),
+        where('categoria_id', '==', categoria),
+        where('zona', '==', zona),
+        orderBy('created_at', 'desc'),
+        limit(20),
+      )
+    );
 
     const recent = snap.docs.filter((d) => {
       const ca = d.data().created_at;
-      // Handle both Firestore Timestamp and ISO string
       const ms = ca?.toMillis?.() ?? (typeof ca === 'string' ? new Date(ca).getTime() : 0);
       return ms >= last24h;
     });
 
     const count = recent.length;
-    if (count >= 5) return { detected: true, count, level: 'high' };
-    if (count >= 3) return { detected: true, count, level: 'medium' };
+    const threshold = categoria === 'gas' ? 2 : 4;
+    console.log('Patrón detectado:', count, 'threshold:', threshold, categoria, zona);
+
+    if (count >= threshold + 1) return { detected: true, count, level: 'high' };
+    if (count >= threshold)     return { detected: true, count, level: 'medium' };
     return { detected: false, count, level: null };
   } catch {
     return { detected: false, count: 0, level: null };
@@ -301,14 +307,25 @@ export function useAIChat() {
                 },
               ]);
 
-              // Persist global alert in Firestore
-              addDoc(collection(db, 'alertas_globales'), {
-                categoria: categoria_id,
-                zona,
-                mensaje: alertMsg,
-                comunidad_id: perfil.comunidad_id,
-                createdAt: new Date().toISOString(),
-                activa: true,
+              // Persist global alert in Firestore (skip if active duplicate exists)
+              getDocs(
+                query(
+                  collection(db, 'alertas_globales'),
+                  where('categoria_id', '==', categoria_id),
+                  where('zona', '==', zona),
+                  where('activa', '==', true),
+                  where('comunidad_id', '==', perfil.comunidad_id),
+                )
+              ).then((existing) => {
+                if (!existing.empty) return;
+                return addDoc(collection(db, 'alertas_globales'), {
+                  categoria_id,
+                  zona,
+                  mensaje: alertMsg,
+                  comunidad_id: perfil.comunidad_id,
+                  createdAt: serverTimestamp(),
+                  activa: true,
+                });
               }).catch(() => {});
 
               // Send email notification (fire-and-forget)
