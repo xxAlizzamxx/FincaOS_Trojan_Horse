@@ -118,7 +118,11 @@ export default function IncidenciaDetailPage() {
         return;
       }
 
-      const incData: any = { id: snap.id, ...snap.data() };
+      const rawData = snap.data() as any;
+      if (rawData.created_at?.toDate) rawData.created_at = rawData.created_at.toDate().toISOString();
+      if (rawData.updated_at?.toDate) rawData.updated_at = rawData.updated_at.toDate().toISOString();
+      if (rawData.resuelta_at?.toDate) rawData.resuelta_at = rawData.resuelta_at.toDate().toISOString();
+      const incData: any = { id: snap.id, ...rawData };
 
       // Enriquece autor y categoría sólo la primera vez (o si cambia autor/categoría)
       if (!enrichmentRef.current ||
