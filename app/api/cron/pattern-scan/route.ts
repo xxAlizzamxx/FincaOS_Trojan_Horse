@@ -32,6 +32,7 @@ import { getAdminDb }                from '@/lib/firebase/admin';
 import {
   detectPatterns,
   saveInsights,
+  autoEscalarZonaCaliente,
   sendZonaCalienteNotifications,
 } from '@/lib/ai/patternEngine';
 import { createLogger } from '@/lib/logger';
@@ -45,13 +46,15 @@ const MAX_COMUNIDADES = 50;
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface ComunidadResult {
-  comunidad_id:    string;
-  patrones:        number;
-  zonas_calientes: string[];
-  notif_sent:      string[];
-  notif_skipped:   string[];
-  duration_ms:     number;
-  error?:          string;
+  comunidad_id:        string;
+  patrones:            number;
+  zonas_calientes:     string[];
+  score_riesgo_global: number;
+  escalated_total:     number;
+  notif_sent:          string[];
+  notif_skipped:       string[];
+  duration_ms:         number;
+  error?:              string;
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -106,19 +109,29 @@ export async function GET(req: NextRequest) {
       // 3b. Persist insights (never throws)
       await saveInsights(comunidadId, patternResult);
 
-      // 3c. Notify for newly detected zona_caliente (anti-spam built-in, never throws)
+      // 3c. Auto-escalate every zona_caliente to urgente (never throws)
+      const escalationResults = await Promise.all(
+        patternResult.patrones
+          .filter(p => p.type === 'zona_caliente')
+          .map(p => autoEscalarZonaCaliente(comunidadId, p.zona)),
+      );
+      const escalatedTotal = escalationResults.reduce((n, r) => n + r.escalated, 0);
+
+      // 3d. Notify for newly detected zona_caliente (anti-spam built-in, never throws)
       const notifResult = await sendZonaCalienteNotifications(
         comunidadId,
         patternResult.patrones,
       );
 
       const result: ComunidadResult = {
-        comunidad_id:    comunidadId,
-        patrones:        patternResult.patrones.length,
-        zonas_calientes: patternResult.zonas_calientes,
-        notif_sent:      notifResult.sent,
-        notif_skipped:   notifResult.skipped,
-        duration_ms:     Date.now() - t0,
+        comunidad_id:        comunidadId,
+        patrones:            patternResult.patrones.length,
+        zonas_calientes:     patternResult.zonas_calientes,
+        score_riesgo_global: patternResult.score_riesgo_global,
+        escalated_total:     escalatedTotal,
+        notif_sent:          notifResult.sent,
+        notif_skipped:       notifResult.skipped,
+        duration_ms:         Date.now() - t0,
       };
 
       results.push(result);
@@ -126,12 +139,14 @@ export async function GET(req: NextRequest) {
       // Structured log per community (one line each, parseable by Vercel Logs)
       if (patternResult.patrones.length > 0 || notifResult.sent.length > 0) {
         log.warn('pattern_detected', {
-          comunidad_id:    comunidadId,
-          patrones:        patternResult.patrones.length,
-          zonas_calientes: patternResult.zonas_calientes,
-          notif_sent:      notifResult.sent,
-          notif_skipped:   notifResult.skipped,
-          duration_ms:     result.duration_ms,
+          comunidad_id:        comunidadId,
+          patrones:            patternResult.patrones.length,
+          zonas_calientes:     patternResult.zonas_calientes,
+          score_riesgo_global: patternResult.score_riesgo_global,
+          escalated_total:     escalatedTotal,
+          notif_sent:          notifResult.sent,
+          notif_skipped:       notifResult.skipped,
+          duration_ms:         result.duration_ms,
         });
       } else {
         log.info('pattern_scan_ok', {
@@ -144,32 +159,36 @@ export async function GET(req: NextRequest) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       log.error('pattern_scan_community_failed', err, { comunidad_id: comunidadId });
       results.push({
-        comunidad_id:    comunidadId,
-        patrones:        0,
-        zonas_calientes: [],
-        notif_sent:      [],
-        notif_skipped:   [],
-        duration_ms:     Date.now() - t0,
-        error:           errorMsg,
+        comunidad_id:        comunidadId,
+        patrones:            0,
+        zonas_calientes:     [],
+        score_riesgo_global: 0,
+        escalated_total:     0,
+        notif_sent:          [],
+        notif_skipped:       [],
+        duration_ms:         Date.now() - t0,
+        error:               errorMsg,
       });
     }
   }
 
   // ── 4. Summary ────────────────────────────────────────────────────────────
-  const totalPatrones    = results.reduce((n, r) => n + r.patrones, 0);
-  const totalNotifSent   = results.reduce((n, r) => n + r.notif_sent.length, 0);
-  const totalErrors      = results.filter(r => r.error).length;
-  const totalDuration    = Date.now() - runStart;
+  const totalPatrones   = results.reduce((n, r) => n + r.patrones, 0);
+  const totalEscalated  = results.reduce((n, r) => n + r.escalated_total, 0);
+  const totalNotifSent  = results.reduce((n, r) => n + r.notif_sent.length, 0);
+  const totalErrors     = results.filter(r => r.error).length;
+  const totalDuration   = Date.now() - runStart;
 
   log.finish(true, 200);
 
   return NextResponse.json({
-    ok:          true,
-    processed:   comunidadIds.length,
-    patrones:    totalPatrones,
-    notif_sent:  totalNotifSent,
-    errors:      totalErrors,
-    duration_ms: totalDuration,
+    ok:              true,
+    processed:       comunidadIds.length,
+    patrones:        totalPatrones,
+    escalated_total: totalEscalated,
+    notif_sent:      totalNotifSent,
+    errors:          totalErrors,
+    duration_ms:     totalDuration,
     results,
   });
 }

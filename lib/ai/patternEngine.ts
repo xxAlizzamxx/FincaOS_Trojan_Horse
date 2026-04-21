@@ -3,10 +3,11 @@
  *
  * Core pattern-detection engine for FincaOS.
  *
- * Three public functions:
+ * Exported functions:
  *   extractPatterns(incidencias, ts) → PatternEngineResult   — pure, no I/O
  *   detectPatterns(comunidadId)      → PatternEngineResult   — reads Firestore
  *   saveInsights(comunidadId, result)                        — writes Firestore (merge)
+ *   autoEscalarZonaCaliente(comunidadId, zona)               — escalates open incidencias to urgente
  *   sendZonaCalienteNotifications(comunidadId, patrones)     — push + in-app (Admin SDK)
  *
  * Design principles:
@@ -48,9 +49,10 @@ export interface PatronDetectado {
 }
 
 export interface PatternEngineResult {
-  patrones:       PatronDetectado[];
-  zonas_calientes: string[];
-  generado_at:    string;
+  patrones:            PatronDetectado[];
+  zonas_calientes:     string[];
+  generado_at:         string;
+  score_riesgo_global: number;   // 0–100: <30 estable · 30–70 atención · >70 crítico
 }
 
 export interface NotificationResult {
@@ -58,28 +60,81 @@ export interface NotificationResult {
   skipped: string[];   // zonas that were in cooldown
 }
 
+export interface EscalationResult {
+  zona:      string;
+  escalated: number;   // number of incidencias updated to urgente
+}
+
+// ── Helpers (pure) ───────────────────────────────────────────────────────────
+
+/**
+ * Returns an actionable message for the given zone and incidencia count.
+ * Replaces the inline template literals to keep messages consistent across
+ * the widget, notifications, and Firestore documents.
+ */
+function generarMensaje(zona: string, count: number): string {
+  if (count >= 5) {
+    return (
+      `⚠️ Situación crítica en zona ${zona}. ` +
+      `Se detectaron ${count} incidencias. Posible problema estructural. ` +
+      `Se recomienda intervención inmediata y contacto con proveedor.`
+    );
+  }
+  return (
+    `Se detectaron ${count} incidencias en zona ${zona}. ` +
+    `Se recomienda inspección preventiva en las próximas 24h para evitar escalamiento.`
+  );
+}
+
+/**
+ * Calculates a 0–100 community risk score.
+ *
+ *   score = (totalOpenIncidencias × 5) + (zonasCalientes.length × 20)
+ *   capped at 100
+ *
+ * Interpretation:
+ *   🟢  < 30 → estable
+ *   🟡 30–70 → atención
+ *   🔴  > 70 → crítico
+ */
+function calcularScoreRiesgo(
+  totalOpenIncidencias: number,
+  zonasCalientes:       string[],
+): number {
+  const score = totalOpenIncidencias * 5 + zonasCalientes.length * 20;
+  return Math.min(100, score);
+}
+
 // ── 1. Pure pattern extraction (no I/O) ─────────────────────────────────────
 
 /**
  * Given a flat list of Firestore incidencia data objects, detects zona_caliente
- * patterns and returns a structured result.
+ * patterns and returns a structured result including the global risk score.
  *
  * Pure function — no side effects, easy to unit-test.
+ *
+ * Count fix: uses String() coercion so zona values stored as numbers are
+ * counted correctly instead of being silently dropped.
  */
 export function extractPatterns(
   incidencias: Array<Record<string, unknown>>,
   generado_at: string,
 ): PatternEngineResult {
-  // Count open incidencias per zone
+  // ── Count open incidencias per zone ───────────────────────────────────────
+  // Using String() coercion (not `typeof === 'string'`) so numeric zona values
+  // are never silently skipped — that was the source of the off-by-one bug.
   const byZona: Record<string, number> = {};
 
   for (const inc of incidencias) {
-    const zona = typeof inc.zona === 'string' ? inc.zona.trim() : null;
-    // Skip incidencias without zone information (legacy docs)
+    const raw  = inc.zona;
+    // Skip docs with no zona field at all (null / undefined)
+    if (raw == null) continue;
+    const zona = String(raw).trim();
     if (!zona) continue;
     byZona[zona] = (byZona[zona] ?? 0) + 1;
   }
 
+  // ── Build patron list ─────────────────────────────────────────────────────
   const patrones: PatronDetectado[] = [];
 
   for (const [zona, count] of Object.entries(byZona)) {
@@ -89,9 +144,7 @@ export function extractPatterns(
         zona,
         count,
         severity: count >= 5 ? 'danger' : 'warning',
-        message:  count >= 5
-          ? `⚠️ Situación crítica: ${count} incidencias activas en la zona ${zona}. Requiere atención urgente.`
-          : `Se han detectado ${count} incidencias activas en la zona ${zona}. Posible problema recurrente.`,
+        message:  generarMensaje(zona, count),
       });
     }
   }
@@ -99,10 +152,13 @@ export function extractPatterns(
   // Most affected zone first
   patrones.sort((a, b) => b.count - a.count);
 
+  const zonas_calientes = patrones.map(p => p.zona);
+
   return {
     patrones,
-    zonas_calientes: patrones.map(p => p.zona),
+    zonas_calientes,
     generado_at,
+    score_riesgo_global: calcularScoreRiesgo(incidencias.length, zonas_calientes),
   };
 }
 
@@ -112,16 +168,17 @@ export function extractPatterns(
  * Reads open incidencias from the last INCIDENCIA_WINDOW_DAYS for a community,
  * runs extractPatterns, and returns the result.
  *
- * Returns { patrones: [], zonas_calientes: [] } on any Firestore error.
+ * Returns { patrones: [], zonas_calientes: [], score_riesgo_global: 0 } on any error.
  */
 export async function detectPatterns(
   comunidadId: string,
 ): Promise<PatternEngineResult> {
   const generado_at = new Date().toISOString();
+  const empty: PatternEngineResult = {
+    patrones: [], zonas_calientes: [], generado_at, score_riesgo_global: 0,
+  };
 
-  if (!comunidadId?.trim()) {
-    return { patrones: [], zonas_calientes: [], generado_at };
-  }
+  if (!comunidadId?.trim()) return empty;
 
   try {
     const db     = getAdminDb();
@@ -148,7 +205,7 @@ export async function detectPatterns(
     return extractPatterns(openRecent, generado_at);
   } catch (err) {
     console.error('[patternEngine] detectPatterns error — returning empty result:', err);
-    return { patrones: [], zonas_calientes: [], generado_at };
+    return empty;
   }
 }
 
@@ -157,6 +214,9 @@ export async function detectPatterns(
 /**
  * Writes pattern results to ai_insights/{comunidadId} using merge:true so we
  * never overwrite fields written by other future modules (e.g. predictive maintenance).
+ *
+ * Now also persists score_riesgo_global so the widget can display it without
+ * recomputing.
  *
  * Silently swallows errors — a failed save must never crash the caller.
  */
@@ -168,10 +228,11 @@ export async function saveInsights(
     const db = getAdminDb();
     await db.collection('ai_insights').doc(comunidadId).set(
       {
-        patrones:        result.patrones,
-        zonas_calientes: result.zonas_calientes,
-        generado_at:     result.generado_at,
-        version:         'v1',
+        patrones:            result.patrones,
+        zonas_calientes:     result.zonas_calientes,
+        generado_at:         result.generado_at,
+        score_riesgo_global: result.score_riesgo_global,
+        version:             'v2',
       },
       { merge: true },
     );
@@ -180,7 +241,67 @@ export async function saveInsights(
   }
 }
 
-// ── 4. Notifications ─────────────────────────────────────────────────────────
+// ── 4. Auto-escalation ───────────────────────────────────────────────────────
+
+/**
+ * For a given zona_caliente, finds all open incidencias in that zone that are
+ * NOT already urgente and escalates them:
+ *
+ *   prioridad   → 'urgente'
+ *   escalado_por → 'sistema_ia'
+ *   escalado_at  → ISO timestamp
+ *
+ * Uses a Firestore batch write for atomicity and efficiency.
+ * Filters zona client-side (no composite index needed — consistent with
+ * the rest of the engine).
+ *
+ * Never throws — returns { zona, escalated: 0 } on any error.
+ */
+export async function autoEscalarZonaCaliente(
+  comunidadId: string,
+  zona:        string,
+): Promise<EscalationResult> {
+  try {
+    const db  = getAdminDb();
+    const now = new Date().toISOString();
+
+    // Query by comunidad_id only; filter zona + estado client-side
+    const snap = await db.collection('incidencias')
+      .where('comunidad_id', '==', comunidadId)
+      .get();
+
+    const batch = db.batch();
+    let escalated = 0;
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      const docZona = data.zona != null ? String(data.zona).trim() : '';
+
+      // Only target this zone, only open, only non-urgent
+      if (
+        docZona !== zona.trim() ||
+        RESOLVED_STATES.has((data.estado as string) ?? '') ||
+        data.prioridad === 'urgente'
+      ) continue;
+
+      batch.update(docSnap.ref, {
+        prioridad:    'urgente',
+        escalado_por: 'sistema_ia',
+        escalado_at:  now,
+      });
+      escalated++;
+    }
+
+    if (escalated > 0) await batch.commit();
+
+    return { zona, escalated };
+  } catch (err) {
+    console.error('[patternEngine] autoEscalarZonaCaliente error for zona', zona, err);
+    return { zona, escalated: 0 };
+  }
+}
+
+// ── 5. Notifications ─────────────────────────────────────────────────────────
 
 /**
  * For each zona_caliente pattern, sends:
@@ -255,7 +376,6 @@ export async function sendZonaCalienteNotifications(
     }
 
     // Ensure Firebase Admin app is initialised before calling getMessaging()
-    // (getAdminDb() guarantees this, but guard explicitly for safety)
     if (!getApps().length) {
       initializeApp({
         credential: cert({
@@ -271,13 +391,12 @@ export async function sendZonaCalienteNotifications(
       const title = patron.severity === 'danger'
         ? '🔴 Zona crítica detectada'
         : '🟡 Alerta en tu comunidad';
-      const body  = patron.severity === 'danger'
+      const body = patron.severity === 'danger'
         ? `Zona ${patron.zona}: ${patron.count} incidencias activas. Requiere atención urgente.`
         : `Se detectaron ${patron.count} incidencias en la zona ${patron.zona}. Revisa la app.`;
-      const link  = '/incidencias';
+      const link = '/incidencias';
 
-      // d1. In-app community notification (1 doc — all members see it via
-      //     perfil.notificaciones_last_read comparison, same as quorum notifications)
+      // d1. In-app community notification
       try {
         await db
           .collection('comunidades').doc(comunidadId)
@@ -314,7 +433,6 @@ export async function sendZonaCalienteNotifications(
           }
         } catch (err) {
           console.error('[patternEngine] FCM push failed for zona', patron.zona, err);
-          // In-app notification already sent — log and continue
         }
       }
 
@@ -323,8 +441,8 @@ export async function sendZonaCalienteNotifications(
 
     // ── e. Persist updated anti-spam map ─────────────────────────────────
     if (sent.length > 0) {
-      const nowIso      = new Date().toISOString();
-      const updatedMap  = { ...notifiedZones };
+      const nowIso     = new Date().toISOString();
+      const updatedMap = { ...notifiedZones };
       sent.forEach(zona => { updatedMap[zona] = nowIso; });
 
       try {
@@ -334,7 +452,6 @@ export async function sendZonaCalienteNotifications(
         );
       } catch (err) {
         console.error('[patternEngine] Failed to update notified_zones:', err);
-        // Not fatal — worst case we send again on next cycle (24 h reset missed)
       }
     }
   } catch (err) {

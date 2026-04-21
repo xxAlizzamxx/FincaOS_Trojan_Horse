@@ -45,10 +45,11 @@ interface PatronDetectado {
 }
 
 interface AIInsightDoc {
-  patrones:        PatronDetectado[];
-  zonas_calientes: string[];
-  generado_at:     string;
-  version?:        string;
+  patrones:            PatronDetectado[];
+  zonas_calientes:     string[];
+  generado_at:         string;
+  score_riesgo_global: number;
+  version?:            string;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -114,9 +115,19 @@ export function PatternAlertWidget() {
 
   if (!comunidadId) return null;
 
-  const patrones = insights?.patrones ?? [];
+  const patrones    = insights?.patrones ?? [];
+  const score       = insights?.score_riesgo_global ?? 0;
   const dangerCount  = patrones.filter(p => p.severity === 'danger').length;
   const warningCount = patrones.filter(p => p.severity === 'warning').length;
+
+  const scoreColor =
+    score > 70 ? 'text-red-600'    :
+    score > 30 ? 'text-amber-600'  :
+                 'text-emerald-600';
+  const scoreLabel =
+    score > 70 ? '🔴 Crítico'  :
+    score > 30 ? '🟡 Atención' :
+                 '🟢 Estable';
 
   const lastScan = insights?.generado_at
     ? formatDistanceToNow(new Date(insights.generado_at), { addSuffix: true, locale: es })
@@ -268,9 +279,9 @@ export function PatternAlertWidget() {
           </div>
         )}
 
-        {/* ── Summary badges ── */}
-        {!loading && (dangerCount > 0 || warningCount > 0) && (
-          <div className="flex gap-2 mt-3 pt-2 border-t border-border/50">
+        {/* ── Summary badges + risk score ── */}
+        {!loading && (
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-2 border-t border-border/50">
             {dangerCount > 0 && (
               <span className="inline-flex items-center gap-1 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
                 <Flame className="w-3 h-3" />
@@ -283,6 +294,12 @@ export function PatternAlertWidget() {
                 {warningCount} zona{warningCount > 1 ? 's' : ''} en alerta
               </span>
             )}
+            {/* Risk score — always visible once data loaded */}
+            <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium">
+              <span className="text-muted-foreground">Riesgo</span>
+              <span className={cn('font-bold', scoreColor)}>{score}/100</span>
+              <span className={cn('text-[10px]', scoreColor)}>{scoreLabel}</span>
+            </span>
           </div>
         )}
       </CardContent>
