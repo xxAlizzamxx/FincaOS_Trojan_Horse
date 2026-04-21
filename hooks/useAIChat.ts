@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { collection, addDoc, setDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, setDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { useAuth } from '@/hooks/useAuth';
@@ -110,7 +110,7 @@ export function useAIChat() {
             extractIncidentDetails(content);
 
           const titulo = content.substring(0, 100);
-          const now = Timestamp.now();
+          const now = new Date().toISOString();
 
           // Create incident in Firestore
           const incidenciaRef = await addDoc(collection(db, 'incidencias'), {
