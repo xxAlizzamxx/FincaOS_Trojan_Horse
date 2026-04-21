@@ -8,7 +8,8 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { BottomTabBar } from '@/components/layout/BottomTabBar';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 import { PageTransition } from '@/components/animation/PageTransition';
-import { AlertaGlobalBanner } from '@/components/ai/AlertaGlobalBanner';
+import { AlertaGlobalBanner }  from '@/components/ai/AlertaGlobalBanner';
+import { AIAssistantWidget }   from '@/components/ai/AIAssistantWidget';
 import { useAuth } from '@/hooks/useAuth';
 
 // ── Public routes ─────────────────────────────────────────────────────────────
@@ -134,6 +135,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </PageTransition>
       </main>
+      <AIAssistantWidget />
       <BottomTabBar />
     </div>
   );

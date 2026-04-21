@@ -29,6 +29,7 @@ import {
   MapPin,
   ChevronRight,
   CheckCircle2,
+  Zap,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -62,6 +63,8 @@ export function PatternAlertWidget() {
   const [loading,    setLoading]    = useState(true);
   const [scanning,   setScanning]   = useState(false);
   const [scanError,  setScanError]  = useState<string | null>(null);
+  // Per-zone acting state: zona → 'idle' | 'acting' | 'done' | 'error'
+  const [actStates,  setActStates]  = useState<Record<string, 'idle'|'acting'|'done'|'error'>>({});
 
   // ── Real-time listener on ai_insights/{comunidadId} ──────────────────────
   useEffect(() => {
@@ -110,6 +113,44 @@ export function PatternAlertWidget() {
       setScanning(false);
     }
   }, [user, comunidadId, scanning]);
+
+  // ── "Actuar ahora" — creates a preventive inspection incidencia ──────────
+  const handleActuar = useCallback(async (
+    e: React.MouseEvent,
+    patron: PatronDetectado,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user || !comunidadId) return;
+    if (actStates[patron.zona] === 'acting' || actStates[patron.zona] === 'done') return;
+
+    setActStates(prev => ({ ...prev, [patron.zona]: 'acting' }));
+
+    try {
+      const token = await user.getIdToken();
+      const res   = await fetch('/api/ai/act', {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          zona:        patron.zona,
+          comunidadId,
+          count:       patron.count,
+          severity:    patron.severity,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setActStates(prev => ({ ...prev, [patron.zona]: 'done' }));
+    } catch (err) {
+      console.error('[PatternAlertWidget] actuar error:', err);
+      setActStates(prev => ({ ...prev, [patron.zona]: 'error' }));
+      // Reset after 3s so user can retry
+      setTimeout(() => setActStates(prev => ({ ...prev, [patron.zona]: 'idle' })), 3_000);
+    }
+  }, [user, comunidadId, actStates]);
 
   // ── Render helpers ────────────────────────────────────────────────────────
 
@@ -260,7 +301,7 @@ export function PatternAlertWidget() {
                       </p>
                     </div>
 
-                    {/* Badge + arrow */}
+                    {/* Badge + "Actuar" button + arrow */}
                     <div className="flex items-center gap-1.5 shrink-0">
                       <Badge className={cn(
                         'text-[11px] font-bold border-0',
@@ -270,6 +311,35 @@ export function PatternAlertWidget() {
                       )}>
                         {patron.count} inc.
                       </Badge>
+
+                      {/* ── Actuar ahora ── */}
+                      {(() => {
+                        const st = actStates[patron.zona] ?? 'idle';
+                        if (st === 'done') return (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                            ✅ Creada
+                          </span>
+                        );
+                        return (
+                          <button
+                            onClick={(e) => handleActuar(e, patron)}
+                            disabled={st === 'acting'}
+                            className={cn(
+                              'inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 border transition-colors',
+                              st === 'error'
+                                ? 'bg-red-50 text-red-700 border-red-300'
+                                : isDanger
+                                ? 'bg-red-600 text-white border-red-600 hover:bg-red-700 active:scale-95'
+                                : 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 active:scale-95',
+                              st === 'acting' && 'opacity-70 cursor-wait',
+                            )}
+                          >
+                            <Zap className={cn('w-2.5 h-2.5', st === 'acting' && 'animate-pulse')} />
+                            {st === 'acting' ? 'Actuando…' : st === 'error' ? 'Error' : 'Actuar'}
+                          </button>
+                        );
+                      })()}
+
                       <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
                     </div>
                   </div>
