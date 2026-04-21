@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { collection, addDoc, setDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface AIMessage {
   id: string;
@@ -70,6 +71,7 @@ function extractIncidentDetails(message: string) {
 }
 
 export function useAIChat() {
+  const { perfil } = useAuth();
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,11 +98,7 @@ export function useAIChat() {
       setError(null);
 
       try {
-        // Get user from localStorage
-        const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-        const user = userStr ? JSON.parse(userStr) : null;
-
-        if (!user?.id || !user?.comunidad_id) {
+        if (!perfil?.id || !perfil?.comunidad_id) {
           throw new Error('User not authenticated');
         }
 
@@ -116,8 +114,8 @@ export function useAIChat() {
 
           // Create incident in Firestore
           const incidenciaRef = await addDoc(collection(db, 'incidencias'), {
-            comunidad_id: user.comunidad_id,
-            autor_id: user.id,
+            comunidad_id: perfil.comunidad_id,
+            autor_id: perfil.id,
             titulo,
             descripcion: content,
             categoria_id,
@@ -156,17 +154,17 @@ export function useAIChat() {
 
           // Fire-and-forget secondary operations
           setDoc(
-            doc(db, 'incidencias', incidenciaId, 'afectados', user.id),
+            doc(db, 'incidencias', incidenciaId, 'afectados', perfil.id),
             { coeficiente: 1, added_at: now, es_autor: true }
           ).catch((err) => {
             console.error('[FIRESTORE WRITE FAILED] afectados subcollection:', err?.code, err?.message);
           });
 
-          crearNotificacionComunidad(user.comunidad_id, {
+          crearNotificacionComunidad(perfil.comunidad_id, {
             tipo: 'incidencia',
             titulo: `New incident reported: ${titulo}`,
             mensaje: content.substring(0, 200),
-            created_by: user.id,
+            created_by: perfil.id,
             related_id: incidenciaId,
             link: `/incidencias/${incidenciaId}`,
           }).catch((err) => {
@@ -200,7 +198,7 @@ export function useAIChat() {
         setLoading(false);
       }
     },
-    []
+    [perfil]
   );
 
   return {
