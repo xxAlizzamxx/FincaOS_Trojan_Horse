@@ -9,7 +9,7 @@ export function AIAssistant() {
 
   return (
     <>
-      <FloatingAIButton isOpen={isOpen} onToggle={() => setIsOpen(!isOpen)} />
+      <FloatingAIButton onClick={() => setIsOpen(!isOpen)} />
       <AIChatPanel isOpen={isOpen} onClose={() => setIsOpen(false)} />
     </>
   );
