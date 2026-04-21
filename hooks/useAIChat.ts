@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { collection, addDoc, setDoc, doc, Timestamp, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { collection, addDoc, setDoc, doc, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase/client';
 import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 
 export interface AIMessage {
