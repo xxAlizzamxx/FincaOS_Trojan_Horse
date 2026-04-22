@@ -8,6 +8,7 @@
  */
 
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import type { UpdateData } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import type { EstadoIncidencia } from '@/types/database';
 
@@ -84,16 +85,12 @@ export async function actualizarEstadoIncidencia(
 
   // 3. Actualizar Firestore de forma atómica
   const now = new Date().toISOString();
-  const update: Record<string, unknown> = {
+  const update: UpdateData<Record<string, unknown>> = {
     estado:            nuevoEstado,
     updated_at:        now,
     historial_estados: arrayUnion(entrada),   // append al array sin sobrescribir
+    ...(nuevoEstado === 'resuelta' ? { resuelta_at: now } : {}),
   };
-
-  // Set resuelta_at when reaching the final state — required by metricsEngine
-  if (nuevoEstado === 'resuelta') {
-    update.resuelta_at = now;
-  }
 
   await updateDoc(doc(db, 'incidencias', incidenciaId), update);
 
