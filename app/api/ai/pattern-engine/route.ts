@@ -5,9 +5,11 @@
  *
  * What it does:
  *   1. Authenticates the caller via Firebase ID token
- *   2. Runs the pattern detection engine (zone hotspot detection)
+ *   2. Runs the pattern detection engine (zone + category hotspot detection)
  *   3. Persists results to ai_insights/{comunidadId} (merge: true)
- *   4. Returns the analysis result
+ *   4. Sends community notifications + email if new patterns are found
+ *      (1-hour cooldown per pattern — shorter than the 24h cron cooldown)
+ *   5. Returns the analysis result
  *
  * Response shape:
  *   {
@@ -20,17 +22,17 @@
  *   - ALWAYS returns { patrones: [], zonas_calientes: [], generado_at } on any failure
  *   - Never returns 5xx from the AI layer itself
  *   - Rate-limited: 10 req / 60 s per IP
- *
- * NOTE: This endpoint does NOT trigger notifications — use the cron for that.
- * Notifications on every manual call would spam users during development.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { detectPatterns, saveInsights } from '@/lib/ai/patternEngine';
+import { detectPatterns, saveInsights, sendZonaCalienteNotifications } from '@/lib/ai/patternEngine';
 import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 import { createLogger } from '@/lib/logger';
+
+/** Cooldown for on-demand manual scans (1 h) — shorter than the cron's 24 h */
+const MANUAL_NOTIF_COOLDOWN_MS = 60 * 60 * 1_000;
 
 // ── Firebase Admin bootstrap (idempotent guard) ──────────────────────────────
 if (!getApps().length) {
@@ -87,6 +89,13 @@ export async function GET(req: NextRequest) {
   // ── 5. Persist (fire-and-forget — result already computed) ────────────────
   void saveInsights(comunidadId, result);
 
-  // ── 6. Return ─────────────────────────────────────────────────────────────
+  // ── 6. Send notifications for new patterns (fire-and-forget) ─────────────
+  // Uses a 1-hour cooldown (vs 24 h for the cron) so on-demand scans
+  // reliably notify all users and send email without hourly spam.
+  if (result.patrones.length > 0) {
+    void sendZonaCalienteNotifications(comunidadId, result.patrones, MANUAL_NOTIF_COOLDOWN_MS);
+  }
+
+  // ── 7. Return ─────────────────────────────────────────────────────────────
   return NextResponse.json(result);
 }

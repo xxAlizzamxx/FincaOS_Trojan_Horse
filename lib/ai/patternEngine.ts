@@ -373,21 +373,29 @@ export async function autoEscalarZonaCaliente(
 /**
  * For each zona_caliente pattern, sends:
  *   a) One community notification doc  → comunidades/{id}/notificaciones/{auto}
- *   b) FCM push to all members         → via Firebase Admin Messaging
+ *   b) Email to admins/presidentes     → via sendAdminNotification
+ *   c) FCM push to all members         → via Firebase Admin Messaging
  *
- * Anti-spam: reads notified_zones from ai_insights and skips zones notified
- * within the last 24 hours. Updates the map after sending.
+ * Anti-spam: reads notified_zones from ai_insights and skips patterns notified
+ * within the last `cooldownMs` milliseconds. Updates the map after sending.
  *
- * Never throws — returns lists of sent / skipped zones.
+ * Key format for notified_zones: "${zona}||${categoria_id ?? '__none__'}"
+ * (same as patternEngine bucket key) — so "vivienda + filtraciones" and
+ * "vivienda + electricidad" get independent cooldowns.
+ *
+ * @param cooldownMs  Anti-spam window (default 24 h for cron, pass 1 h for manual scans)
+ *
+ * Never throws — returns lists of sent / skipped keys.
  */
 export async function sendZonaCalienteNotifications(
   comunidadId: string,
   patrones:    PatronDetectado[],
+  cooldownMs:  number = NOTIFICATION_COOLDOWN_MS,
 ): Promise<NotificationResult> {
   const sent:    string[] = [];
   const skipped: string[] = [];
 
-  console.log('[patternEngine] sendZonaCalienteNotifications — patrones:', patrones.length);
+  console.log('[patternEngine] sendZonaCalienteNotifications — patrones:', patrones.length, '| cooldownMs:', cooldownMs);
 
   if (patrones.length === 0) {
     console.log('[patternEngine] No patrones — skipping notifications');
@@ -407,18 +415,26 @@ export async function sendZonaCalienteNotifications(
       // Can't read anti-spam map → proceed but won't update it (fail safe)
     }
 
-    // ── b. Decide which zones actually need a notification ────────────────
+    // ── b. Decide which patterns actually need a notification ─────────────
+    //
+    // Key includes categoria_id so "vivienda + filtraciones" and
+    // "vivienda + electricidad" have independent cooldowns — without this,
+    // the first category to fire blocks ALL others in the same zone for 24 h.
+    const patternKey = (p: PatronDetectado) =>
+      `${p.zona}||${p.categoria_id ?? '__none__'}`;
+
     const toNotify = patrones.filter(p => {
-      const last = notifiedZones[p.zona];
-      if (!last) return true;                                      // never notified
-      return now - new Date(last).getTime() > NOTIFICATION_COOLDOWN_MS;
+      const key  = patternKey(p);
+      const last = notifiedZones[key] ?? notifiedZones[p.zona]; // fallback: old zone-only key
+      if (!last) return true;
+      return now - new Date(last).getTime() > cooldownMs;
     });
 
     patrones
-      .filter(p => !toNotify.some(n => n.zona === p.zona))
+      .filter(p => !toNotify.some(n => patternKey(n) === patternKey(p)))
       .forEach(p => {
-        console.log('[patternEngine] zona in cooldown, skipping notifications:', p.zona);
-        skipped.push(p.zona);
+        console.log('[patternEngine] pattern in cooldown, skipping:', patternKey(p));
+        skipped.push(patternKey(p));
       });
 
     console.log('[patternEngine] toNotify:', toNotify.length, '| skipped (cooldown):', skipped.length);
@@ -463,17 +479,25 @@ export async function sendZonaCalienteNotifications(
       });
     }
 
-    // ── d. Send per-zone ──────────────────────────────────────────────────
+    // ── d. Send per-pattern ───────────────────────────────────────────────
     for (const patron of toNotify) {
-      const title = patron.severity === 'danger'
-        ? '🔴 Zona crítica detectada'
-        : '🟡 Alerta en tu comunidad';
-      const body = patron.severity === 'danger'
-        ? `Zona ${patron.zona}: ${patron.count} incidencias activas. Requiere atención urgente.`
-        : `Se detectaron ${patron.count} incidencias en la zona ${patron.zona}. Revisa la app.`;
-      const link = '/incidencias';
+      const catLabel = patron.categoria_nombre && patron.categoria_nombre !== 'Sin categoría'
+        ? ` de ${patron.categoria_nombre}`
+        : '';
+      const zonaLabel = patron.zona.replace(/_/g, ' ');
 
-      // d1. In-app community notification
+      const title = patron.severity === 'danger'
+        ? `🔴 Alerta: múltiples incidencias${catLabel} en ${zonaLabel}`
+        : `⚠️ Alerta: múltiples incidencias${catLabel} en ${zonaLabel}`;
+
+      // Rich body with recommendation — visible to ALL users in the notifications bell
+      const body = patron.severity === 'danger'
+        ? `Se han detectado ${patron.count} incidencias${catLabel} en zona "${zonaLabel}" en las últimas 24h. Situación crítica — se recomienda intervención inmediata.`
+        : `Se han detectado ${patron.count} incidencias${catLabel} en zona "${zonaLabel}" en las últimas 24h. Se recomienda inspección preventiva.`;
+
+      const link = `/incidencias?zona=${encodeURIComponent(patron.zona)}`;
+
+      // d1. In-app community notification → visible to ALL users via useNotifications hook
       try {
         await db
           .collection('comunidades').doc(comunidadId)
@@ -483,51 +507,44 @@ export async function sendZonaCalienteNotifications(
             mensaje:    body,
             created_at: new Date().toISOString(),
             created_by: 'sistema_ia',
-            related_id: `zona_caliente_${patron.zona}`,
+            related_id: `zona_caliente_${patron.zona}_${patron.categoria_id ?? 'none'}`,
             link,
           });
-        console.log('[patternEngine] In-app notification created for zona', patron.zona);
+        console.log('[patternEngine] In-app notification created for pattern:', patternKey(patron));
       } catch (err) {
-        console.error('[patternEngine] In-app notification failed for zona', patron.zona, err);
-        // Don't abort — still attempt push and email
+        console.error('[patternEngine] In-app notification failed for pattern:', patternKey(patron), err);
+        // Don't abort — still attempt email and push
       }
 
       // d2. Email alert to admin/presidente
       //
-      // Uses sendAdminNotification directly (not sendSmartAlert) so the subject
-      // is zone-specific — avoids Firestore dedup collision when multiple zones
-      // trigger alerts in the same run.
+      // Subject is pattern-specific (zona + categoria) to avoid Firestore dedup
+      // collision when multiple patterns fire in the same run.
       try {
         const emailSubject = patron.severity === 'danger'
-          ? `🔴 Zona crítica: ${patron.zona} — ${patron.count} incidencias activas`
-          : `🟡 Alerta zona ${patron.zona} — ${patron.count} incidencias detectadas`;
-
-        const catNote = patron.categoria_nombre && patron.categoria_nombre !== 'Sin categoría'
-          ? `\n📂 Categoría: ${patron.categoria_nombre}`
-          : '';
+          ? `🔴 Alerta: múltiples incidencias${catLabel} en ${zonaLabel}`
+          : `⚠️ Alerta: múltiples incidencias${catLabel} en ${zonaLabel}`;
 
         const emailContent = [
-          `El sistema IA ha detectado ${patron.count} incidencia${patron.count !== 1 ? 's' : ''} en la zona "${patron.zona}".`,
-          catNote,
+          `Se han detectado ${patron.count} incidencia${patron.count !== 1 ? 's' : ''}${catLabel} en zona "${zonaLabel}" en las últimas 24h.`,
           '',
           patron.severity === 'danger'
-            ? '🚨 Situación crítica — se recomienda intervención inmediata.'
-            : '📋 Se recomienda inspección preventiva en las próximas 24h.',
+            ? '🚨 Situación crítica — se recomienda intervención inmediata y contacto con proveedor.'
+            : '📋 Se recomienda inspección preventiva en las próximas 24h para evitar escalamiento.',
+          '',
+          patron.message,
           '',
           '👉 Accede al panel de administración → Incidencias para gestionar la situación.',
-          '',
-          `Mensaje del sistema: ${patron.message}`,
-        ].filter(s => s !== null && s !== undefined).join('\n');
+        ].join('\n');
 
-        console.log('[patternEngine] Sending alert email for zona:', patron.zona);
+        console.log('[patternEngine] Sending alert email for pattern:', patternKey(patron));
         await sendAdminNotification({
           comunidad_id: comunidadId,
           subject:      emailSubject,
           content:      emailContent,
         });
       } catch (err) {
-        // sendAdminNotification already swallows errors, but belt-and-suspenders
-        console.error('[patternEngine] Email alert failed for zona', patron.zona, err);
+        console.error('[patternEngine] Email alert failed for pattern:', patternKey(patron), err);
       }
 
       // d3. FCM push — batched to respect the 500-token multicast limit
@@ -552,14 +569,14 @@ export async function sendZonaCalienteNotifications(
         }
       }
 
-      sent.push(patron.zona);
+      sent.push(patternKey(patron));
     }
 
-    // ── e. Persist updated anti-spam map ─────────────────────────────────
+    // ── e. Persist updated anti-spam map (keyed by zona||categoria_id) ───
     if (sent.length > 0) {
       const nowIso     = new Date().toISOString();
       const updatedMap = { ...notifiedZones };
-      sent.forEach(zona => { updatedMap[zona] = nowIso; });
+      sent.forEach(key => { updatedMap[key] = nowIso; });
 
       try {
         await db.collection('ai_insights').doc(comunidadId).set(
