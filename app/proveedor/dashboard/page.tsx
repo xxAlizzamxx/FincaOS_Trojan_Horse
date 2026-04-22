@@ -45,8 +45,12 @@ interface ProveedorProfile {
   servicios?: string[];     // new multi-service array (from /proveedor setup screen)
   zona: string;
   email: string;
-  rating: number;
-  trabajosRealizados: number;
+  // Registration writes rating/trabajosRealizados; review API writes promedio_rating/total_reviews.
+  // We read both and prefer the review-API values when present.
+  rating?: number;
+  trabajosRealizados?: number;
+  promedio_rating?: number;
+  total_reviews?: number;
   createdAt: string;
 }
 
@@ -468,10 +472,15 @@ export default function ProveedorDashboardPage() {
 
   if (!user || !proveedor) return null;
 
+  // Prefer promedio_rating (set by review API) over legacy rating field
+  const ratingValue  = proveedor.promedio_rating ?? proveedor.rating ?? null;
+  const trabajosValue = proveedor.total_reviews ?? proveedor.trabajosRealizados ?? 0;
+  const ratingDisplay = ratingValue ? ratingValue.toString() : '—';
+
   const avgRating =
     valoraciones.length > 0
       ? (valoraciones.reduce((s, v) => s + v.rating, 0) / valoraciones.length).toFixed(1)
-      : '—';
+      : ratingDisplay;  // fall back to stored rating if no local valoraciones loaded yet
 
   const TABS: { key: Tab; label: string }[] = [
     { key: 'disponibles',  label: 'Disponibles' },
@@ -487,12 +496,15 @@ export default function ProveedorDashboardPage() {
     return 'secondary';
   };
 
-  // Compute initials for avatar
+  // Compute initials for avatar fallback
   const initials = proveedor.nombre
     .split(' ')
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? '')
     .join('');
+
+  // Google photo from Firebase Auth
+  const photoURL = user.photoURL ?? null;
 
   const SERVICIOS_LABELS: Record<string, string> = {
     electricidad: '⚡', fontaneria: '🔧', pintura: '🎨', limpieza: '🧹',
@@ -513,11 +525,21 @@ export default function ProveedorDashboardPage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_70%)]" />
 
         <div className="relative px-4 pt-10 pb-5 flex items-end gap-4">
-          {/* Avatar circle */}
+          {/* Avatar circle — Google photo or initials fallback */}
           <div className="relative shrink-0">
-            <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm border-2 border-white/40 flex items-center justify-center shadow-lg">
-              <span className="text-2xl font-bold text-white">{initials}</span>
-            </div>
+            {photoURL ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={photoURL}
+                alt={proveedor.nombre}
+                className="w-16 h-16 rounded-2xl object-cover border-2 border-white/40 shadow-lg"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm border-2 border-white/40 flex items-center justify-center shadow-lg">
+                <span className="text-2xl font-bold text-white">{initials}</span>
+              </div>
+            )}
             {/* Online indicator */}
             <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-400 border-2 border-white" />
           </div>
@@ -538,11 +560,11 @@ export default function ProveedorDashboardPage() {
             <div className="flex items-center gap-3 mt-1.5 text-xs text-white/70">
               <span className="flex items-center gap-1">
                 <Star className="w-3 h-3 fill-yellow-300 text-yellow-300" />
-                {proveedor.rating || '—'}
+                {ratingDisplay}
               </span>
               <span className="flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" />
-                {proveedor.trabajosRealizados || 0} trabajos
+                {trabajosValue} trabajos
               </span>
               {proveedor.zona && (
                 <span className="flex items-center gap-1">
@@ -965,7 +987,7 @@ export default function ProveedorDashboardPage() {
                         <Star
                           key={s}
                           className={`w-5 h-5 ${
-                            s <= Math.round(Number(avgRating))
+                            s <= Math.round(Number(avgRating) || 0)
                               ? 'fill-yellow-400 text-yellow-400'
                               : 'text-gray-200 fill-gray-200'
                           }`}
@@ -1024,8 +1046,13 @@ export default function ProveedorDashboardPage() {
               <div className="h-16 bg-gradient-to-r from-finca-coral to-orange-400" />
               <CardContent className="pb-5">
                 <div className="-mt-8 mb-3 flex items-end justify-between gap-2">
-                  <div className="w-16 h-16 rounded-2xl bg-white shadow-md border-2 border-white flex items-center justify-center shrink-0">
-                    <span className="text-2xl font-black text-finca-coral">{initials}</span>
+                  <div className="w-16 h-16 rounded-2xl bg-white shadow-md border-2 border-white shrink-0 overflow-hidden flex items-center justify-center">
+                    {photoURL ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={photoURL} alt={proveedor.nombre} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-2xl font-black text-finca-coral">{initials}</span>
+                    )}
                   </div>
                   <div className="pb-1 flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -1038,8 +1065,8 @@ export default function ProveedorDashboardPage() {
                 {/* Stats row */}
                 <div className="grid grid-cols-3 gap-2 mt-4">
                   {[
-                    { label: 'Rating', value: `⭐ ${proveedor.rating || '—'}` },
-                    { label: 'Trabajos', value: String(proveedor.trabajosRealizados || 0) },
+                    { label: 'Rating', value: `⭐ ${ratingDisplay}` },
+                    { label: 'Trabajos', value: String(trabajosValue) },
                     { label: 'Zona', value: proveedor.zona || '—' },
                   ].map((stat) => (
                     <div key={stat.label} className="bg-gray-50 rounded-xl p-2.5 text-center">
