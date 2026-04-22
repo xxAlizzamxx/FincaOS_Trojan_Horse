@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, CircleAlert as AlertCircle, LayoutGrid, Map } from 'lucide-react';
+import { Search, CircleAlert as AlertCircle, LayoutGrid, Map, Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import { collection, query, where, orderBy, getDocs, getDoc, doc } from 'firebase/firestore';
@@ -33,6 +33,7 @@ export default function IncidenciasPage() {
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [filtroActivo, setFiltroActivo] = useState('Todas');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (perfil?.comunidad_id) fetchIncidencias();
@@ -111,6 +112,31 @@ export default function IncidenciasPage() {
     const matchFiltro = estadosFiltro.length === 0 || estadosFiltro.includes(inc.estado);
     return matchBusqueda && matchFiltro;
   });
+
+  // Separate AI parent groups from regular incidencias
+  // Children (those with parentId) are hidden from top-level list
+  const childIds = new Set(
+    incidenciasFiltradas
+      .filter((inc: any) => (inc as any).parentId)
+      .map((inc: any) => (inc as any).parentId as string)
+  );
+
+  // Build a lookup of parentId → children array
+  const childrenByParent: Record<string, Incidencia[]> = {};
+  incidenciasFiltradas.forEach((inc: any) => {
+    if ((inc as any).parentId) {
+      const pid = (inc as any).parentId as string;
+      if (!childrenByParent[pid]) childrenByParent[pid] = [];
+      childrenByParent[pid].push(inc);
+    }
+  });
+
+  // Top-level: exclude children (those with parentId)
+  const topLevel = incidenciasFiltradas.filter((inc: any) => !(inc as any).parentId);
+
+  function toggleGroup(id: string) {
+    setExpandedGroups(prev => ({ ...prev, [id]: !prev[id] }));
+  }
 
   return (
     <div className="px-4 py-5 space-y-4">
@@ -199,13 +225,67 @@ export default function IncidenciasPage() {
         </div>
       ) : (
         <StaggerList className="flex flex-col gap-3" stagger={0.06}>
-          {sortByPrioridad(incidenciasFiltradas).map((inc) => (
-            <IncidenciaCard
-              key={inc.id}
-              incidencia={inc}
-              totalVecinos={totalVecinos}
-            />
-          ))}
+          {sortByPrioridad(topLevel).map((inc) => {
+            const isAIParent = (inc as any).creado_por_avatar === 'ia' || (inc as any).autor_id === 'sistema_ia';
+            const children   = childrenByParent[inc.id] ?? [];
+            const isExpanded = expandedGroups[inc.id] ?? false;
+
+            if (isAIParent && children.length > 0) {
+              return (
+                <div key={inc.id} className="flex flex-col gap-2">
+                  {/* AI parent group header */}
+                  <button
+                    className="w-full text-left"
+                    onClick={() => toggleGroup(inc.id)}
+                  >
+                    <Card className="border-0 shadow-sm bg-violet-50 ring-1 ring-violet-200 rounded-2xl overflow-hidden hover:shadow-md transition-all">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-violet-100 ring-1 ring-violet-300 flex items-center justify-center shrink-0">
+                          <Bot className="w-4 h-4 text-violet-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-violet-800 truncate">{inc.titulo}</p>
+                          <p className="text-xs text-violet-500 mt-0.5">
+                            {children.length} incidencia{children.length !== 1 ? 's' : ''} agrupada{children.length !== 1 ? 's' : ''} por IA
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] font-semibold text-violet-700 bg-violet-100 border border-violet-200 rounded-full px-2 py-0.5">
+                            Agrupado por IA
+                          </span>
+                          {isExpanded
+                            ? <ChevronDown  className="w-4 h-4 text-violet-400" />
+                            : <ChevronRight className="w-4 h-4 text-violet-400" />
+                          }
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </button>
+
+                  {/* Expanded children */}
+                  {isExpanded && (
+                    <div className="flex flex-col gap-2 pl-4 border-l-2 border-violet-200 ml-4">
+                      {sortByPrioridad(children).map(child => (
+                        <IncidenciaCard
+                          key={child.id}
+                          incidencia={child}
+                          totalVecinos={totalVecinos}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <IncidenciaCard
+                key={inc.id}
+                incidencia={inc}
+                totalVecinos={totalVecinos}
+              />
+            );
+          })}
         </StaggerList>
       )}
     </div>

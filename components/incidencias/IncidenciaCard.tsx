@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, AlertTriangle, MessageSquare } from 'lucide-react';
+import { Users, AlertTriangle, MessageSquare, Bot } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,7 @@ export function IncidenciaCard({
   modoSeleccion = false,
   onToggle,
 }: Props) {
+  const isAI        = (inc as any).creado_por_avatar === 'ia' || (inc as any).autor_id === 'sistema_ia';
   const cfg         = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG.pendiente;
   const afectados   = Math.max(1, inc.quorum?.afectados_count ?? 0);
   const umbral      = inc.quorum?.umbral ?? 30;
@@ -63,14 +64,25 @@ export function IncidenciaCard({
         'transition-all duration-200 hover:shadow-md hover:border-border',
         seleccionada && 'ring-2 ring-finca-coral border-transparent shadow-md',
         qAlcanzado   && 'border-red-200 bg-red-50/40',
+        isAI         && 'border-violet-200 bg-violet-50/30 hover:border-violet-300',
       )}
     >
+      {/* AI accent strip */}
+      {isAI && (
+        <div className="absolute inset-y-0 left-0 w-1 bg-violet-400 rounded-l-2xl" />
+      )}
       <CardContent className="p-4 space-y-3">
-        {/* Header — estado + quórum alert + fecha */}
+        {/* Header — estado + quórum alert + AI badge + fecha */}
         <div className="flex items-center gap-2">
           <Badge className={cn('text-[10px] border-0 font-medium shrink-0', cfg.badge)}>
             {cfg.label}
           </Badge>
+          {isAI && (
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-violet-700 bg-violet-100 border border-violet-200 rounded-full px-1.5 py-0.5 shrink-0">
+              <Bot className="w-2.5 h-2.5" />
+              IA
+            </span>
+          )}
           {qAlcanzado && (
             <span className="flex items-center gap-1 text-[10px] font-semibold text-red-600 shrink-0">
               <AlertTriangle className="w-3 h-3" />

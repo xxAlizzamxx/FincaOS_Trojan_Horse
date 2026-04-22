@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
   const db  = getAdminDb();
   const now = new Date().toISOString();
 
-  // ── 4. Idempotency: skip if an AI inspection exists for this zone today ───
+  // ── 4. Idempotency: skip if an AI inspection (parent) exists for this zone today ─
   const todayMidnight = new Date();
   todayMidnight.setHours(0, 0, 0, 0);
   const todayIso = todayMidnight.toISOString();
@@ -109,7 +109,36 @@ export async function POST(req: NextRequest) {
     // Can't check — proceed anyway (better to duplicate than to block)
   }
 
-  // ── 5. Create inspection incidencia ─────────────────────────────────────
+  // ── 5. Fetch open children to group under the parent ────────────────────
+  // Only fetch incidencias that are: open (not resuelta/cerrada), in same zone,
+  // not already AI-generated parents, and not already children of another parent.
+  let hijosIds: string[] = [];
+  try {
+    const childrenQuery = await db.collection('incidencias')
+      .where('comunidad_id', '==', comunidadId)
+      .where('zona',         '==', zona)
+      .get();
+
+    hijosIds = childrenQuery.docs
+      .filter(d => {
+        const data = d.data();
+        const estado = data.estado as string;
+        // Exclude: already resolved, AI-generated parents, already children
+        if (['resuelta', 'cerrada'].includes(estado)) return false;
+        if (data.autor_id === 'sistema_ia') return false;
+        if (data.parentId) return false; // already child of another group
+        if (data.tipo_problema === 'inspeccion_preventiva') return false;
+        // If categoriaId filter applies, match it
+        if (categoriaId && data.categoria_id && data.categoria_id !== categoriaId) return false;
+        return true;
+      })
+      .map(d => d.id);
+  } catch (err) {
+    log.error('ai_act_fetch_children_failed', err, { comunidad_id: comunidadId, zona });
+    // Non-fatal — proceed without children
+  }
+
+  // ── 6. Create parent inspection incidencia ──────────────────────────────
   const zonaLabel   = zona.charAt(0).toUpperCase() + zona.slice(1).replace('_', ' ');
   const catLabel    = categoriaNombre && categoriaNombre !== 'Sin categoría' ? ` · ${categoriaNombre}` : '';
   const titulo      = `🔍 Inspección preventiva — ${zonaLabel}${catLabel}`;
@@ -138,6 +167,10 @@ export async function POST(req: NextRequest) {
       ubicacion:             zona,
       zona,
       tipo_problema:         'inspeccion_preventiva',
+      // ── Parent-child fields ──
+      hijos:                 hijosIds,
+      total_hijos:           hijosIds.length,
+      // ────────────────────────
       estimacion_min:        null,
       estimacion_max:        null,
       presupuesto_proveedor: null,
@@ -155,7 +188,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Error al crear la incidencia' }, { status: 500 });
   }
 
-  // ── 6. Community notification ────────────────────────────────────────────
+  // ── 7. Batch-update children with parentId ───────────────────────────────
+  if (hijosIds.length > 0) {
+    try {
+      // Firestore batch limit is 500 writes
+      const BATCH_SIZE = 400;
+      for (let i = 0; i < hijosIds.length; i += BATCH_SIZE) {
+        const batch = db.batch();
+        hijosIds.slice(i, i + BATCH_SIZE).forEach(childId => {
+          batch.update(db.collection('incidencias').doc(childId), {
+            parentId:   incidenciaId,
+            updated_at: now,
+          });
+        });
+        await batch.commit();
+      }
+      log.info('ai_act_children_linked', { incidencia_id: incidenciaId, hijos: hijosIds.length });
+    } catch (err) {
+      // Non-fatal — parent created, children just don't have parentId yet
+      log.error('ai_act_batch_update_failed', err, { incidencia_id: incidenciaId });
+    }
+  }
+
+  // ── 8. Community notification ────────────────────────────────────────────
   try {
     await db
       .collection('comunidades').doc(comunidadId)
