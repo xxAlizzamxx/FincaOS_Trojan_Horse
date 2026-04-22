@@ -1,70 +1,211 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/client';
-import { useAuth } from '@/hooks/useAuth';
-import { X } from 'lucide-react';
+/**
+ * AlertaGlobalBanner
+ *
+ * Persistent top-of-screen banner visible to ALL community users when the
+ * AI pattern engine detects zone/category hotspots.
+ *
+ * Design:
+ *  - Reads real-time from ai_insights/{comunidadId} via onSnapshot
+ *  - One banner row per active pattern (danger = red, warning = amber)
+ *  - Each user dismisses individually via the X button
+ *  - Dismissal persisted in localStorage keyed by userId + patternKey + generado_at
+ *    → auto-reappears for everyone when a NEW scan produces a fresh generado_at
+ *  - In-flow (sticky top-0) so it pushes AppHeader + content down naturally
+ *  - Also renders legacy admin-created alertas_globales (shared dismiss)
+ */
 
-interface Alerta {
-  id: string;
-  categoria_id: string;
-  zona: string;
-  mensaje: string;
-  nivel?: 'medium' | 'high';
+import { useEffect, useState, useCallback } from 'react';
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  updateDoc,
+} from 'firebase/firestore';
+import { db }       from '@/lib/firebase/client';
+import { useAuth }  from '@/hooks/useAuth';
+import { cn }       from '@/lib/utils';
+import { AlertTriangle, Flame, MapPin, X } from 'lucide-react';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface PatronDetectado {
+  type:             'zona_caliente' | 'categoria_caliente';
+  zona:             string;
+  categoria_id:     string | null;
+  categoria_nombre: string;
+  count:            number;
+  severity:         'warning' | 'danger';
+  message:          string;
+}
+
+interface AIInsightDoc {
+  patrones:    PatronDetectado[];
+  generado_at: string;
+}
+
+interface AlertaAdmin {
+  id:          string;
+  zona:        string;
+  mensaje:     string;
+  nivel?:      'medium' | 'high';
   created_at?: unknown;
 }
 
+// ── localStorage helpers ───────────────────────────────────────────────────────
+
+/** Key uniquely identifies: this user + this pattern + this analysis run */
+function lsKey(userId: string, pk: string, generadoAt: string) {
+  return `finca:alert_dismissed:${userId}:${pk}:${generadoAt}`;
+}
+
+/** patternKey mirrors the bucket key used by patternEngine.ts */
+function patternKey(p: PatronDetectado) {
+  return `${p.zona}||${p.categoria_id ?? '__none__'}`;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function AlertaGlobalBanner() {
-  const { perfil } = useAuth();
-  const [alertas, setAlertas] = useState<Alerta[]>([]);
+  const { user, perfil } = useAuth();
+  const comunidadId = perfil?.comunidad_id;
 
+  const [insights,     setInsights]     = useState<AIInsightDoc | null>(null);
+  const [dismissed,    setDismissed]    = useState<Set<string>>(new Set());
+  const [adminAlertas, setAdminAlertas] = useState<AlertaAdmin[]>([]);
+
+  // ── Subscribe: ai_insights/{comunidadId} ─────────────────────────────────
   useEffect(() => {
-    if (!perfil?.comunidad_id) return;
+    if (!comunidadId) return;
+    const ref = doc(db, 'ai_insights', comunidadId);
+    return onSnapshot(
+      ref,
+      (snap) => setInsights(snap.exists() ? (snap.data() as AIInsightDoc) : null),
+      (err)  => console.error('[AlertaGlobalBanner] ai_insights error:', err),
+    );
+  }, [comunidadId]);
 
-    console.log('[ALERT BANNER] Subscribing to alertas_globales for comunidad:', perfil.comunidad_id);
-
+  // ── Subscribe: alertas_globales (legacy admin alerts) ────────────────────
+  useEffect(() => {
+    if (!comunidadId) return;
     const q = query(
       collection(db, 'alertas_globales'),
-      where('activa', '==', true),
-      where('comunidad_id', '==', perfil.comunidad_id),
+      where('activa',       '==', true),
+      where('comunidad_id', '==', comunidadId),
     );
-
-    const unsub = onSnapshot(
+    return onSnapshot(
       q,
-      (snap) => {
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Alerta));
-        console.log('[ALERT BANNER] Snapshot received, active alerts:', data.length);
-        setAlertas(data);
-      },
-      (error) => {
-        console.error('[ALERT SNAPSHOT ERROR]', error.code, error.message);
-      },
+      (snap) => setAdminAlertas(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AlertaAdmin))),
+      (err)  => console.error('[AlertaGlobalBanner] alertas_globales error:', err),
     );
+  }, [comunidadId]);
 
-    return () => unsub();
-  }, [perfil?.comunidad_id]);
+  // ── Load per-user dismissals from localStorage ───────────────────────────
+  // Re-runs whenever generado_at changes → a new scan resets all dismissals
+  // because old lsKeys won't match the new generado_at.
+  useEffect(() => {
+    if (!user?.uid || !insights?.generado_at) return;
+    const active = new Set<string>();
+    const prefix = `finca:alert_dismissed:${user.uid}:`;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k?.startsWith(prefix)) continue;
+      // key: finca:alert_dismissed:{uid}:{patternKey}:{generadoAt}
+      // patternKey contains "||" but no ":" — split on last ":"
+      const rest      = k.slice(prefix.length);
+      const lastColon = rest.lastIndexOf(':');
+      const storedAt  = rest.slice(lastColon + 1);
+      const storedPk  = rest.slice(0, lastColon);
+      if (storedAt === insights.generado_at) active.add(storedPk);
+    }
+    setDismissed(active);
+  }, [user?.uid, insights?.generado_at]);
 
-  const dismiss = (id: string) => {
-    console.log('[ALERT BANNER] Dismissing alert:', id);
-    updateDoc(doc(db, 'alertas_globales', id), { activa: false }).catch((err) => {
-      console.error('[ALERT BANNER] Dismiss failed:', err);
-    });
-  };
+  // ── Dismiss AI pattern (per-user, localStorage) ──────────────────────────
+  const dismissPattern = useCallback((patron: PatronDetectado) => {
+    if (!user?.uid || !insights?.generado_at) return;
+    const pk  = patternKey(patron);
+    try { localStorage.setItem(lsKey(user.uid, pk, insights.generado_at), '1'); } catch { /* quota */ }
+    setDismissed(prev => new Set(Array.from(prev).concat(pk)));
+  }, [user?.uid, insights?.generado_at]);
 
-  if (alertas.length === 0) return null;
+  // ── Dismiss legacy admin alert (shared — marks activa: false for all) ─────
+  const dismissAdmin = useCallback((id: string) => {
+    updateDoc(doc(db, 'alertas_globales', id), { activa: false }).catch(console.error);
+  }, []);
+
+  if (!comunidadId) return null;
+
+  const visiblePatterns = (insights?.patrones ?? []).filter(
+    (p) => !dismissed.has(patternKey(p)),
+  );
+
+  if (visiblePatterns.length === 0 && adminAlertas.length === 0) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[9990] flex flex-col gap-1 pointer-events-none">
-      {alertas.map((a) => (
+    <div className="sticky top-0 z-[9990] flex flex-col">
+      {/* ── AI pattern banners ── */}
+      {visiblePatterns.map((patron) => {
+        const isDanger = patron.severity === 'danger';
+        return (
+          <div
+            key={patternKey(patron)}
+            className={cn(
+              'flex items-center gap-3 px-4 py-2.5 border-b shadow-sm',
+              isDanger
+                ? 'bg-red-600 border-red-700 text-white'
+                : 'bg-amber-500 border-amber-600 text-white',
+            )}
+          >
+            {/* Severity icon */}
+            {isDanger
+              ? <Flame         className="w-4 h-4 shrink-0" />
+              : <AlertTriangle className="w-4 h-4 shrink-0" />
+            }
+
+            {/* Message */}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold leading-snug">
+                <MapPin className="inline w-3 h-3 mr-1 opacity-80" />
+                Zona {patron.zona}
+                {patron.categoria_nombre && patron.categoria_nombre !== 'Sin categoría' && (
+                  <span className="font-normal opacity-90"> · {patron.categoria_nombre}</span>
+                )}
+                <span className="ml-2 text-[11px] font-bold bg-white/20 rounded-full px-1.5 py-0.5">
+                  {patron.count} incidencias
+                </span>
+              </p>
+              <p className="text-xs opacity-85 mt-0.5 leading-snug truncate">
+                {patron.message}
+              </p>
+            </div>
+
+            {/* Per-user dismiss */}
+            <button
+              onClick={() => dismissPattern(patron)}
+              className="shrink-0 p-1.5 rounded-full hover:bg-white/20 active:scale-95 transition-all"
+              aria-label="Cerrar alerta"
+              title="Solo tú verás esto cerrado. Si se detectan nuevos patrones reaparecerá para todos."
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        );
+      })}
+
+      {/* ── Legacy admin alerts ── */}
+      {adminAlertas.map((a) => (
         <div
           key={a.id}
-          className="pointer-events-auto flex items-start gap-3 bg-amber-50 border-b border-amber-300 px-4 py-3 shadow-sm"
+          className="flex items-start gap-3 bg-amber-50 border-b border-amber-300 px-4 py-3 shadow-sm"
         >
           <span className="text-amber-600 text-lg shrink-0">⚠️</span>
           <p className="flex-1 text-sm text-amber-900 leading-snug">{a.mensaje}</p>
           <button
-            onClick={() => dismiss(a.id)}
+            onClick={() => dismissAdmin(a.id)}
             className="shrink-0 p-1 rounded hover:bg-amber-100 transition-colors"
             aria-label="Cerrar alerta"
           >

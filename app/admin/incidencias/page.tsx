@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Search, CircleAlert as AlertCircle, LayoutGrid, List, CheckSquare, Bot } from 'lucide-react';
+import { Search, CircleAlert as AlertCircle, LayoutGrid, List, CheckSquare, Bot, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import { collection, query, where, orderBy, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -29,7 +29,7 @@ const estadoConfig: Record<string, { label: string; color: string }> = {
 const KANBAN_COLUMNS = ['pendiente', 'en_revision', 'presupuestada', 'en_ejecucion', 'resuelta'];
 
 export default function AdminIncidenciasPage() {
-  const { perfil } = useAuth();
+  const { user, perfil } = useAuth();
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('todos');
@@ -38,6 +38,8 @@ export default function AdminIncidenciasPage() {
   const [vista, setVista] = useState<'lista' | 'kanban'>('lista');
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [accionLote, setAccionLote] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
 
   useEffect(() => {
     if (perfil?.comunidad_id) fetchIncidencias();
@@ -106,6 +108,31 @@ export default function AdminIncidenciasPage() {
     setActualizando(null);
   }
 
+  async function eliminarLote() {
+    if (seleccionados.size === 0 || !user) return;
+    setEliminando(true);
+    setConfirmandoEliminar(false);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/incidencias/bulk-action', {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ids: Array.from(seleccionados), accion: 'eliminar' }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success(`${seleccionados.size} incidencia${seleccionados.size !== 1 ? 's' : ''} eliminada${seleccionados.size !== 1 ? 's' : ''}`);
+      setSeleccionados(new Set());
+      setAccionLote(false);
+      fetchIncidencias();
+    } catch {
+      toast.error('Error al eliminar las incidencias');
+    }
+    setEliminando(false);
+  }
+
   function toggleSeleccion(id: string) {
     setSeleccionados((prev) => {
       const next = new Set(prev);
@@ -172,7 +199,7 @@ export default function AdminIncidenciasPage() {
           </Button>
           {accionLote && seleccionados.size > 0 && (
             <>
-              <span className="text-xs text-muted-foreground">{seleccionados.size} seleccionadas</span>
+              <span className="text-xs text-muted-foreground">{seleccionados.size} seleccionada{seleccionados.size !== 1 ? 's' : ''}</span>
               <Select onValueChange={(v) => cambiarEstadoLote(v)}>
                 <SelectTrigger className="w-48 h-8 text-xs"><SelectValue placeholder="Cambiar estado a..." /></SelectTrigger>
                 <SelectContent>
@@ -181,6 +208,45 @@ export default function AdminIncidenciasPage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* ── Eliminar selección ── */}
+              {!confirmandoEliminar ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:border-red-400 gap-1.5"
+                  onClick={() => setConfirmandoEliminar(true)}
+                  disabled={eliminando}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Eliminar
+                </Button>
+              ) : (
+                <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-2 py-1">
+                  <span className="text-xs text-red-700 font-medium">¿Eliminar {seleccionados.size}?</span>
+                  <Button
+                    size="sm"
+                    className="h-6 text-[11px] px-2 bg-red-600 hover:bg-red-700 text-white gap-1"
+                    onClick={eliminarLote}
+                    disabled={eliminando}
+                  >
+                    {eliminando
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <Trash2 className="w-3 h-3" />
+                    }
+                    {eliminando ? 'Eliminando…' : 'Confirmar'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[11px] px-2 text-red-600"
+                    onClick={() => setConfirmandoEliminar(false)}
+                    disabled={eliminando}
+                  >
+                    No
+                  </Button>
+                </div>
+              )}
             </>
           )}
           {accionLote && (
