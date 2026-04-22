@@ -225,7 +225,35 @@ export default function IncidenciaDetailPage() {
 
       await batch.commit();
       toast.success('Presupuesto aceptado');
-      // onSnapshot listener will automatically update presupuestos
+
+      // ── Notify accepted provider ─────────────────────────────────────────
+      if (pres.proveedor_id) {
+        addDoc(collection(db, 'notificaciones'), {
+          usuario_id:   pres.proveedor_id,
+          tipo:         'presupuesto_aceptado',
+          titulo:       '¡Presupuesto aceptado!',
+          mensaje:      `Tu presupuesto de €${pres.monto} para "${incidencia.titulo}" ha sido aceptado. El trabajo ha quedado asignado a ti.`,
+          incidencia_id: incidencia.id,
+          leida:        false,
+          created_at:   new Date().toISOString(),
+        }).catch(() => { /* fire-and-forget */ });
+      }
+
+      // ── Notify rejected providers ────────────────────────────────────────
+      presupuestosRecibidos.forEach((p) => {
+        if (p.id !== pres.id && p.proveedor_id) {
+          addDoc(collection(db, 'notificaciones'), {
+            usuario_id:   p.proveedor_id,
+            tipo:         'presupuesto_rechazado',
+            titulo:       'Presupuesto no seleccionado',
+            mensaje:      `Tu presupuesto para "${incidencia.titulo}" no fue seleccionado esta vez.`,
+            incidencia_id: incidencia.id,
+            leida:        false,
+            created_at:   new Date().toISOString(),
+          }).catch(() => { /* fire-and-forget */ });
+        }
+      });
+
     } catch (err: any) {
       toast.error(err.message ?? 'Error al aceptar presupuesto');
     } finally {
@@ -236,12 +264,26 @@ export default function IncidenciaDetailPage() {
   async function rechazarPresupuesto(presId: string) {
     if (!incidencia) return;
     try {
+      const presDoc = presupuestosRecibidos.find((p) => p.id === presId);
+
       await updateDoc(
         doc(db, 'incidencias', incidencia.id, 'presupuestos', presId),
         { estado: 'rechazado' }
       );
       toast.success('Presupuesto rechazado');
-      // onSnapshot listener will automatically update presupuestos
+
+      // ── Notify rejected provider ─────────────────────────────────────────
+      if (presDoc?.proveedor_id) {
+        addDoc(collection(db, 'notificaciones'), {
+          usuario_id:   presDoc.proveedor_id,
+          tipo:         'presupuesto_rechazado',
+          titulo:       'Presupuesto rechazado',
+          mensaje:      `Tu presupuesto para "${incidencia.titulo}" ha sido rechazado.`,
+          incidencia_id: incidencia.id,
+          leida:        false,
+          created_at:   new Date().toISOString(),
+        }).catch(() => { /* fire-and-forget */ });
+      }
     } catch (err: any) {
       toast.error(err.message ?? 'Error al rechazar presupuesto');
     }

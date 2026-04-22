@@ -16,6 +16,7 @@ import {
   collectionGroup,
   query,
   where,
+  updateDoc,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,8 @@ interface Incidencia {
   estimacion_max?: number | null;
   fotos?: Array<{ storage_path?: string; url?: string }>;
   created_at: string;
+  zona?: string;
+  proveedor_asignado?: string;
 }
 
 interface Presupuesto {
@@ -68,6 +71,7 @@ interface Presupuesto {
   mensaje: string;
   estado: string;
   created_at: any;
+  incidencia_titulo?: string;  // Task 4 — loaded from incidencia doc
   // legacy fields (top-level collection)
   precio?: number;
   comentario?: string;
@@ -80,7 +84,7 @@ interface Valoracion {
   createdAt: string;
 }
 
-type Tab = 'disponibles' | 'presupuestos' | 'valoraciones' | 'perfil';
+type Tab = 'disponibles' | 'asignados' | 'presupuestos' | 'valoraciones' | 'perfil';
 
 export default function ProveedorDashboardPage() {
   const router = useRouter();
@@ -89,7 +93,7 @@ export default function ProveedorDashboardPage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('disponibles');
 
-  // Tab 1
+  // Tab 1: Disponibles
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [loadingIncidencias, setLoadingIncidencias] = useState(false);
   // Modal
@@ -99,11 +103,17 @@ export default function ProveedorDashboardPage() {
   const [comentario, setComentario] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Tab 2
+  // Tab 2: Asignados (Task 1)
+  const [asignados, setAsignados] = useState<Incidencia[]>([]);
+  const [loadingAsignados, setLoadingAsignados] = useState(false);
+  const [updatingEstado, setUpdatingEstado] = useState<string | null>(null);
+
+  // Tab 3: Presupuestos
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
   const [loadingPresupuestos, setLoadingPresupuestos] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
-  // Tab 3
+  // Tab 4: Valoraciones
   const [valoraciones, setValoraciones] = useState<Valoracion[]>([]);
   const [loadingValoraciones, setLoadingValoraciones] = useState(false);
 
@@ -154,20 +164,24 @@ export default function ProveedorDashboardPage() {
   useEffect(() => {
     if (!user || !proveedor) return;
     if (activeTab === 'disponibles') loadIncidencias();
+    if (activeTab === 'asignados') loadAsignados();
     if (activeTab === 'valoraciones') loadValoraciones();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, user, proveedor]);
 
-  // Setup presupuestos listener when tab is active
+  // Setup presupuestos listener + notifications listener when tab is active
   useEffect(() => {
     if (activeTab !== 'presupuestos' || !user) return;
-    
+
     console.log('[ProveedorDashboard] Setting up presupuestos listener');
     let unsubscribe: (() => void) | undefined;
-    
+
     (async () => {
       unsubscribe = await loadPresupuestos();
     })();
+
+    // Mark all notifications as read when opening presupuestos tab (Task 5)
+    markNotificationsAsRead();
 
     return () => {
       if (unsubscribe) {
@@ -176,6 +190,25 @@ export default function ProveedorDashboardPage() {
       }
     };
   }, [activeTab, user]);
+
+  // Setup notifications listener (Task 5)
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, 'notificaciones'),
+      where('usuario_id', '==', user.uid),
+      where('leida', '==', false)
+    );
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setUnreadNotifications(snap.docs.length);
+    }, (err) => {
+      console.error('[ProveedorDashboard] Error loading notifications:', err);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   async function loadIncidencias() {
     if (!proveedor) return;
@@ -215,24 +248,66 @@ export default function ProveedorDashboardPage() {
     }
   }
 
+  // Task 1: Load assigned work (proveedor_asignado == user.uid, estado NOT IN resuelta/cerrada)
+  async function loadAsignados() {
+    if (!user) return;
+    setLoadingAsignados(true);
+    try {
+      const q = query(
+        collection(db, 'incidencias'),
+        where('proveedor_asignado', '==', user.uid),
+        where('estado', 'not-in', ['resuelta', 'cerrada'])
+      );
+      const snap = await getDocs(q);
+      const data: Incidencia[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<Incidencia, 'id'>),
+      }));
+      setAsignados(data);
+    } catch {
+      toast.error('Error al cargar trabajos asignados');
+    } finally {
+      setLoadingAsignados(false);
+    }
+  }
+
 
   async function loadPresupuestos() {
     if (!user) return;
     setLoadingPresupuestos(true);
-    
+
     const q = query(
       collectionGroup(db, 'presupuestos'),
       where('proveedor_id', '==', user.uid)
     );
-    
-    const unsubscribe = onSnapshot(q, (snap) => {
+
+    const unsubscribe = onSnapshot(q, async (snap) => {
       console.log('[ProveedorDashboard] Presupuestos actualizados:', snap.docs.length);
       const data: Presupuesto[] = snap.docs.map((d) => ({
         id: d.id,
         idIncidencia: d.ref.parent.parent?.id ?? '',
         ...(d.data() as Omit<Presupuesto, 'id' | 'idIncidencia'>),
       }));
-      setPresupuestos(data);
+
+      // Task 4: Load incidencia titles for each presupuesto
+      const enriched = await Promise.all(
+        data.map(async (p) => {
+          try {
+            const incDoc = await getDoc(doc(db, 'incidencias', p.idIncidencia));
+            if (incDoc.exists()) {
+              return {
+                ...p,
+                incidencia_titulo: (incDoc.data() as any).titulo ?? 'Sin título',
+              };
+            }
+          } catch {
+            // Silently fail — presupuesto stays without titulo
+          }
+          return p;
+        })
+      );
+
+      setPresupuestos(enriched);
       setLoadingPresupuestos(false);
     }, (err) => {
       console.error('[ProveedorDashboard] Error presupuestos:', err);
@@ -306,6 +381,58 @@ export default function ProveedorDashboardPage() {
     toast.success('Solicitud rechazada');
   }
 
+  // Task 2: Update work status (asignado → en_ejecucion → resuelta)
+  async function handleActualizarEstado(incidenciaId: string, nuevoEstado: string) {
+    if (!user) return;
+    setUpdatingEstado(incidenciaId);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/proveedor/actualizar-estado', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          incidencia_id: incidenciaId,
+          nuevo_estado: nuevoEstado,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Error ${res.status}`);
+      }
+      toast.success('Estado actualizado');
+      // Reload asignados
+      await loadAsignados();
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al actualizar el estado');
+    } finally {
+      setUpdatingEstado(null);
+    }
+  }
+
+  // Task 5: Mark all notifications as read
+  async function markNotificationsAsRead() {
+    if (!user) return;
+    try {
+      const q = query(
+        collection(db, 'notificaciones'),
+        where('usuario_id', '==', user.uid),
+        where('leida', '==', false)
+      );
+      const snap = await getDocs(q);
+      // Use Promise.all to update all notifications in parallel
+      const promises = snap.docs.map((d) =>
+        updateDoc(d.ref, { leida: true })
+      );
+      await Promise.all(promises);
+      setUnreadNotifications(0);
+    } catch (err) {
+      console.error('[ProveedorDashboard] Error marking notifications as read:', err);
+    }
+  }
+
   async function handleSignOut() {
     await firebaseSignOut(auth);
     router.replace('/proveedor/login');
@@ -328,7 +455,13 @@ export default function ProveedorDashboardPage() {
 
   const TABS: { key: Tab; label: string }[] = [
     { key: 'disponibles', label: 'Disponibles' },
-    { key: 'presupuestos', label: 'Mis Presupuestos' },
+    { key: 'asignados', label: 'Trabajos asignados' },
+    {
+      key: 'presupuestos',
+      label: unreadNotifications > 0
+        ? `Mis Presupuestos (${unreadNotifications})`
+        : 'Mis Presupuestos'
+    },
     { key: 'valoraciones', label: 'Valoraciones' },
     { key: 'perfil', label: 'Mi Perfil' },
   ];
@@ -394,13 +527,24 @@ export default function ProveedorDashboardPage() {
                       {inc.tipo_problema ?? inc.categoria}
                     </Badge>
                   </div>
+                  {/* Meta row: zona + date */}
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    {inc.zona && <span>📍 {inc.zona}</span>}
+                    <span>
+                      📅{' '}
+                      {new Date(inc.created_at).toLocaleDateString('es-ES', {
+                        day: '2-digit',
+                        month: 'short',
+                      })}
+                    </span>
+                  </div>
                   {inc.descripcion && (
                     <p className="text-sm text-muted-foreground line-clamp-2">
                       {inc.descripcion}
                     </p>
                   )}
                   {(inc.estimacion_min || inc.estimacion_max) && (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs font-medium text-finca-coral">
                       Estimación IA: €{inc.estimacion_min ?? '?'} — €{inc.estimacion_max ?? '?'}
                     </p>
                   )}
@@ -493,7 +637,125 @@ export default function ProveedorDashboardPage() {
           </>
         )}
 
-        {/* ── TAB 2: Mis Presupuestos ── */}
+        {/* ── TAB 2: Trabajos asignados ── */}
+        {activeTab === 'asignados' && (
+          <>
+            {loadingAsignados && (
+              <div className="flex justify-center py-8">
+                <div className="w-6 h-6 rounded-full border-4 border-finca-coral border-t-transparent animate-spin" />
+              </div>
+            )}
+            {!loadingAsignados && asignados.length === 0 && (
+              <div className="text-center py-12 space-y-2">
+                <p className="text-4xl">🔨</p>
+                <p className="font-medium text-finca-dark">Sin trabajos asignados</p>
+                <p className="text-sm text-muted-foreground">
+                  Cuando el admin acepte uno de tus presupuestos, el trabajo aparecerá aquí.
+                </p>
+              </div>
+            )}
+            {asignados.map((inc) => {
+              const isUpdating = updatingEstado === inc.id;
+              return (
+                <Card key={inc.id}>
+                  <CardContent className="pt-4 space-y-3">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold text-sm">{inc.titulo}</p>
+                      <Badge
+                        variant="secondary"
+                        className={`shrink-0 text-xs capitalize ${
+                          inc.estado === 'asignado'
+                            ? 'bg-blue-100 text-blue-700'
+                            : inc.estado === 'en_ejecucion'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        {inc.estado === 'asignado'
+                          ? 'Asignado'
+                          : inc.estado === 'en_ejecucion'
+                          ? 'En ejecución'
+                          : inc.estado}
+                      </Badge>
+                    </div>
+
+                    {/* Meta */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      {inc.zona && <span>📍 {inc.zona}</span>}
+                      {inc.tipo_problema && <span>🔧 {inc.tipo_problema}</span>}
+                      <span>
+                        📅{' '}
+                        {new Date(inc.created_at).toLocaleDateString('es-ES', {
+                          day: '2-digit',
+                          month: 'short',
+                        })}
+                      </span>
+                    </div>
+
+                    {inc.descripcion && (
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {inc.descripcion}
+                      </p>
+                    )}
+
+                    {/* Photos */}
+                    {inc.fotos && inc.fotos.length > 0 && (
+                      <div className="w-20 h-20 rounded overflow-hidden bg-muted">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={inc.fotos[0].url ?? inc.fotos[0].storage_path ?? ''}
+                          alt="foto"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    {inc.estado === 'asignado' && (
+                      <Button
+                        size="sm"
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-white"
+                        disabled={isUpdating}
+                        onClick={() => handleActualizarEstado(inc.id, 'en_ejecucion')}
+                      >
+                        {isUpdating ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          '🔨 Iniciar trabajo'
+                        )}
+                      </Button>
+                    )}
+                    {inc.estado === 'en_ejecucion' && (
+                      <Button
+                        size="sm"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                        disabled={isUpdating}
+                        onClick={() => handleActualizarEstado(inc.id, 'resuelta')}
+                      >
+                        {isUpdating ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          '✅ Marcar como completado'
+                        )}
+                      </Button>
+                    )}
+                    {inc.estado === 'resuelta' && (
+                      <p className="text-xs text-emerald-600 font-medium text-center py-1">
+                        ✅ Trabajo completado
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </>
+        )}
+
+        {/* ── TAB 3: Mis Presupuestos ── */}
         {activeTab === 'presupuestos' && (
           <>
             {loadingPresupuestos && (
@@ -509,15 +771,15 @@ export default function ProveedorDashboardPage() {
             {presupuestos.map((p) => (
               <Card key={p.id}>
                 <CardContent className="pt-4 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground font-mono">
-                      #{p.idIncidencia.slice(0, 8)}
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold text-sm line-clamp-1">
+                      {p.incidencia_titulo ?? `#${p.idIncidencia.slice(0, 8)}`}
                     </p>
-                    <Badge variant={estadoBadgeVariant(p.estado)} className="text-xs capitalize">
+                    <Badge variant={estadoBadgeVariant(p.estado)} className="text-xs capitalize shrink-0">
                       {p.estado}
                     </Badge>
                   </div>
-                  <p className="font-semibold text-sm">€{p.monto ?? p.precio}</p>
+                  <p className="text-base font-bold text-finca-coral">€{p.monto ?? p.precio}</p>
                   {(p.mensaje || p.comentario) && (
                     <p className="text-sm text-muted-foreground">{p.mensaje ?? p.comentario}</p>
                   )}
