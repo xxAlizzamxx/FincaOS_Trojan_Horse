@@ -23,6 +23,7 @@ import { getAuth }    from 'firebase-admin/auth';
 import { getAdminDb } from '@/lib/firebase/admin';
 import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 import { createLogger } from '@/lib/logger';
+import { assignBestProvider } from '@/lib/ai/providerAssignment';
 
 // ── Firebase Admin bootstrap ─────────────────────────────────────────────────
 if (!getApps().length) {
@@ -128,41 +129,39 @@ export async function POST(req: NextRequest) {
   // Only fetch incidencias that are: open (not resuelta/cerrada), in same zone,
   // not already AI-generated parents, and not already children of another parent.
   let hijosIds: string[] = [];
+  // Track category frequencies from children → used for provider matching in step 8
+  const childrenCategoryFreq: Record<string, number> = {};
+
   try {
     const childrenQuery = await db.collection('incidencias')
       .where('comunidad_id', '==', comunidadId)
       .where('zona',         '==', zona)
       .get();
 
-    hijosIds = childrenQuery.docs
-      .filter(d => {
-        const data  = d.data();
-        const estado = data.estado as string;
+    const filteredChildren = childrenQuery.docs.filter(d => {
+      const data  = d.data();
+      const estado = data.estado as string;
 
-        // Exclude resolved / closed
-        if (['resuelta', 'cerrada'].includes(estado)) return false;
-        // Exclude AI-generated docs (inspection parents, chat incidencias with sistema_ia)
-        if (data.autor_id === 'sistema_ia') return false;
-        // Exclude incidencias already grouped under another inspection
-        if (data.parentId) return false;
-        // Exclude other AI inspection parents
-        if (data.tipo_problema === 'inspeccion_preventiva') return false;
+      if (['resuelta', 'cerrada'].includes(estado)) return false;
+      if (data.autor_id === 'sistema_ia') return false;
+      if (data.parentId) return false;
+      if (data.tipo_problema === 'inspeccion_preventiva') return false;
 
-        // Category matching:
-        //   If this inspection has a category, only group incidencias of that
-        //   same category (or those with no category at all — uncategorized ones
-        //   are always relevant to the zone).
-        //   If this inspection has NO category (zona_caliente, not categoria_caliente),
-        //   group all open incidencias in the zone regardless of their category.
-        if (categoriaId) {
-          const childCat = data.categoria_id ? String(data.categoria_id) : null;
-          // Include only: exact category match OR incidencia has no category
-          if (childCat && childCat !== categoriaId) return false;
-        }
+      if (categoriaId) {
+        const childCat = data.categoria_id ? String(data.categoria_id) : null;
+        if (childCat && childCat !== categoriaId) return false;
+      }
 
-        return true;
-      })
-      .map(d => d.id);
+      return true;
+    });
+
+    // Collect category IDs for dominant-category detection
+    for (const d of filteredChildren) {
+      const cat = d.data().categoria_id as string | undefined;
+      if (cat) childrenCategoryFreq[cat] = (childrenCategoryFreq[cat] || 0) + 1;
+    }
+
+    hijosIds = filteredChildren.map(d => d.id);
   } catch (err) {
     log.error('ai_act_fetch_children_failed', err, { comunidad_id: comunidadId, zona });
     // Non-fatal — proceed without children
@@ -240,7 +239,24 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 8. Community notification ────────────────────────────────────────────
+  // ── 8. Auto-assign best provider ────────────────────────────────────────
+  // Detects the dominant category from children, finds the highest-rated
+  // provider with a matching especialidad/servicios, and assigns them.
+  // Fire-and-forget — parent incidencia is already created; any failure here
+  // is non-fatal and logged.
+  void assignBestProvider({
+    db,
+    comunidadId,
+    incidenciaId,
+    zona,
+    categoriaId,
+    categoriaNombre,
+    childrenCategoryFreq,
+    now,
+    log,
+  });
+
+  // ── 9. Community notification ────────────────────────────────────────────
   try {
     await db
       .collection('comunidades').doc(comunidadId)

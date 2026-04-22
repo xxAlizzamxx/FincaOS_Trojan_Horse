@@ -15,7 +15,8 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { PatternAlertWidget } from '@/components/ai/PatternAlertWidget';
+import { PatternAlertWidget }  from '@/components/ai/PatternAlertWidget';
+import { ZonaMetricsWidget }   from '@/components/ai/ZonaMetricsWidget';
 
 const estadoConfig: Record<string, { label: string; color: string }> = {
   pendiente:    { label: 'Pendiente',    color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
@@ -154,6 +155,8 @@ export default function AdminDashboard() {
       </div>
 
       <PatternAlertWidget />
+
+      <ZonaMetricsWidget />
 
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-2">
