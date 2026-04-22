@@ -11,11 +11,16 @@
  * Design:
  *   - Admin SDK only — no client SDK
  *   - Fail-safe — never throws to caller
- *   - Backward-compatible — only reads existing fields (zona, created_at, resuelta_at)
+ *   - Backward-compatible:
+ *       • Reads existing `resuelta_at` + `created_at` fields
+ *       • Handles both ISO string AND Firestore Timestamp formats
+ *       • Falls back to `ubicacion → normalizeZona()` for legacy docs
+ *         that predate the `zona` enum field (mirrors patternEngine.ts)
  */
 
 import type { Firestore } from 'firebase-admin/firestore';
-import { getAdminDb }    from '@/lib/firebase/admin';
+import { getAdminDb }     from '@/lib/firebase/admin';
+import { normalizeZona }  from '@/lib/incidencias/mapZona';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +43,40 @@ export interface AIMetricsDoc {
 
 const MS_PER_DAY = 1_000 * 60 * 60 * 24;
 
+// ── Timestamp helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Converts a Firestore field value to a JS Date, handling:
+ *   - ISO string              "2025-04-22T12:00:00.000Z"
+ *   - Firestore Timestamp     { toDate(): Date, seconds: number, nanoseconds: number }
+ *   - null / undefined        → returns null
+ */
+function toDate(value: unknown): Date | null {
+  if (!value) return null;
+
+  // Firestore Timestamp object (Admin SDK)
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).toDate === 'function'
+  ) {
+    return (value as { toDate(): Date }).toDate();
+  }
+
+  // ISO string or any string parseable by Date
+  if (typeof value === 'string') {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Epoch millis stored as number
+  if (typeof value === 'number') {
+    return new Date(value);
+  }
+
+  return null;
+}
+
 // ── Core computation ─────────────────────────────────────────────────────────
 
 /**
@@ -45,8 +84,9 @@ const MS_PER_DAY = 1_000 * 60 * 60 * 24;
  * time-to-resolution statistics, persists to ai_metrics/{comunidadId},
  * and returns the result.
  *
- * Uses the existing `resuelta_at` + `created_at` fields.
- * Incidencias missing either timestamp are silently skipped.
+ * Both `zona` (canonical enum) and legacy `ubicacion` (free text) are
+ * supported. Timestamps can be ISO strings or Firestore Timestamp objects.
+ * Incidencias with missing/invalid timestamps are silently skipped.
  */
 export async function computeZonaMetrics(
   comunidadId: string,
@@ -63,18 +103,29 @@ export async function computeZonaMetrics(
 
   // ── Bucket resolution times by zona ──────────────────────────────────────
   const buckets: Record<string, number[]> = {};
+  let skipped = 0;
 
   for (const docSnap of snap.docs) {
     const data = docSnap.data();
 
-    const createdAt  = data.created_at  as string | undefined;
-    const resueltaAt = data.resuelta_at as string | undefined;
-    const zona       = data.zona        as string | undefined;
+    // ── Resolve zona (canonical field first, then legacy ubicacion fallback) ─
+    let zona: string | null = null;
+    if (data.zona != null && String(data.zona).trim()) {
+      zona = String(data.zona).trim();
+    } else if (data.ubicacion != null) {
+      zona = normalizeZona(String(data.ubicacion));
+    }
 
-    if (!createdAt || !resueltaAt || !zona) continue;
+    if (!zona) { skipped++; continue; }
 
-    const ms = new Date(resueltaAt).getTime() - new Date(createdAt).getTime();
-    if (ms < 0) continue; // skip bad/corrupted timestamps
+    // ── Parse timestamps (string or Firestore Timestamp) ─────────────────
+    const createdDate  = toDate(data.created_at);
+    const resueltaDate = toDate(data.resuelta_at);
+
+    if (!createdDate || !resueltaDate) { skipped++; continue; }
+
+    const ms = resueltaDate.getTime() - createdDate.getTime();
+    if (ms < 0) { skipped++; continue; }  // corrupt/future data — skip
 
     if (!buckets[zona]) buckets[zona] = [];
     buckets[zona].push(ms);
@@ -92,12 +143,12 @@ export async function computeZonaMetrics(
         max_dias:        +(Math.max(...tiempos)          / MS_PER_DAY).toFixed(1),
       };
     })
-    // Sort by worst (slowest) zone first so the admin sees the problem areas at top
+    // Sort by worst (slowest) zone first
     .sort((a, b) => b.promedio_dias - a.promedio_dias);
 
   const result: AIMetricsDoc = {
     comunidad_id:            comunidadId,
-    total_resueltas:         snap.size,
+    total_resueltas:         snap.size - skipped,
     tiempo_resolucion_zonas,
     actualizado_at:          new Date().toISOString(),
   };

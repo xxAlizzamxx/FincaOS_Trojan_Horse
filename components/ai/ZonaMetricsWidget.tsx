@@ -11,7 +11,7 @@
  * - Color-coded bars: green < 3 d, amber 3–10 d, red > 10 d
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { doc, onSnapshot }                  from 'firebase/firestore';
 import { db }                               from '@/lib/firebase/client';
 import { useAuth }                          from '@/hooks/useAuth';
@@ -71,6 +71,7 @@ export function ZonaMetricsWidget() {
   const [loading,    setLoading]    = useState(true);
   const [computing,  setComputing]  = useState(false);
   const [error,      setError]      = useState<string | null>(null);
+  const didAutoCompute = useRef(false);
 
   // ── Real-time listener ────────────────────────────────────────────────────
   useEffect(() => {
@@ -89,6 +90,27 @@ export function ZonaMetricsWidget() {
       },
     );
   }, [comunidadId]);
+
+  // ── Auto-compute on mount if data is missing or stale (> 1 h) ───────────
+  const AUTO_STALE_MS = 60 * 60 * 1_000; // 1 hour
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user || !comunidadId) return;
+    if (didAutoCompute.current) return;
+    didAutoCompute.current = true;
+
+    const lastMs = metrics?.actualizado_at
+      ? new Date(metrics.actualizado_at).getTime()
+      : 0;
+    const isStale = Date.now() - lastMs > AUTO_STALE_MS;
+
+    if (isStale) {
+      console.log('[ZonaMetricsWidget] auto-compute triggered');
+      void handleCompute();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   // ── Trigger recomputation ─────────────────────────────────────────────────
   const handleCompute = useCallback(async () => {
