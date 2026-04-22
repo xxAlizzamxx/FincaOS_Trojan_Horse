@@ -135,7 +135,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </PageTransition>
       </main>
-      <AIAssistantWidget />
+      {/* AI assistant only for residents — not for providers */}
+      {!isProveedor && <AIAssistantWidget />}
       <BottomTabBar />
     </div>
   );

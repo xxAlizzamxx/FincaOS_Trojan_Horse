@@ -29,12 +29,31 @@ const CATEGORIAS = [
 
 // Technical routing options — used to match with proveedor.servicios.
 // Independent of CATEGORIAS (user-facing labels). Defaults to 'general'.
+// The first 4 are shown by default; selecting 'otro' expands ALL_SERVICIOS below.
 const TIPO_PROBLEMA_OPTIONS = [
   { value: 'electricidad', label: 'Electricidad', emoji: '⚡' },
   { value: 'fontaneria',   label: 'Fontanería',   emoji: '🔧' },
   { value: 'ascensores',   label: 'Ascensores',   emoji: '🛗' },
   { value: 'general',      label: 'General',      emoji: '🔩' },
+  { value: 'otro',         label: 'Otro…',        emoji: '➕' },
 ] as const;
+
+// Full list of provider specialties — shown when "Otro…" is selected.
+// Must match ESPECIALIDADES in /proveedor/registro and SERVICIOS_DISPONIBLES in /proveedor/page.
+const ALL_SERVICIOS = [
+  { value: 'electricidad',      label: 'Electricidad',        emoji: '⚡' },
+  { value: 'fontaneria',        label: 'Fontanería',          emoji: '🔧' },
+  { value: 'albanileria',       label: 'Albañilería',         emoji: '🧱' },
+  { value: 'pintura',           label: 'Pintura',             emoji: '🎨' },
+  { value: 'ascensores',        label: 'Ascensores',          emoji: '🛗' },
+  { value: 'limpieza',          label: 'Limpieza',            emoji: '🧹' },
+  { value: 'jardineria',        label: 'Jardinería',          emoji: '🌿' },
+  { value: 'cerrajeria',        label: 'Cerrajería',          emoji: '🔑' },
+  { value: 'climatizacion',     label: 'Climatización',       emoji: '❄️' },
+  { value: 'telecomunicaciones',label: 'Telecomunicaciones',  emoji: '📡' },
+  { value: 'desinfeccion',      label: 'Desinfección/Plagas', emoji: '🐀' },
+  { value: 'general',           label: 'General',             emoji: '🔩' },
+];
 
 const prioridades = [
   { value: 'baja',    label: 'Baja',    emoji: '🟢', color: 'border-green-300 bg-green-50 text-green-700'   },
@@ -425,24 +444,80 @@ export default function NuevaIncidenciaPage() {
               Ayuda a conectar con el proveedor adecuado
             </p>
           </div>
-          <div className="grid grid-cols-4 gap-2">
-            {TIPO_PROBLEMA_OPTIONS.map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => setTipoProblema(t.value)}
-                className={cn(
-                  'p-2.5 rounded-xl border text-center transition-all',
-                  tipoProblema === t.value
-                    ? 'border-finca-coral bg-finca-peach/30 text-finca-coral'
-                    : 'border-border bg-white text-muted-foreground hover:border-finca-salmon',
-                )}
-              >
-                <span className="text-lg block mb-0.5">{t.emoji}</span>
-                <span className="text-xs font-medium">{t.label}</span>
-              </button>
-            ))}
+
+          {/* Quick options — always visible */}
+          <div className="grid grid-cols-5 gap-2">
+            {TIPO_PROBLEMA_OPTIONS.map((t) => {
+              const isOtro    = t.value === 'otro';
+              const isExpanded = tipoProblema === 'otro' || (isOtro && !TIPO_PROBLEMA_OPTIONS.some(o => o.value === tipoProblema && o.value !== 'otro'));
+              const isSelected = isOtro
+                ? !TIPO_PROBLEMA_OPTIONS.slice(0, -1).some(o => o.value === tipoProblema)
+                : tipoProblema === t.value;
+              return (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => {
+                    if (isOtro) setTipoProblema('otro');
+                    else setTipoProblema(t.value);
+                  }}
+                  className={cn(
+                    'p-2.5 rounded-xl border text-center transition-all',
+                    isSelected
+                      ? 'border-finca-coral bg-finca-peach/30 text-finca-coral'
+                      : 'border-border bg-white text-muted-foreground hover:border-finca-salmon',
+                  )}
+                >
+                  <span className="text-lg block mb-0.5">{t.emoji}</span>
+                  <span className="text-xs font-medium">{t.label}</span>
+                </button>
+              );
+            })}
           </div>
+
+          {/* Expanded specialties grid — shown when "Otro…" is selected */}
+          {tipoProblema === 'otro' && (
+            <div className="mt-2 p-3 rounded-xl border border-finca-coral/30 bg-finca-peach/10 space-y-2">
+              <p className="text-xs font-medium text-finca-coral">
+                Selecciona el tipo de proveedor que necesitas:
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {ALL_SERVICIOS.map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => setTipoProblema(s.value)}
+                    className={cn(
+                      'p-2.5 rounded-xl border text-center transition-all',
+                      tipoProblema === s.value
+                        ? 'border-finca-coral bg-finca-peach/30 text-finca-coral'
+                        : 'border-border bg-white text-muted-foreground hover:border-finca-salmon',
+                    )}
+                  >
+                    <span className="text-lg block mb-0.5">{s.emoji}</span>
+                    <span className="text-xs font-medium">{s.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Show selected specialty name if it's from the expanded list */}
+          {tipoProblema !== 'otro' && !TIPO_PROBLEMA_OPTIONS.slice(0, -1).some(o => o.value === tipoProblema) && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-[11px] text-finca-coral font-medium">
+                {ALL_SERVICIOS.find(s => s.value === tipoProblema)?.emoji}{' '}
+                {ALL_SERVICIOS.find(s => s.value === tipoProblema)?.label} seleccionado
+              </span>
+              <button
+                type="button"
+                onClick={() => setTipoProblema('general')}
+                className="text-[10px] text-muted-foreground underline"
+              >
+                cambiar
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="space-y-2">

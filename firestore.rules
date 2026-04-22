@@ -143,7 +143,7 @@ service cloud.firestore {
         allow delete: if isAuth() && request.auth.uid == userId;
       }
 
-      // Presupuestos de proveedores (subcolección)
+      // Presupuestos de proveedores (subcolección — acceso individual)
       match /presupuestos/{presupuestoId} {
         // Proveedor puede leer solo sus propios presupuestos
         // Admin/presidente de la comunidad puede leer todos los presupuestos
@@ -156,6 +156,20 @@ service cloud.firestore {
         // Admin/presidente puede actualizar estado (aceptado/rechazado)
         allow update: if isAuth() && isAdminOfCommunity(get(/databases/$(database)/documents/incidencias/$(incidenciaId)).data.comunidad_id);
       }
+    }
+
+    // ── Presupuestos collectionGroup (para queries entre todas las incidencias) ──
+    // El proveedor hace collectionGroup('presupuestos') para ver TODOS sus
+    // presupuestos de una vez sin conocer los IDs de cada incidencia.
+    // Sin esta regla explícita con {path=**} Firestore rechaza el collectionGroup.
+    //
+    // La regla de subcollección dentro de /incidencias/ cubre lecturas individuales;
+    // esta cubre la query transversal que necesita el dashboard del proveedor.
+    match /{path=**}/presupuestos/{presupuestoId} {
+      allow read: if isAuth() && (
+        resource.data.proveedor_id == request.auth.uid
+        || (profile().rol == 'admin' || profile().rol == 'presidente')
+      );
     }
 
     // ── Comentarios ───────────────────────────────────────────────────────
