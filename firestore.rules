@@ -346,6 +346,19 @@ service cloud.firestore {
         allow read: if isAuth();
         allow write: if false; // Admin SDK only (via /api/proveedores/review)
       }
+
+      // Denormalized copy of budgets submitted by this provider.
+      // Written by the presupuesto API (Admin SDK — bypasses rules).
+      // Status updates (aceptado/rechazado) come from admin client batch writes.
+      match /presupuestos/{incidenciaId} {
+        // Provider reads their own budgets
+        allow read: if isAuth() && request.auth.uid == proveedorId;
+        // Admin/presidente updates status when accepting or rejecting
+        allow update: if isAuth()
+                      && (profile().rol == 'admin' || profile().rol == 'presidente');
+        // Creates go via Admin SDK only; deletes not needed
+        allow create, delete: if false;
+      }
     }
 
     // ── Presupuestos ──────────────────────────────────────────────────────

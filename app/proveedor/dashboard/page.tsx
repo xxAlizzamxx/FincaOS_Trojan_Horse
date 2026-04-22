@@ -13,7 +13,6 @@ import {
   getDoc,
   getDocs,
   collection,
-  collectionGroup,
   query,
   where,
   updateDoc,
@@ -86,7 +85,9 @@ interface Valoracion {
   id: string;
   rating: number;
   comentario: string;
-  createdAt: string;
+  created_at: string;   // stored as ISO string in proveedores/{uid}/reviews
+  incidencia_id?: string;
+  user_id?: string;
 }
 
 type Tab = 'disponibles' | 'asignados' | 'presupuestos' | 'valoraciones' | 'perfil';
@@ -269,7 +270,10 @@ export default function ProveedorDashboardPage() {
     }
   }
 
-  // Task 1: Load assigned work (proveedor_asignado == user.uid, estado NOT IN resuelta/cerrada)
+  // Load assigned work — states after a presupuesto is accepted:
+  //   'presupuestada' = assigned but not yet started
+  //   'en_ejecucion'  = provider started the work
+  // Using 'in' (not 'not-in') so the composite index is simpler.
   async function loadAsignados() {
     if (!user) return;
     setLoadingAsignados(true);
@@ -277,7 +281,7 @@ export default function ProveedorDashboardPage() {
       const q = query(
         collection(db, 'incidencias'),
         where('proveedor_asignado', '==', user.uid),
-        where('estado', 'not-in', ['resuelta', 'cerrada'])
+        where('estado', 'in', ['presupuestada', 'en_ejecucion'])
       );
       const snap = await getDocs(q);
       const data: Incidencia[] = snap.docs.map((d) => ({
@@ -297,44 +301,33 @@ export default function ProveedorDashboardPage() {
     if (!user) return;
     setLoadingPresupuestos(true);
 
-    const q = query(
-      collectionGroup(db, 'presupuestos'),
-      where('proveedor_id', '==', user.uid)
+    // Read from proveedores/{uid}/presupuestos — denormalized subcollection.
+    // No collectionGroup index required; title is already stored at write time.
+    const unsubscribe = onSnapshot(
+      collection(db, 'proveedores', user.uid, 'presupuestos'),
+      (snap) => {
+        console.log('[ProveedorDashboard] Presupuestos actualizados:', snap.docs.length);
+        const data: Presupuesto[] = snap.docs.map((d) => {
+          const raw = d.data();
+          return {
+            id:               d.id,
+            idIncidencia:     raw.incidencia_id ?? d.id,
+            incidencia_titulo:raw.incidencia_titulo ?? null,
+            monto:            raw.monto ?? raw.precio ?? 0,
+            mensaje:          raw.mensaje ?? raw.comentario ?? '',
+            estado:           raw.estado ?? 'pendiente',
+            created_at:       raw.created_at ?? null,
+          } as Presupuesto;
+        });
+        setPresupuestos(data);
+        setLoadingPresupuestos(false);
+      },
+      (err) => {
+        console.error('[ProveedorDashboard] Error presupuestos:', err);
+        toast.error('Error al cargar presupuestos');
+        setLoadingPresupuestos(false);
+      }
     );
-
-    const unsubscribe = onSnapshot(q, async (snap) => {
-      console.log('[ProveedorDashboard] Presupuestos actualizados:', snap.docs.length);
-      const data: Presupuesto[] = snap.docs.map((d) => ({
-        id: d.id,
-        idIncidencia: d.ref.parent.parent?.id ?? '',
-        ...(d.data() as Omit<Presupuesto, 'id' | 'idIncidencia'>),
-      }));
-
-      // Task 4: Load incidencia titles for each presupuesto
-      const enriched = await Promise.all(
-        data.map(async (p) => {
-          try {
-            const incDoc = await getDoc(doc(db, 'incidencias', p.idIncidencia));
-            if (incDoc.exists()) {
-              return {
-                ...p,
-                incidencia_titulo: (incDoc.data() as any).titulo ?? 'Sin título',
-              };
-            }
-          } catch {
-            // Silently fail — presupuesto stays without titulo
-          }
-          return p;
-        })
-      );
-
-      setPresupuestos(enriched);
-      setLoadingPresupuestos(false);
-    }, (err) => {
-      console.error('[ProveedorDashboard] Error presupuestos:', err);
-      toast.error('Error al cargar presupuestos');
-      setLoadingPresupuestos(false);
-    });
 
     return unsubscribe;
   }
@@ -343,11 +336,10 @@ export default function ProveedorDashboardPage() {
     if (!user) return;
     setLoadingValoraciones(true);
     try {
-      const q = query(
-        collection(db, 'valoraciones_proveedor'),
-        where('proveedorId', '==', user.uid)
+      // Reviews live in proveedores/{uid}/reviews — no where clause needed
+      const snap = await getDocs(
+        collection(db, 'proveedores', user.uid, 'reviews')
       );
-      const snap = await getDocs(q);
       const data: Valoracion[] = snap.docs.map((d) => ({
         id: d.id,
         ...(d.data() as Omit<Valoracion, 'id'>),
@@ -783,9 +775,9 @@ export default function ProveedorDashboardPage() {
             {asignados.map((inc, idx) => {
               const isUpdating = updatingEstado === inc.id;
               const statusConfig = {
-                asignado:    { label: 'Asignado',     cls: 'bg-blue-50 text-blue-700 border-blue-200',   bar: 'bg-blue-500'   },
-                en_ejecucion:{ label: 'En ejecución', cls: 'bg-amber-50 text-amber-700 border-amber-200', bar: 'bg-amber-400'  },
-                resuelta:    { label: 'Completado',   cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', bar: 'bg-emerald-500' },
+                presupuestada:{ label: 'Asignado',     cls: 'bg-blue-50 text-blue-700 border-blue-200',   bar: 'bg-blue-500'   },
+                en_ejecucion: { label: 'En ejecución', cls: 'bg-amber-50 text-amber-700 border-amber-200', bar: 'bg-amber-400'  },
+                resuelta:     { label: 'Completado',   cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', bar: 'bg-emerald-500' },
               }[inc.estado] ?? { label: inc.estado, cls: 'bg-gray-100 text-gray-600 border-gray-200', bar: 'bg-gray-400' };
 
               return (
@@ -828,7 +820,7 @@ export default function ProveedorDashboardPage() {
                         )}
                       </div>
 
-                      {inc.estado === 'asignado' && (
+                      {inc.estado === 'presupuestada' && (
                         <Button
                           size="sm"
                           className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-semibold shadow-sm gap-1.5"
@@ -1010,9 +1002,9 @@ export default function ProveedorDashboardPage() {
                         {v.comentario && (
                           <p className="text-sm text-finca-dark leading-relaxed">{v.comentario}</p>
                         )}
-                        {v.createdAt && (
+                        {(v.created_at) && (
                           <p className="text-xs text-muted-foreground">
-                            {new Date(v.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                            {new Date(v.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
                           </p>
                         )}
                       </CardContent>

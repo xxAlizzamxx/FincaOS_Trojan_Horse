@@ -216,11 +216,20 @@ export default function IncidenciaDetailPage() {
       });
 
       // Accept this presupuesto, reject all others
+      // Also sync proveedores/{uid}/presupuestos/{incidenciaId} so providers
+      // can read their status without a collectionGroup index.
       presupuestosRecibidos.forEach((p) => {
+        const nuevoEstado = p.id === pres.id ? 'aceptado' : 'rechazado';
         batch.update(
           doc(db, 'incidencias', incidencia.id, 'presupuestos', p.id),
-          { estado: p.id === pres.id ? 'aceptado' : 'rechazado' }
+          { estado: nuevoEstado }
         );
+        if (p.proveedor_id) {
+          batch.update(
+            doc(db, 'proveedores', p.proveedor_id, 'presupuestos', incidencia.id),
+            { estado: nuevoEstado }
+          );
+        }
       });
 
       await batch.commit();
@@ -266,10 +275,19 @@ export default function IncidenciaDetailPage() {
     try {
       const presDoc = presupuestosRecibidos.find((p) => p.id === presId);
 
-      await updateDoc(
+      const batch = writeBatch(db);
+      batch.update(
         doc(db, 'incidencias', incidencia.id, 'presupuestos', presId),
         { estado: 'rechazado' }
       );
+      // Sync provider's own subcollection
+      if (presDoc?.proveedor_id) {
+        batch.update(
+          doc(db, 'proveedores', presDoc.proveedor_id, 'presupuestos', incidencia.id),
+          { estado: 'rechazado' }
+        );
+      }
+      await batch.commit();
       toast.success('Presupuesto rechazado');
 
       // ── Notify rejected provider ─────────────────────────────────────────
