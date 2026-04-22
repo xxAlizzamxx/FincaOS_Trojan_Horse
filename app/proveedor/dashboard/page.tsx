@@ -110,7 +110,7 @@ export default function ProveedorDashboardPage() {
     } catch { return new Set(); }
   }
   function saveRejected(uid: string, set: Set<string>) {
-    try { localStorage.setItem(getRejectedKey(uid), JSON.stringify([...set])); } catch { /* quota */ }
+    try { localStorage.setItem(getRejectedKey(uid), JSON.stringify(Array.from(set))); } catch { /* quota */ }
   }
   // Modal
   const [modalOpen, setModalOpen] = useState(false);

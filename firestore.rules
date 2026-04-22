@@ -12,6 +12,12 @@ service cloud.firestore {
       return p == null ? {} : p.data;
     }
 
+    // Checks whether the authenticated user has a proveedores doc (never has a perfiles doc).
+    // Uses exists() — cheaper than get(), no cross-doc data needed.
+    function isProveedorUser() {
+      return isAuth() && exists(/databases/$(database)/documents/proveedores/$(request.auth.uid));
+    }
+
     function belongsToCommunity(comunidadId) {
       return isAuth() && profile().comunidad_id == comunidadId;
     }
@@ -159,16 +165,25 @@ service cloud.firestore {
     }
 
     // ── Presupuestos collectionGroup (para queries entre todas las incidencias) ──
-    // El proveedor hace collectionGroup('presupuestos') para ver TODOS sus
-    // presupuestos de una vez sin conocer los IDs de cada incidencia.
-    // Sin esta regla explícita con {path=**} Firestore rechaza el collectionGroup.
+    // El proveedor hace collectionGroup('presupuestos').where('proveedor_id','==',uid)
+    // para ver TODOS sus presupuestos de una vez sin conocer los IDs de incidencias.
+    // Sin esta regla {path=**} Firestore rechaza la collectionGroup query.
     //
-    // La regla de subcollección dentro de /incidencias/ cubre lecturas individuales;
-    // esta cubre la query transversal que necesita el dashboard del proveedor.
+    // IMPORTANTE: profile() llama get(perfiles/uid). Los proveedores NO tienen
+    // documento en perfiles, solo en proveedores. Para evitar el get() innecesario
+    // —y el posible fallo de evaluación de reglas— distinguimos los dos casos:
+    //
+    //   1. Proveedor leyendo sus propios presupuestos  →  isProveedorUser() + proveedor_id match
+    //   2. Admin/presidente de la comunidad            →  profile().rol check
+    //
+    // Usar isProveedorUser() (exists()) evita que profile() haga un get() a perfiles
+    // para un uid que nunca tendrá ese documento.
     match /{path=**}/presupuestos/{presupuestoId} {
       allow read: if isAuth() && (
-        resource.data.proveedor_id == request.auth.uid
-        || (profile().rol == 'admin' || profile().rol == 'presidente')
+        // Caso 1 — Proveedor ve solo sus propios presupuestos
+        (isProveedorUser() && resource.data.proveedor_id == request.auth.uid)
+        // Caso 2 — Admin/presidente de la comunidad (vecinos con perfiles doc)
+        || (!isProveedorUser() && (profile().rol == 'admin' || profile().rol == 'presidente'))
       );
     }
 
