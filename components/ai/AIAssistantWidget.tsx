@@ -16,11 +16,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
-import { BotMessageSquare, X, Send, Loader2, ChevronDown } from 'lucide-react';
+import { BotMessageSquare, X, Send, Loader2, ChevronDown, CheckCircle2, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 
 interface Message {
   role: 'user' | 'assistant';
   text: string;
+  incidencia_id?: string; // set when IA auto-created an incidencia
 }
 
 const WELCOME: Message = {
@@ -76,8 +78,9 @@ export function AIAssistantWidget() {
 
       const data = await res.json();
       setMessages(prev => [...prev, {
-        role: 'assistant',
-        text: data.reply ?? 'No se pudo obtener respuesta. Inténtalo de nuevo.',
+        role:         'assistant',
+        text:         data.reply ?? 'No se pudo obtener respuesta. Inténtalo de nuevo.',
+        incidencia_id: data.incidencia_creada ? data.incidencia_id : undefined,
       }]);
     } catch {
       setMessages(prev => [...prev, {
@@ -137,13 +140,27 @@ export function AIAssistantWidget() {
                     <BotMessageSquare className="w-3.5 h-3.5 text-finca-coral" />
                   </div>
                 )}
-                <div className={cn(
-                  'max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-snug',
-                  msg.role === 'user'
-                    ? 'bg-finca-coral text-white rounded-br-sm'
-                    : 'bg-gray-100 text-finca-dark rounded-bl-sm',
-                )}>
-                  {msg.text}
+                <div className="flex flex-col gap-1.5 max-w-[80%]">
+                  <div className={cn(
+                    'rounded-2xl px-3 py-2 text-sm leading-snug',
+                    msg.role === 'user'
+                      ? 'bg-finca-coral text-white rounded-br-sm'
+                      : 'bg-gray-100 text-finca-dark rounded-bl-sm',
+                  )}>
+                    {msg.text}
+                  </div>
+                  {/* ── Incidencia created confirmation ── */}
+                  {msg.incidencia_id && (
+                    <Link
+                      href={`/incidencias/${msg.incidencia_id}`}
+                      onClick={() => setOpen(false)}
+                      className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 hover:bg-emerald-100 transition-colors self-start"
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      Incidencia creada
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </Link>
+                  )}
                 </div>
               </div>
             ))}

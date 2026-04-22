@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Search, CircleAlert as AlertCircle, LayoutGrid, List, CheckSquare } from 'lucide-react';
+import { Search, CircleAlert as AlertCircle, LayoutGrid, List, CheckSquare, Bot } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import { collection, query, where, orderBy, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -219,7 +219,14 @@ export default function AdminIncidenciasPage() {
                     <Card key={inc.id} className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow">
                       <CardContent className="p-3 space-y-1.5">
                         <p className="text-xs font-semibold text-finca-dark line-clamp-2">{inc.titulo}</p>
-                        <p className="text-[10px] text-muted-foreground">{(inc.autor as any)?.nombre_completo}</p>
+                        {(inc as any).creado_por_avatar === 'ia' ? (
+                          <p className="text-[10px] text-violet-600 font-medium flex items-center gap-0.5">
+                            <Bot className="w-2.5 h-2.5" />
+                            Asistente IA
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-muted-foreground">{(inc.autor as any)?.nombre_completo}</p>
+                        )}
                         {inc.prioridad === 'urgente' && (
                           <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded">URGENTE</span>
                         )}
@@ -273,7 +280,14 @@ export default function AdminIncidenciasPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                        <span>{(inc.autor as any)?.nombre_completo}</span>
+                        {(inc as any).creado_por_avatar === 'ia' ? (
+                          <span className="inline-flex items-center gap-1 text-violet-600 font-medium">
+                            <Bot className="w-3.5 h-3.5" />
+                            Asistente IA
+                          </span>
+                        ) : (
+                          <span>{(inc.autor as any)?.nombre_completo}</span>
+                        )}
                         <span>· {format(new Date(inc.created_at), "d MMM yyyy", { locale: es })}</span>
                       </div>
                       {inc.estimacion_min != null && inc.estimacion_max != null && (

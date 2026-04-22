@@ -119,6 +119,9 @@ export async function POST(req: NextRequest) {
     const ref = await db.collection('incidencias').add({
       comunidad_id:          comunidadId,
       autor_id:              'sistema_ia',
+      creado_por:            'sistema_ia',
+      creado_por_avatar:     'ia',
+      origen:                'pattern_engine',
       titulo,
       descripcion,
       categoria_id:          null,
