@@ -215,9 +215,13 @@ export function ZonaMetricsWidget() {
 
         {/* ── Empty — data exists but no resolved incidencias ── */}
         {!loading && metrics && zonas.length === 0 && (
-          <div className="py-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              Aún no hay incidencias resueltas para calcular métricas.
+          <div className="py-4 text-center space-y-1.5">
+            <Clock className="w-8 h-8 text-muted-foreground/30 mx-auto" />
+            <p className="text-sm font-medium text-finca-dark">Sin datos de resolución</p>
+            <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
+              Las métricas requieren incidencias con estado <strong>resuelta</strong> que tengan
+              fechas de creación y resolución registradas. Marca incidencias como resueltas
+              y haz clic en "Actualizar".
             </p>
           </div>
         )}

@@ -83,11 +83,19 @@ export async function actualizarEstadoIncidencia(
   };
 
   // 3. Actualizar Firestore de forma atómica
-  await updateDoc(doc(db, 'incidencias', incidenciaId), {
+  const now = new Date().toISOString();
+  const update: Record<string, unknown> = {
     estado:            nuevoEstado,
-    updated_at:        new Date().toISOString(),
+    updated_at:        now,
     historial_estados: arrayUnion(entrada),   // append al array sin sobrescribir
-  });
+  };
+
+  // Set resuelta_at when reaching the final state — required by metricsEngine
+  if (nuevoEstado === 'resuelta') {
+    update.resuelta_at = now;
+  }
+
+  await updateDoc(doc(db, 'incidencias', incidenciaId), update);
 
   return nuevoEstado;
 }
