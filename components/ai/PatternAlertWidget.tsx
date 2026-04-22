@@ -12,7 +12,7 @@
  * - Clicking a zone row navigates to /incidencias filtered by that zone
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { doc, onSnapshot, updateDoc }       from 'firebase/firestore';
 import { db }                               from '@/lib/firebase/client';
 import { useAuth }                          from '@/hooks/useAuth';
@@ -76,6 +76,8 @@ export function PatternAlertWidget() {
   const [actStates,  setActStates]  = useState<Record<string, 'idle'|'acting'|'done'|'error'>>({});
   // Local optimistic dismiss state (mirrors what's in Firestore) so UI is instant
   const [localDismissed, setLocalDismissed] = useState<Record<string, boolean>>({});
+  // Guard: auto-scan fires at most once per component mount
+  const didAutoScan = useRef(false);
 
   // ── Real-time listener on ai_insights/{comunidadId} ──────────────────────
   useEffect(() => {
@@ -124,6 +126,35 @@ export function PatternAlertWidget() {
       setScanning(false);
     }
   }, [user, comunidadId, scanning]);
+
+  // ── Auto-scan on mount ───────────────────────────────────────────────────
+  //
+  // Fires once when the initial Firestore load completes (loading → false).
+  // Triggers a fresh scan if:
+  //   a) ai_insights doesn't exist yet (no previous scan), OR
+  //   b) the last scan is more than AUTO_SCAN_STALE_MS old
+  //
+  // This means creating incidencias and opening the dashboard is enough to
+  // see alerts — the user never has to click "Analizar ahora" manually.
+  const AUTO_SCAN_STALE_MS = 5 * 60 * 1_000; // 5 minutes
+
+  useEffect(() => {
+    if (loading) return;                     // wait for Firestore to load
+    if (!user || !comunidadId) return;
+    if (didAutoScan.current) return;         // run at most once per mount
+    didAutoScan.current = true;
+
+    const lastScanMs = insights?.generado_at
+      ? new Date(insights.generado_at).getTime()
+      : 0;
+    const isStale = Date.now() - lastScanMs > AUTO_SCAN_STALE_MS;
+
+    if (isStale) {
+      console.log('[PatternAlertWidget] auto-scan triggered (stale data)');
+      void handleScan();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]); // intentionally narrow: fires once when loading finishes
 
   // ── "Actuar ahora" — creates a preventive inspection incidencia ──────────
   const handleActuar = useCallback(async (

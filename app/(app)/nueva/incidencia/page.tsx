@@ -54,7 +54,7 @@ const UBICACIONES: { label: string; emoji: string; zona: Zona }[] = [
 
 export default function NuevaIncidenciaPage() {
   const router = useRouter();
-  const { perfil } = useAuth();
+  const { perfil, user } = useAuth();
   const { play } = useSound();
   const [loading, setLoading] = useState(false);
   const [enviado, setEnviado] = useState(false);
@@ -261,6 +261,21 @@ export default function NuevaIncidenciaPage() {
       // 6. Sonido
       try { play('incidencia_creada'); } catch (err) {
         console.warn('[CREATE INCIDENCIA] play() ignorado:', err);
+      }
+
+      // 7. Ping the AI pattern engine in the background so the PatternAlertWidget
+      //    updates automatically without the admin having to click "Analizar ahora".
+      //    Fire-and-forget — failures are silent and never affect the UI.
+      if (user && perfil.comunidad_id) {
+        user.getIdToken()
+          .then(token =>
+            fetch(
+              `/api/ai/pattern-engine?comunidadId=${encodeURIComponent(perfil.comunidad_id!)}`,
+              { headers: { Authorization: `Bearer ${token}` } },
+            ),
+          )
+          .then(() => console.log('[CREATE INCIDENCIA] pattern engine refreshed'))
+          .catch(() => {}); // silent — never block incidencia creation
       }
 
     } catch (err: any) {

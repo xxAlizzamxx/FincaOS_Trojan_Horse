@@ -31,6 +31,7 @@ import { askGemini }     from '@/lib/gemini';
 import { normalizeZona } from '@/lib/incidencias/mapZona';
 import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 import { createLogger }  from '@/lib/logger';
+import { detectPatterns, saveInsights } from '@/lib/ai/patternEngine';
 
 // ── Firebase Admin bootstrap ─────────────────────────────────────────────────
 if (!getApps().length) {
@@ -373,6 +374,13 @@ async function createIncidenciaFromChat(
       link:       `/incidencias/${incidenciaId}`,
     })
     .catch((err: unknown) => log.error('ai_chat_notification_failed', err));
+
+  // ── 4. Refresh pattern engine (non-blocking) ─────────────────────────────
+  // Runs the pattern scan so the PatternAlertWidget updates automatically
+  // after each chat incidencia is created — no need to click "Analizar ahora".
+  void detectPatterns(comunidadId)
+    .then(result => saveInsights(comunidadId, result))
+    .catch((err: unknown) => log.error('ai_chat_pattern_refresh_failed', err));
 
   return {
     reply:         parsed.respuesta || '¡Listo! He creado una incidencia con tu reporte. El administrador será notificado.',
