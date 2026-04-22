@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { doc, onSnapshot }                  from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc }       from 'firebase/firestore';
 import { db }                               from '@/lib/firebase/client';
 import { useAuth }                          from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +30,7 @@ import {
   ChevronRight,
   CheckCircle2,
   Zap,
+  X,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -53,6 +54,12 @@ interface AIInsightDoc {
   generado_at:         string;
   score_riesgo_global: number;
   version?:            string;
+  /**
+   * dismissed_alerts — persisted in Firestore so dismissals survive page reloads.
+   * Key: `${zona}||${categoria_id ?? '__none__'}` (same bucket key as patternEngine)
+   * Value: ISO timestamp of when the alert was dismissed.
+   */
+  dismissed_alerts?:   Record<string, string>;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -67,6 +74,8 @@ export function PatternAlertWidget() {
   const [scanError,  setScanError]  = useState<string | null>(null);
   // Per-zone acting state: zona → 'idle' | 'acting' | 'done' | 'error'
   const [actStates,  setActStates]  = useState<Record<string, 'idle'|'acting'|'done'|'error'>>({});
+  // Local optimistic dismiss state (mirrors what's in Firestore) so UI is instant
+  const [localDismissed, setLocalDismissed] = useState<Record<string, boolean>>({});
 
   // ── Real-time listener on ai_insights/{comunidadId} ──────────────────────
   useEffect(() => {
@@ -156,12 +165,49 @@ export function PatternAlertWidget() {
     }
   }, [user, comunidadId, actStates]);
 
+  // ── "Dismiss" — persists dismissal in Firestore so it survives page reloads ─
+  const handleDismiss = useCallback(async (
+    e:      React.MouseEvent,
+    patron: PatronDetectado,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!comunidadId) return;
+
+    // Deterministic key — same bucket key used by patternEngine.ts
+    const key = `${patron.zona}||${patron.categoria_id ?? '__none__'}`;
+
+    // Optimistic local update — instant visual feedback
+    setLocalDismissed(prev => ({ ...prev, [key]: true }));
+
+    try {
+      const insightRef = doc(db, 'ai_insights', comunidadId);
+      // Use dot-notation field path so merge: true is implicit for updateDoc
+      await updateDoc(insightRef, {
+        [`dismissed_alerts.${key}`]: new Date().toISOString(),
+      });
+      console.log('[PatternAlertWidget] dismissed alert:', key);
+    } catch (err) {
+      console.error('[PatternAlertWidget] failed to persist dismissal:', err);
+      // Don't revert — user clearly wants it gone; Firestore will sync on next load
+    }
+  }, [comunidadId]);
+
   // ── Render helpers ────────────────────────────────────────────────────────
 
   if (!comunidadId) return null;
 
-  const patrones    = insights?.patrones ?? [];
-  const score       = insights?.score_riesgo_global ?? 0;
+  const allPatrones  = insights?.patrones ?? [];
+  const score        = insights?.score_riesgo_global ?? 0;
+  // Merge Firestore-persisted dismissals with optimistic local ones
+  const firestoreDismissed = insights?.dismissed_alerts ?? {};
+  const isDismissed  = (p: PatronDetectado) => {
+    const key = `${p.zona}||${p.categoria_id ?? '__none__'}`;
+    return !!firestoreDismissed[key] || !!localDismissed[key];
+  };
+
+  // Only show alerts the user has NOT dismissed
+  const patrones     = allPatrones.filter(p => !isDismissed(p));
   const dangerCount  = patrones.filter(p => p.severity === 'danger').length;
   const warningCount = patrones.filter(p => p.severity === 'warning').length;
 
@@ -315,7 +361,7 @@ export function PatternAlertWidget() {
                       </p>
                     </div>
 
-                    {/* Badge + "Actuar" button + arrow */}
+                    {/* Badge + "Actuar" button + dismiss + arrow */}
                     <div className="flex items-center gap-1.5 shrink-0">
                       <Badge className={cn(
                         'text-[11px] font-bold border-0',
@@ -353,6 +399,18 @@ export function PatternAlertWidget() {
                           </button>
                         );
                       })()}
+
+                      {/* ── Dismiss (X) — persists to Firestore ── */}
+                      <button
+                        onClick={(e) => handleDismiss(e, patron)}
+                        title="Descartar alerta"
+                        className={cn(
+                          'w-5 h-5 rounded-full flex items-center justify-center transition-colors shrink-0',
+                          'text-muted-foreground/50 hover:text-muted-foreground hover:bg-gray-100',
+                        )}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
 
                       <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
                     </div>

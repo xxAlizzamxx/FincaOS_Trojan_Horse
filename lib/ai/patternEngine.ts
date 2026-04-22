@@ -21,6 +21,7 @@ import { getAdminDb }    from '@/lib/firebase/admin';
 import { normalizeZona } from '@/lib/incidencias/mapZona';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
+import { sendAdminNotification } from '@/lib/email';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -133,6 +134,8 @@ export function extractPatterns(
   generado_at: string,
   categoryMap: Record<string, string> = {},
 ): PatternEngineResult {
+  console.log('[patternEngine] extractPatterns — input count:', incidencias.length);
+
   // ── Count open incidencias per (zona + categoria_id) pair ─────────────────
   //
   // Key format:  "<zona>||<categoria_id>"   (|| chosen as it can't appear in either)
@@ -164,6 +167,13 @@ export function extractPatterns(
     byZonaCategoria[bucketKey].count += 1;
   }
 
+  // Debug: log bucket counts to verify grouping (zona + categoría)
+  const bucketSummary = Object.entries(byZonaCategoria)
+    .map(([k, v]) => `${k}=${v.count}`)
+    .join(', ');
+  console.log('[patternEngine] buckets:', bucketSummary || '(none)');
+  console.log('[patternEngine] threshold:', ZONA_CALIENTE_THRESHOLD);
+
   // ── Build patron list ─────────────────────────────────────────────────────
   const patrones: PatronDetectado[] = [];
 
@@ -191,6 +201,15 @@ export function extractPatterns(
   // Unique zones represented in the alert list (for the risk score + summary tags)
   // Array.from avoids downlevelIteration requirement on es5 target
   const zonas_calientes = Array.from(new Set(patrones.map(p => p.zona)));
+
+  console.log(
+    '[patternEngine] extractPatterns — result:',
+    patrones.length,
+    'patrones,',
+    zonas_calientes.length,
+    'zonas calientes:',
+    zonas_calientes.join(', ') || '(ninguna)',
+  );
 
   return {
     patrones,
@@ -368,7 +387,12 @@ export async function sendZonaCalienteNotifications(
   const sent:    string[] = [];
   const skipped: string[] = [];
 
-  if (patrones.length === 0) return { sent, skipped };
+  console.log('[patternEngine] sendZonaCalienteNotifications — patrones:', patrones.length);
+
+  if (patrones.length === 0) {
+    console.log('[patternEngine] No patrones — skipping notifications');
+    return { sent, skipped };
+  }
 
   try {
     const db  = getAdminDb();
@@ -392,7 +416,12 @@ export async function sendZonaCalienteNotifications(
 
     patrones
       .filter(p => !toNotify.some(n => n.zona === p.zona))
-      .forEach(p => skipped.push(p.zona));
+      .forEach(p => {
+        console.log('[patternEngine] zona in cooldown, skipping notifications:', p.zona);
+        skipped.push(p.zona);
+      });
+
+    console.log('[patternEngine] toNotify:', toNotify.length, '| skipped (cooldown):', skipped.length);
 
     if (toNotify.length === 0) return { sent, skipped };
 
@@ -457,12 +486,51 @@ export async function sendZonaCalienteNotifications(
             related_id: `zona_caliente_${patron.zona}`,
             link,
           });
+        console.log('[patternEngine] In-app notification created for zona', patron.zona);
       } catch (err) {
         console.error('[patternEngine] In-app notification failed for zona', patron.zona, err);
-        // Don't abort — still attempt push
+        // Don't abort — still attempt push and email
       }
 
-      // d2. FCM push — batched to respect the 500-token multicast limit
+      // d2. Email alert to admin/presidente
+      //
+      // Uses sendAdminNotification directly (not sendSmartAlert) so the subject
+      // is zone-specific — avoids Firestore dedup collision when multiple zones
+      // trigger alerts in the same run.
+      try {
+        const emailSubject = patron.severity === 'danger'
+          ? `🔴 Zona crítica: ${patron.zona} — ${patron.count} incidencias activas`
+          : `🟡 Alerta zona ${patron.zona} — ${patron.count} incidencias detectadas`;
+
+        const catNote = patron.categoria_nombre && patron.categoria_nombre !== 'Sin categoría'
+          ? `\n📂 Categoría: ${patron.categoria_nombre}`
+          : '';
+
+        const emailContent = [
+          `El sistema IA ha detectado ${patron.count} incidencia${patron.count !== 1 ? 's' : ''} en la zona "${patron.zona}".`,
+          catNote,
+          '',
+          patron.severity === 'danger'
+            ? '🚨 Situación crítica — se recomienda intervención inmediata.'
+            : '📋 Se recomienda inspección preventiva en las próximas 24h.',
+          '',
+          '👉 Accede al panel de administración → Incidencias para gestionar la situación.',
+          '',
+          `Mensaje del sistema: ${patron.message}`,
+        ].filter(s => s !== null && s !== undefined).join('\n');
+
+        console.log('[patternEngine] Sending alert email for zona:', patron.zona);
+        await sendAdminNotification({
+          comunidad_id: comunidadId,
+          subject:      emailSubject,
+          content:      emailContent,
+        });
+      } catch (err) {
+        // sendAdminNotification already swallows errors, but belt-and-suspenders
+        console.error('[patternEngine] Email alert failed for zona', patron.zona, err);
+      }
+
+      // d3. FCM push — batched to respect the 500-token multicast limit
       if (allTokens.length > 0) {
         try {
           for (let i = 0; i < allTokens.length; i += FCM_BATCH_SIZE) {
