@@ -42,11 +42,13 @@ const RESOLVED_STATES = new Set(['resuelta', 'cerrada']);
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export interface PatronDetectado {
-  type:     'zona_caliente';
-  zona:     string;
-  count:    number;
-  severity: 'warning' | 'danger';
-  message:  string;
+  type:            'zona_caliente' | 'categoria_caliente';
+  zona:            string;
+  categoria_id:    string | null;   // null = incidencias sin categoría asignada
+  categoria_nombre: string;         // display name, e.g. "Fontanería" or "Sin categoría"
+  count:           number;
+  severity:        'warning' | 'danger';
+  message:         string;
 }
 
 export interface PatternEngineResult {
@@ -73,16 +75,19 @@ export interface EscalationResult {
  * Replaces the inline template literals to keep messages consistent across
  * the widget, notifications, and Firestore documents.
  */
-function generarMensaje(zona: string, count: number): string {
+function generarMensaje(zona: string, count: number, categoriaNombre: string): string {
+  const cat = categoriaNombre && categoriaNombre !== 'Sin categoría'
+    ? ` de tipo "${categoriaNombre}"`
+    : '';
   if (count >= 5) {
     return (
-      `⚠️ Situación crítica en zona ${zona}. ` +
-      `Se detectaron ${count} incidencias. Posible problema estructural. ` +
+      `⚠️ Situación crítica en zona ${zona}${cat}. ` +
+      `Se detectaron ${count} incidencias repetidas. Posible problema estructural. ` +
       `Se recomienda intervención inmediata y contacto con proveedor.`
     );
   }
   return (
-    `Se detectaron ${count} incidencias en zona ${zona}. ` +
+    `Se detectaron ${count} incidencias${cat} en zona ${zona}. ` +
     `Se recomienda inspección preventiva en las próximas 24h para evitar escalamiento.`
   );
 }
@@ -117,51 +122,75 @@ function calcularScoreRiesgo(
  * Count fix: uses String() coercion so zona values stored as numbers are
  * counted correctly instead of being silently dropped.
  */
+/**
+ * @param incidencias  Flat list of Firestore incidencia data objects
+ * @param generado_at  ISO timestamp for the result
+ * @param categoryMap  Optional map of { [categoria_id]: nombre } for display names.
+ *                     Resolved by detectPatterns(); pass {} or omit in unit tests.
+ */
 export function extractPatterns(
   incidencias: Array<Record<string, unknown>>,
   generado_at: string,
+  categoryMap: Record<string, string> = {},
 ): PatternEngineResult {
-  // ── Count open incidencias per zone ───────────────────────────────────────
-  // Primary:  inc.zona  (enum stored since the field was added to the form)
-  // Fallback: normalizeZona(inc.ubicacion) for legacy docs created before
-  //           the zona field existed — this is the fix for the "0 patterns"
-  //           bug where all existing incidencias were silently skipped.
-  const byZona: Record<string, number> = {};
+  // ── Count open incidencias per (zona + categoria_id) pair ─────────────────
+  //
+  // Key format:  "<zona>||<categoria_id>"   (|| chosen as it can't appear in either)
+  // An incidencia without a categoria_id is grouped under the "<zona>||__none__" key.
+  //
+  // Zone resolution:
+  //   Primary:  inc.zona  (enum stored since the field was added to the form)
+  //   Fallback: normalizeZona(inc.ubicacion) for legacy docs without a zona field
+  const byZonaCategoria: Record<string, { count: number; zona: string; categoria_id: string | null }> = {};
 
   for (const inc of incidencias) {
+    // ─ Resolve zone ──────────────────────────────────────────────────────
     let zona: string | null = null;
-
     if (inc.zona != null) {
-      // New incidencias: zona is already the canonical enum value
       zona = String(inc.zona).trim() || null;
     } else if (inc.ubicacion != null) {
-      // Legacy incidencias: derive zone from free-text ubicacion field
       zona = normalizeZona(String(inc.ubicacion));
     }
-
     if (!zona) continue;
-    byZona[zona] = (byZona[zona] ?? 0) + 1;
+
+    // ─ Resolve category ──────────────────────────────────────────────────
+    const rawCat    = inc.categoria_id != null ? String(inc.categoria_id).trim() : null;
+    const catId     = rawCat || null;
+    const bucketKey = `${zona}||${catId ?? '__none__'}`;
+
+    if (!byZonaCategoria[bucketKey]) {
+      byZonaCategoria[bucketKey] = { count: 0, zona, categoria_id: catId };
+    }
+    byZonaCategoria[bucketKey].count += 1;
   }
 
   // ── Build patron list ─────────────────────────────────────────────────────
   const patrones: PatronDetectado[] = [];
 
-  for (const [zona, count] of Object.entries(byZona)) {
-    if (count >= ZONA_CALIENTE_THRESHOLD) {
-      patrones.push({
-        type:     'zona_caliente',
-        zona,
-        count,
-        severity: count >= 5 ? 'danger' : 'warning',
-        message:  generarMensaje(zona, count),
-      });
-    }
+  for (const bucket of Object.values(byZonaCategoria)) {
+    if (bucket.count < ZONA_CALIENTE_THRESHOLD) continue;
+
+    const categoriaNombre = bucket.categoria_id
+      ? (categoryMap[bucket.categoria_id] ?? bucket.categoria_id)   // fallback to raw ID
+      : 'Sin categoría';
+
+    patrones.push({
+      type:             bucket.categoria_id ? 'categoria_caliente' : 'zona_caliente',
+      zona:             bucket.zona,
+      categoria_id:     bucket.categoria_id,
+      categoria_nombre: categoriaNombre,
+      count:            bucket.count,
+      severity:         bucket.count >= 5 ? 'danger' : 'warning',
+      message:          generarMensaje(bucket.zona, bucket.count, categoriaNombre),
+    });
   }
 
-  // Most affected zone first
+  // Most affected first
   patrones.sort((a, b) => b.count - a.count);
 
-  const zonas_calientes = patrones.map(p => p.zona);
+  // Unique zones represented in the alert list (for the risk score + summary tags)
+  // Array.from avoids downlevelIteration requirement on es5 target
+  const zonas_calientes = Array.from(new Set(patrones.map(p => p.zona)));
 
   return {
     patrones,
@@ -197,11 +226,21 @@ export async function detectPatterns(
 
     // Single collection query — client-side filters avoid composite index requirements
     // (same approach used by /api/ai/alerts)
-    const snap = await db.collection('incidencias')
-      .where('comunidad_id', '==', comunidadId)
-      .get();
+    const [incSnap, catSnap] = await Promise.all([
+      db.collection('incidencias')
+        .where('comunidad_id', '==', comunidadId)
+        .get(),
+      db.collection('categorias_incidencia').get(),
+    ]);
 
-    const openRecent = snap.docs
+    // Build { [id]: nombre } lookup for category display names
+    const categoryMap: Record<string, string> = {};
+    catSnap.docs.forEach(d => {
+      const data = d.data();
+      if (data.nombre) categoryMap[d.id] = String(data.nombre);
+    });
+
+    const openRecent = incSnap.docs
       .map(d => d.data())
       .filter(d => {
         // Exclude resolved / closed
@@ -211,7 +250,7 @@ export async function detectPatterns(
         return true;
       });
 
-    return extractPatterns(openRecent, generado_at);
+    return extractPatterns(openRecent, generado_at, categoryMap);
   } catch (err) {
     console.error('[patternEngine] detectPatterns error — returning empty result:', err);
     return empty;

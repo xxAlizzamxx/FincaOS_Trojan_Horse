@@ -63,13 +63,17 @@ export async function POST(req: NextRequest) {
   let comunidadId: string;
   let count: number;
   let severity: string;
+  let categoriaNombre: string;
+  let categoriaId: string | null;
 
   try {
-    const body = await req.json();
-    zona        = String(body.zona ?? '').trim();
-    comunidadId = String(body.comunidadId ?? '').trim();
-    count       = Number(body.count ?? 0);
-    severity    = String(body.severity ?? 'warning');
+    const body    = await req.json();
+    zona          = String(body.zona ?? '').trim();
+    comunidadId   = String(body.comunidadId ?? '').trim();
+    count         = Number(body.count ?? 0);
+    severity      = String(body.severity ?? 'warning');
+    categoriaId   = body.categoria_id ? String(body.categoria_id).trim() : null;
+    categoriaNombre = body.categoria_nombre ? String(body.categoria_nombre).trim() : '';
   } catch {
     return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 });
   }
@@ -106,10 +110,14 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 5. Create inspection incidencia ─────────────────────────────────────
-  const titulo      = `🔍 Inspección preventiva — ${zona.charAt(0).toUpperCase() + zona.slice(1).replace('_', ' ')}`;
+  const zonaLabel   = zona.charAt(0).toUpperCase() + zona.slice(1).replace('_', ' ');
+  const catLabel    = categoriaNombre && categoriaNombre !== 'Sin categoría' ? ` · ${categoriaNombre}` : '';
+  const titulo      = `🔍 Inspección preventiva — ${zonaLabel}${catLabel}`;
   const descripcion =
     `Inspección solicitada por el sistema IA tras detectar ${count} incidencia${count !== 1 ? 's' : ''} ` +
-    `activa${count !== 1 ? 's' : ''} en ${zona}. ` +
+    `activa${count !== 1 ? 's' : ''}` +
+    (categoriaNombre && categoriaNombre !== 'Sin categoría' ? ` de tipo "${categoriaNombre}"` : '') +
+    ` en ${zona}. ` +
     (severity === 'danger'
       ? 'Situación crítica — se recomienda intervención inmediata.'
       : 'Inspección preventiva para evitar escalamiento.');
@@ -124,7 +132,7 @@ export async function POST(req: NextRequest) {
       origen:                'pattern_engine',
       titulo,
       descripcion,
-      categoria_id:          null,
+      categoria_id:          categoriaId,
       estado:                'pendiente',
       prioridad:             'urgente',
       ubicacion:             zona,

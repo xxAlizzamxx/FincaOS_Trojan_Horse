@@ -38,11 +38,13 @@ import Link from 'next/link';
 // ── Types (mirrors lib/ai/patternEngine.ts exports) ──────────────────────────
 
 interface PatronDetectado {
-  type:     'zona_caliente';
-  zona:     string;
-  count:    number;
-  severity: 'warning' | 'danger';
-  message:  string;
+  type:             'zona_caliente' | 'categoria_caliente';
+  zona:             string;
+  categoria_id:     string | null;
+  categoria_nombre: string;
+  count:            number;
+  severity:         'warning' | 'danger';
+  message:          string;
 }
 
 interface AIInsightDoc {
@@ -135,10 +137,12 @@ export function PatternAlertWidget() {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          zona:        patron.zona,
+          zona:            patron.zona,
+          categoria_id:    patron.categoria_id,
+          categoria_nombre: patron.categoria_nombre,
           comunidadId,
-          count:       patron.count,
-          severity:    patron.severity,
+          count:           patron.count,
+          severity:        patron.severity,
         }),
       });
 
@@ -287,7 +291,7 @@ export function PatternAlertWidget() {
 
                     {/* Text */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <MapPin className="w-3 h-3 text-muted-foreground shrink-0" />
                         <p className={cn(
                           'text-sm font-semibold truncate',
@@ -295,6 +299,16 @@ export function PatternAlertWidget() {
                         )}>
                           Zona {patron.zona}
                         </p>
+                        {patron.categoria_nombre && patron.categoria_nombre !== 'Sin categoría' && (
+                          <span className={cn(
+                            'text-[10px] font-medium px-1.5 py-0.5 rounded-full border',
+                            isDanger
+                              ? 'bg-red-50 text-red-700 border-red-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200',
+                          )}>
+                            {patron.categoria_nombre}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5 leading-snug line-clamp-1">
                         {patron.message}
