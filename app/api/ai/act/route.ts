@@ -87,26 +87,41 @@ export async function POST(req: NextRequest) {
   const db  = getAdminDb();
   const now = new Date().toISOString();
 
-  // ── 4. Idempotency: skip if an AI inspection (parent) exists for this zone today ─
+  // ── 4. Idempotency: skip if an AI inspection already exists for this
+  //      EXACT zone + categoria_id combination today.
+  //
+  //  IMPORTANT: the check must include categoria_id so that two different
+  //  category alerts in the same zone (e.g. "jardin + filtraciones" and
+  //  "jardin + electricidad") are allowed to coexist as separate inspections.
+  //  Without this, the second inspection would falsely match the first one.
   const todayMidnight = new Date();
   todayMidnight.setHours(0, 0, 0, 0);
   const todayIso = todayMidnight.toISOString();
 
   try {
-    const existing = await db.collection('incidencias')
+    // Build query scoped to zona + categoria_id.
+    // Firestore supports `where('field', '==', null)` to match null / missing field.
+    let dupQuery = db.collection('incidencias')
       .where('comunidad_id',  '==', comunidadId)
       .where('autor_id',      '==', 'sistema_ia')
       .where('zona',          '==', zona)
       .where('tipo_problema', '==', 'inspeccion_preventiva')
-      .get();
+      .where('categoria_id',  '==', categoriaId); // null matches null/missing
 
-    const todayDup = existing.docs.find(d => (d.data().created_at as string) >= todayIso);
+    const existing  = await dupQuery.get();
+    const todayDup  = existing.docs.find(d => (d.data().created_at as string) >= todayIso);
+
     if (todayDup) {
-      log.info('ai_act_duplicate_skipped', { incidencia_id: todayDup.id });
+      log.info('ai_act_duplicate_skipped', {
+        incidencia_id: todayDup.id,
+        zona,
+        categoria_id: categoriaId,
+      });
       return NextResponse.json({ ok: true, incidencia_id: todayDup.id, duplicate: true });
     }
-  } catch {
+  } catch (err) {
     // Can't check — proceed anyway (better to duplicate than to block)
+    log.error('ai_act_idempotency_check_failed', err, { zona, categoria_id: categoriaId });
   }
 
   // ── 5. Fetch open children to group under the parent ────────────────────
@@ -121,15 +136,30 @@ export async function POST(req: NextRequest) {
 
     hijosIds = childrenQuery.docs
       .filter(d => {
-        const data = d.data();
+        const data  = d.data();
         const estado = data.estado as string;
-        // Exclude: already resolved, AI-generated parents, already children
+
+        // Exclude resolved / closed
         if (['resuelta', 'cerrada'].includes(estado)) return false;
+        // Exclude AI-generated docs (inspection parents, chat incidencias with sistema_ia)
         if (data.autor_id === 'sistema_ia') return false;
-        if (data.parentId) return false; // already child of another group
+        // Exclude incidencias already grouped under another inspection
+        if (data.parentId) return false;
+        // Exclude other AI inspection parents
         if (data.tipo_problema === 'inspeccion_preventiva') return false;
-        // If categoriaId filter applies, match it
-        if (categoriaId && data.categoria_id && data.categoria_id !== categoriaId) return false;
+
+        // Category matching:
+        //   If this inspection has a category, only group incidencias of that
+        //   same category (or those with no category at all — uncategorized ones
+        //   are always relevant to the zone).
+        //   If this inspection has NO category (zona_caliente, not categoria_caliente),
+        //   group all open incidencias in the zone regardless of their category.
+        if (categoriaId) {
+          const childCat = data.categoria_id ? String(data.categoria_id) : null;
+          // Include only: exact category match OR incidencia has no category
+          if (childCat && childCat !== categoriaId) return false;
+        }
+
         return true;
       })
       .map(d => d.id);

@@ -226,11 +226,31 @@ async function buildContext(comunidadId: string, uid: string, rol: string) {
 // ── Incident creator ─────────────────────────────────────────────────────────
 
 interface GeminiIncidentResult {
-  titulo:     string;
-  zona:       string;
-  descripcion: string;
-  prioridad:  string;
-  respuesta:  string;
+  titulo:          string;
+  zona:            string;
+  descripcion:     string;
+  prioridad:       string;
+  respuesta:       string;
+  categoria_nombre?: string; // matched against community categories in Firestore
+}
+
+/** Tries to match a Gemini-suggested category name against the community's Firestore categories.
+ *  Returns { id, nombre } if a match is found (case-insensitive, partial ok), otherwise null. */
+function matchCategoria(
+  sugerida:    string,
+  categorias:  Array<{ id: string; nombre: string }>,
+): { id: string; nombre: string } | null {
+  if (!sugerida || categorias.length === 0) return null;
+  const needle = sugerida.toLowerCase().trim();
+  // 1. Exact match
+  const exact = categorias.find(c => c.nombre.toLowerCase().trim() === needle);
+  if (exact) return exact;
+  // 2. Starts-with match
+  const starts = categorias.find(c => c.nombre.toLowerCase().startsWith(needle) || needle.startsWith(c.nombre.toLowerCase()));
+  if (starts) return starts;
+  // 3. Substring match
+  const sub = categorias.find(c => c.nombre.toLowerCase().includes(needle) || needle.includes(c.nombre.toLowerCase()));
+  return sub ?? null;
 }
 
 async function createIncidenciaFromChat(
@@ -242,10 +262,33 @@ async function createIncidenciaFromChat(
   const db  = getAdminDb();
   const now = new Date().toISOString();
 
+  // ── 0. Load community categories so Gemini can pick the right one ────────
+  //
+  //  Without this step, AI chat incidencias are always saved with
+  //  categoria_id: null, which means they never trigger category-specific
+  //  patterns in the AI pattern engine (e.g. "3+ filtraciones in same zone").
+  let categorias: Array<{ id: string; nombre: string }> = [];
+  try {
+    const catSnap = await db.collection('categorias_incidencia').get();
+    categorias = catSnap.docs
+      .map(d => ({ id: d.id, nombre: String(d.data().nombre ?? '') }))
+      .filter(c => c.nombre.length > 0);
+  } catch {
+    // Non-fatal — we'll store categoria_id: null as before
+  }
+
+  // Build a category hint for the Gemini prompt (only if categories exist)
+  const catHint = categorias.length > 0
+    ? `\n\nCategorías disponibles en esta comunidad: ${categorias.map(c => `"${c.nombre}"`).join(', ')}.\nElige la más apropiada en el campo "categoria_nombre". Si ninguna encaja, omite el campo.`
+    : '';
+
   // ── 1. Ask Gemini to classify and structure the incident ─────────────────
   let parsed: GeminiIncidentResult;
   try {
-    const raw     = await askGemini(INCIDENT_SYSTEM_PROMPT, `Mensaje del usuario: "${message}"`);
+    const raw     = await askGemini(
+      INCIDENT_SYSTEM_PROMPT + catHint,
+      `Mensaje del usuario: "${message}"`,
+    );
     const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     parsed        = JSON.parse(cleaned);
   } catch (err) {
@@ -267,6 +310,19 @@ async function createIncidenciaFromChat(
   const VALID_PRIORIDAD = ['baja', 'normal', 'alta', 'urgente'];
   const prioridad = VALID_PRIORIDAD.includes(parsed.prioridad) ? parsed.prioridad : 'normal';
 
+  // Resolve category ID from Gemini's suggestion
+  const categoriaMatch  = parsed.categoria_nombre
+    ? matchCategoria(parsed.categoria_nombre, categorias)
+    : null;
+  const categoriaId     = categoriaMatch?.id    ?? null;
+  const categoriaNombre = categoriaMatch?.nombre ?? null;
+
+  log.info('ai_chat_categoria_resolved', {
+    sugerida:  parsed.categoria_nombre ?? null,
+    resuelta:  categoriaNombre,
+    id:        categoriaId,
+  });
+
   // ── 2. Create incidencia ─────────────────────────────────────────────────
   let incidenciaId: string;
   try {
@@ -275,7 +331,7 @@ async function createIncidenciaFromChat(
       autor_id:              uid,
       titulo:                (parsed.titulo ?? 'Incidencia IA').slice(0, 100),
       descripcion:           parsed.descripcion ?? message.slice(0, 200),
-      categoria_id:          null,
+      categoria_id:          categoriaId,   // now correctly set when Gemini matches a category
       estado:                'pendiente',
       prioridad,
       ubicacion:             zona,
