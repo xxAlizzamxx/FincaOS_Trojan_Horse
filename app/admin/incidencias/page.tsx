@@ -436,13 +436,18 @@ export default function AdminIncidenciasPage() {
                     <Card key={inc.id} className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow">
                       <CardContent className="p-3 space-y-1.5">
                         <p className="text-xs font-semibold text-finca-dark line-clamp-2">{inc.titulo}</p>
-                        {(inc as any).creado_por_avatar === 'ia' ? (
+                        {(inc as any).autor_id === 'sistema_ia' ? (
                           <p className="text-[10px] text-violet-600 font-medium flex items-center gap-0.5">
                             <Bot className="w-2.5 h-2.5" />
-                            Asistente IA
+                            Vecino Virtual
                           </p>
                         ) : (
-                          <p className="text-[10px] text-muted-foreground">{(inc.autor as any)?.nombre_completo}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {(inc.autor as any)?.nombre_completo}
+                            {(inc as any).origen === 'chat_ia' && (
+                              <span className="ml-1 text-violet-500">· V.Virtual</span>
+                            )}
+                          </p>
                         )}
                         {inc.prioridad === 'urgente' && (
                           <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded">URGENTE</span>
@@ -503,13 +508,18 @@ export default function AdminIncidenciasPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                        {(inc as any).creado_por_avatar === 'ia' ? (
+                        {(inc as any).autor_id === 'sistema_ia' ? (
                           <span className="inline-flex items-center gap-1 text-violet-600 font-medium">
                             <Bot className="w-3.5 h-3.5" />
-                            Asistente IA
+                            Vecino Virtual
                           </span>
                         ) : (
-                          <span>{(inc.autor as any)?.nombre_completo}</span>
+                          <span>
+                            {(inc.autor as any)?.nombre_completo}
+                            {(inc as any).origen === 'chat_ia' && (
+                              <span className="ml-1 text-violet-500 text-[11px]">· vía V.Virtual</span>
+                            )}
+                          </span>
                         )}
                         <span>· {format(new Date(inc.created_at), "d MMM yyyy", { locale: es })}</span>
                         {(inc as any).asignado_por === 'sistema_ia' && (

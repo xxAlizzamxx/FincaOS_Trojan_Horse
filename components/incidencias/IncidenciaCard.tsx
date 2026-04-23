@@ -39,7 +39,7 @@ export function IncidenciaCard({
   modoSeleccion = false,
   onToggle,
 }: Props) {
-  const isAI        = (inc as any).creado_por_avatar === 'ia' || (inc as any).autor_id === 'sistema_ia';
+  const isAI        = (inc as any).autor_id === 'sistema_ia' || (inc as any).origen === 'chat_ia';
   const cfg         = ESTADO_CONFIG[inc.estado] ?? ESTADO_CONFIG.pendiente;
   const afectados   = Math.max(1, inc.quorum?.afectados_count ?? 0);
   const umbral      = inc.quorum?.umbral ?? 30;
@@ -80,7 +80,7 @@ export function IncidenciaCard({
           {isAI && (
             <span className="flex items-center gap-1 text-[10px] font-semibold text-violet-700 bg-violet-100 border border-violet-200 rounded-full px-1.5 py-0.5 shrink-0">
               <Bot className="w-2.5 h-2.5" />
-              IA
+              V. Virtual
             </span>
           )}
           {qAlcanzado && (

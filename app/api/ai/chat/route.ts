@@ -630,7 +630,7 @@ async function createIncidenciaFromChat(
     log.error('ai_chat_incident_gemini_failed', err);
     // Graceful fallback — still create the incidencia with raw message
     parsed = {
-      titulo:      'Incidencia reportada por asistente IA',
+      titulo:      message.slice(0, 100),
       zona:        'otro',
       descripcion: message.slice(0, 200),
       prioridad:   'normal',
@@ -677,8 +677,8 @@ async function createIncidenciaFromChat(
       presupuesto_proveedor: null,
       proveedor_nombre:      null,
       // ── IA metadata ──────────────────────────────────
-      creado_por:            'sistema_ia',
-      creado_por_avatar:     'ia',
+      creado_por:            uid,
+      creado_por_avatar:     'vecino_virtual',
       origen:                'chat_ia',
       mensaje_original:      message.slice(0, 300),
       // ────────────────────────────────────────────────
@@ -700,10 +700,10 @@ async function createIncidenciaFromChat(
   db.collection('comunidades').doc(comunidadId)
     .collection('notificaciones').add({
       tipo:       'incidencia',
-      titulo:     `🤖 Nueva incidencia creada por IA`,
-      mensaje:    parsed.titulo ?? 'Incidencia reportada por asistente IA',
+      titulo:     `🤖 Nueva incidencia vía Vecino Virtual`,
+      mensaje:    parsed.titulo ?? message.slice(0, 100),
       created_at: now,
-      created_by: 'sistema_ia',
+      created_by: uid,
       related_id: incidenciaId,
       link:       `/incidencias/${incidenciaId}`,
     })

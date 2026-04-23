@@ -761,11 +761,13 @@ export default function IncidenciaDetailPage() {
         <Card className="border-0 shadow-sm">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-start gap-3">
-              {(incidencia as any).creado_por_avatar === 'ia' || (incidencia as any).autor_id === 'sistema_ia' ? (
+              {(incidencia as any).autor_id === 'sistema_ia' ? (
+                /* Pure AI-generated (pattern engine) — show bot avatar */
                 <div className="w-11 h-11 rounded-full bg-violet-100 ring-2 ring-violet-300 flex items-center justify-center shrink-0">
                   <Bot className="w-5 h-5 text-violet-600" />
                 </div>
               ) : (
+                /* Real vecino (including chat_ia origin) — show their avatar */
                 <AvatarVecino
                   perfil={{
                     nombre_completo: (incidencia.autor as any)?.nombre_completo ?? '?',
@@ -776,17 +778,23 @@ export default function IncidenciaDetailPage() {
                 />
               )}
               <div>
-                {(incidencia as any).creado_por_avatar === 'ia' || (incidencia as any).autor_id === 'sistema_ia' ? (
+                {(incidencia as any).autor_id === 'sistema_ia' ? (
                   <p className="font-medium text-sm text-violet-700 flex items-center gap-1">
-                    <Bot className="w-3.5 h-3.5" /> Asistente IA
+                    <Bot className="w-3.5 h-3.5" /> Vecino Virtual
                   </p>
                 ) : (
                   <p className="font-medium text-sm text-finca-dark">{(incidencia.autor as any)?.nombre_completo}</p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {!(((incidencia as any).creado_por_avatar === 'ia' || (incidencia as any).autor_id === 'sistema_ia')) && lineaVivienda(incidencia.autor) && `${lineaVivienda(incidencia.autor)} · `}
+                  {(incidencia as any).autor_id !== 'sistema_ia' && lineaVivienda(incidencia.autor) && `${lineaVivienda(incidencia.autor)} · `}
                   {format(new Date(incidencia.created_at), "d 'de' MMMM, HH:mm", { locale: es })}
                 </p>
+                {/* Badge for incidencias auto-created via AI chat */}
+                {(incidencia as any).origen === 'chat_ia' && (
+                  <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-medium text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-1.5 py-0.5">
+                    <Bot className="w-2.5 h-2.5" /> vía Vecino Virtual
+                  </span>
+                )}
               </div>
             </div>
 
