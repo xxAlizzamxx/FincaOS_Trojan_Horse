@@ -72,7 +72,9 @@ export function PatternAlertWidget() {
   const [loading,    setLoading]    = useState(true);
   const [scanning,   setScanning]   = useState(false);
   const [scanError,  setScanError]  = useState<string | null>(null);
-  // Per-zone acting state: zona → 'idle' | 'acting' | 'done' | 'error'
+  // Per-pattern acting state — keyed by `${zona}||${categoria_id ?? '__none__'}`
+  // (same bucket key as patternEngine) so two alerts in the same zone but
+  // different categories have independent "Actuar" buttons.
   const [actStates,  setActStates]  = useState<Record<string, 'idle'|'acting'|'done'|'error'>>({});
   // Local optimistic dismiss state (mirrors what's in Firestore) so UI is instant
   const [localDismissed, setLocalDismissed] = useState<Record<string, boolean>>({});
@@ -164,9 +166,12 @@ export function PatternAlertWidget() {
     e.preventDefault();
     e.stopPropagation();
     if (!user || !comunidadId) return;
-    if (actStates[patron.zona] === 'acting' || actStates[patron.zona] === 'done') return;
+    // Unique key per pattern — same bucket key used by patternEngine.ts so that
+    // two alerts in the same zone but different categories have independent states.
+    const patronKey = `${patron.zona}||${patron.categoria_id ?? '__none__'}`;
+    if (actStates[patronKey] === 'acting' || actStates[patronKey] === 'done') return;
 
-    setActStates(prev => ({ ...prev, [patron.zona]: 'acting' }));
+    setActStates(prev => ({ ...prev, [patronKey]: 'acting' }));
 
     try {
       const token = await user.getIdToken();
@@ -187,12 +192,12 @@ export function PatternAlertWidget() {
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setActStates(prev => ({ ...prev, [patron.zona]: 'done' }));
+      setActStates(prev => ({ ...prev, [patronKey]: 'done' }));
     } catch (err) {
       console.error('[PatternAlertWidget] actuar error:', err);
-      setActStates(prev => ({ ...prev, [patron.zona]: 'error' }));
+      setActStates(prev => ({ ...prev, [patronKey]: 'error' }));
       // Reset after 3s so user can retry
-      setTimeout(() => setActStates(prev => ({ ...prev, [patron.zona]: 'idle' })), 3_000);
+      setTimeout(() => setActStates(prev => ({ ...prev, [patronKey]: 'idle' })), 3_000);
     }
   }, [user, comunidadId, actStates]);
 
@@ -341,10 +346,11 @@ export function PatternAlertWidget() {
         {!loading && sorted.length > 0 && (
           <div className="space-y-1.5 mt-1">
             {sorted.map((patron) => {
-              const isDanger = patron.severity === 'danger';
+              const isDanger   = patron.severity === 'danger';
+              const patronKey  = `${patron.zona}||${patron.categoria_id ?? '__none__'}`;
               return (
                 <Link
-                  key={patron.zona}
+                  key={patronKey}
                   href={`/incidencias?zona=${encodeURIComponent(patron.zona)}`}
                   className="group block"
                 >
@@ -405,7 +411,7 @@ export function PatternAlertWidget() {
 
                       {/* ── Actuar ahora ── */}
                       {(() => {
-                        const st = actStates[patron.zona] ?? 'idle';
+                        const st = actStates[patronKey] ?? 'idle';
                         if (st === 'done') return (
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
                             ✅ Creada

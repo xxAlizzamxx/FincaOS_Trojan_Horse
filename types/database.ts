@@ -15,6 +15,23 @@ export interface EntradaHistorialEstado {
 }
 export type PrioridadIncidencia = 'baja' | 'normal' | 'alta' | 'urgente';
 
+/**
+ * Per-community AI configuration stored in comunidades/{id}.config
+ * All fields are optional — missing values fall back to system defaults.
+ *
+ * Defaults (mirrors the hardcoded constants they replace):
+ *   zona_caliente_threshold:      3    incidencias in the same zone → hotspot alert
+ *   pattern_window_days:          60   how far back the pattern engine looks
+ *   notification_cooldown_hours:  24   minimum hours between repeat zone alerts
+ *   dias_alerta_estancada:        5    days in en_ejecucion before stuck alert fires
+ */
+export interface ComunidadConfig {
+  zona_caliente_threshold?:     number;  // default 3
+  pattern_window_days?:         number;  // default 60
+  notification_cooldown_hours?: number;  // default 24
+  dias_alerta_estancada?:       number;  // default 5
+}
+
 export interface Comunidad {
   id: string;
   nombre: string;
@@ -22,6 +39,8 @@ export interface Comunidad {
   codigo: string;
   num_viviendas: number;
   created_at: string;
+  /** Optional per-community AI/automation configuration */
+  config?: ComunidadConfig;
 }
 
 export interface Perfil {
@@ -242,6 +261,16 @@ export interface VotoUsuario {
 
 export type EstadoPago = 'pendiente' | 'pagado' | 'overdue';
 
+/**
+ * Which staged reminder has already been dispatched for a cuota.
+ *   t7        → friendly reminder sent at T-7 days
+ *   t3        → warning sent at T-3 days
+ *   t0        → urgent notice sent on due date (T-0)
+ *   t7_overdue → admin overdue alert sent at T+7 days
+ * Value: ISO timestamp of when that stage was sent.
+ */
+export type ReminderStage = 't7' | 't3' | 't0' | 't7_overdue';
+
 export interface Cuota {
   id: string;
   comunidad_id: string;
@@ -249,6 +278,11 @@ export interface Cuota {
   monto: number;
   fecha_limite: string;   // ISO string
   created_at: string;
+  /**
+   * Idempotency record for multi-stage payment reminders.
+   * Written by the /api/cron/cuotas cron job after each stage is dispatched.
+   */
+  reminders_sent?: Partial<Record<ReminderStage, string>>;
 }
 
 export interface PagoCuota {

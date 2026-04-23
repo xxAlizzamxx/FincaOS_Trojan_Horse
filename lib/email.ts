@@ -21,6 +21,7 @@ import { createHash } from 'crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 import { getAdminDb }    from '@/lib/firebase/admin';
 import { createLogger }  from '@/lib/logger';
+import type { ReminderStage } from '@/types/database';
 
 const log = createLogger({ route: 'lib/email' });
 
@@ -258,8 +259,123 @@ export async function sendAdminNotification({
 /* ── Payment Reminder ────────────────────────────────────────────────────── */
 
 /**
- * Envía un recordatorio de cuota próxima a vencer a los admins de una comunidad.
- * Se llama desde el cron /api/cron/cuotas cuando quedan ≤3 días para el vencimiento.
+ * Envía un recordatorio multi-etapa de cuota a los admins de la comunidad.
+ *
+ * Stages:
+ *   t7         — Aviso amistoso 7 días antes
+ *   t3         — Aviso de alerta 3 días antes
+ *   t0         — Aviso urgente el mismo día de vencimiento
+ *   t7_overdue — Alerta de mora al administrador (7 días tras vencer)
+ *
+ * @example
+ * void sendStagedPaymentReminder({
+ *   comunidad_id: 'abc',
+ *   cuota_nombre: 'Cuota enero',
+ *   monto: 80,
+ *   fecha_limite: '2026-01-31T00:00:00Z',
+ *   pending_count: 4,
+ *   stage: 't3',
+ * });
+ */
+export async function sendStagedPaymentReminder({
+  comunidad_id,
+  cuota_nombre,
+  monto,
+  fecha_limite,
+  pending_count,
+  stage,
+}: {
+  comunidad_id:  string;
+  cuota_nombre:  string;
+  monto:         number;
+  fecha_limite:  string;
+  pending_count: number;
+  stage:         ReminderStage;
+}): Promise<void> {
+  const fechaFormateada = new Date(fecha_limite).toLocaleDateString('es-ES', {
+    day: '2-digit', month: 'long', year: 'numeric',
+  });
+
+  const montoFormateado = new Intl.NumberFormat('es-ES', {
+    style: 'currency', currency: 'EUR',
+  }).format(monto);
+
+  log.info('email_triggered', {
+    alert_type:   `payment_reminder_${stage}`,
+    comunidad_id,
+    cuota_nombre,
+    pending_count,
+    stage,
+  });
+
+  let subject: string;
+  let content: string;
+
+  switch (stage) {
+    case 't7':
+      subject = `📅 Recordatorio: cuota "${cuota_nombre}" vence en 7 días`;
+      content = [
+        `La cuota "${cuota_nombre}" vence el ${fechaFormateada}.`,
+        '',
+        `💶 Importe: ${montoFormateado} por vecino`,
+        `👥 Vecinos con pago pendiente: ${pending_count}`,
+        '',
+        'Quedan 7 días — te avisamos con antelación para que los vecinos puedan organizarse.',
+        '',
+        '📲 Accede a Administración → Cuotas para consultar el estado de cada pago.',
+      ].join('\n');
+      break;
+
+    case 't3':
+      subject = `⚠️ Aviso: cuota "${cuota_nombre}" vence en 3 días`;
+      content = [
+        `⚠️ Atención: la cuota "${cuota_nombre}" vence el ${fechaFormateada} y ${pending_count} vecino${pending_count !== 1 ? 's' : ''} aún no ha${pending_count !== 1 ? 'n' : ''} pagado.`,
+        '',
+        `💶 Importe: ${montoFormateado} por vecino`,
+        `👥 Pagos pendientes: ${pending_count}`,
+        '',
+        'Quedan solo 3 días. Te recomendamos enviar un recordatorio manual a los vecinos afectados.',
+        '',
+        '📲 Administración → Cuotas → Ver pendientes.',
+      ].join('\n');
+      break;
+
+    case 't0':
+      subject = `🚨 URGENTE: cuota "${cuota_nombre}" vence HOY`;
+      content = [
+        `🚨 La cuota "${cuota_nombre}" vence hoy (${fechaFormateada}).`,
+        '',
+        `💶 Importe: ${montoFormateado} por vecino`,
+        `👥 Pagos pendientes a día de hoy: ${pending_count}`,
+        '',
+        'Los pagos no realizados pasarán a estado "overdue" tras el vencimiento.',
+        'Puedes registrar pagos manuales desde el panel antes de que finalice el día.',
+        '',
+        '📲 Administración → Cuotas → Registrar pago.',
+      ].join('\n');
+      break;
+
+    case 't7_overdue':
+      subject = `💰 Mora detectada: cuota "${cuota_nombre}" — 7 días sin pago`;
+      content = [
+        `La cuota "${cuota_nombre}" venció el ${fechaFormateada} y han pasado 7 días.`,
+        '',
+        `💶 Importe: ${montoFormateado} por vecino`,
+        `👥 Vecinos en mora: ${pending_count}`,
+        '',
+        'Se recomienda contactar individualmente a los vecinos afectados o iniciar el proceso de reclamación establecido por la comunidad.',
+        '',
+        '📲 Administración → Cuotas → Pagos en mora.',
+      ].join('\n');
+      break;
+  }
+
+  await sendAdminNotification({ comunidad_id, subject, content });
+}
+
+/**
+ * @deprecated Use sendStagedPaymentReminder with stage: 't3' instead.
+ * Kept for backwards compatibility with any external callers.
  */
 export async function sendPaymentReminder({
   comunidad_id,
@@ -274,34 +390,8 @@ export async function sendPaymentReminder({
   fecha_limite:  string;
   pending_count: number;
 }): Promise<void> {
-  const fechaFormateada = new Date(fecha_limite).toLocaleDateString('es-ES', {
-    day: '2-digit', month: 'long', year: 'numeric',
-  });
-
-  const montoFormateado = new Intl.NumberFormat('es-ES', {
-    style: 'currency', currency: 'EUR',
-  }).format(monto);
-
-  log.info('email_triggered', {
-    alert_type:   'payment_reminder',
-    comunidad_id,
-    cuota_nombre,
-    pending_count,
-  });
-
-  await sendAdminNotification({
-    comunidad_id,
-    subject: `⏰ Recordatorio: cuota "${cuota_nombre}" vence en 3 días`,
-    content: [
-      `La cuota "${cuota_nombre}" vence el ${fechaFormateada}.`,
-      '',
-      `💶 Importe: ${montoFormateado} por vecino`,
-      `👥 Vecinos con pago pendiente: ${pending_count}`,
-      '',
-      '📲 Accede al panel de administración → Cuotas para ver el detalle y hacer seguimiento.',
-      '',
-      'Puedes marcar pagos manualmente o dejar que los vecinos paguen a través de la app.',
-    ].join('\n'),
+  return sendStagedPaymentReminder({
+    comunidad_id, cuota_nombre, monto, fecha_limite, pending_count, stage: 't3',
   });
 }
 
