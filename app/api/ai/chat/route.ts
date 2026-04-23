@@ -177,6 +177,123 @@ function detectIntent(msg: string): Intent {
   return null;
 }
 
+// ── Smart response templates (no Gemini, no Firestore) ───────────────────────
+//
+// Pre-written human-sounding replies for the most common community issues.
+// Matched before calling Gemini — instant, never rate-limited.
+// Keywords are normalised (lowercase + no accents) before matching.
+
+interface TemplateHit {
+  reply: string;
+}
+
+const TEMPLATES: Array<{ pattern: RegExp; reply: string }> = [
+  // ── Gas — critical, must come before generic "agua" ──────────────────────
+  {
+    pattern: /gas|olor.{0,10}gas|escape.{0,10}gas|huele.{0,10}gas/,
+    reply: [
+      '⚠️ Si detectas olor a gas, actúa de inmediato:',
+      '1. Abre ventanas y puertas para ventilar.',
+      '2. No enciendas luces, interruptores ni aparatos eléctricos.',
+      '3. Sal del edificio y llama al 112 y a la empresa de gas.',
+      '',
+      'Una vez controlada la situación, puedo ayudarte a crear una incidencia para que quede registrado y se revisen las instalaciones.',
+    ].join('\n'),
+  },
+
+  // ── Filtraciones / humedad / agua ────────────────────────────────────────
+  {
+    pattern: /filtracion|humedad|humed|goteo|gotera|goteras|inundac|mancha.{0,10}agua|agua.{0,15}(techo|pared|suelo)/,
+    reply: [
+      'Las filtraciones y humedades suelen ser síntoma de un problema en tuberías o en la impermeabilización del edificio.',
+      '',
+      'Te recomiendo reportarlo cuanto antes porque si no se trata puede empeorar y afectar a más vecinos. Puedo ayudarte a crear una incidencia ahora mismo para que un técnico lo revise. ¿Lo hacemos?',
+    ].join('\n'),
+  },
+
+  // ── Electricidad ─────────────────────────────────────────────────────────
+  {
+    pattern: /electricidad|cortocircuito|apagon|sin luz|fallo electr|cable pelado|enchufe quemado|chispas/,
+    reply: [
+      'Podría tratarse de un problema eléctrico. Por seguridad, evita manipular la instalación tú mismo.',
+      '',
+      'Lo más recomendable es reportar una incidencia para que un electricista certificado lo revise lo antes posible. ¿Te ayudo a crearla?',
+    ].join('\n'),
+  },
+
+  // ── Ascensor ─────────────────────────────────────────────────────────────
+  {
+    pattern: /ascensor|elevador|lift|atrapado en|ascensor.{0,10}(roto|parado|averiado|no funciona)/,
+    reply: [
+      'Los problemas con el ascensor tienen prioridad alta.',
+      '',
+      'Si hay alguien atrapado, llama al 112 de inmediato. Si el ascensor simplemente no funciona, reporta la incidencia ahora para gestionarlo con urgencia. ¿Lo creamos?',
+    ].join('\n'),
+  },
+
+  // ── Ruido / vecinos ───────────────────────────────────────────────────────
+  {
+    pattern: /ruido|ruidos|vecino.{0,10}(molest|grit|music)|molestia.{0,10}(vecin|ruido)|gritos?|music.{0,10}alta|fiesta/,
+    reply: [
+      'Este tipo de situaciones es habitual en comunidades. Tienes dos opciones:',
+      '',
+      '1. Reportarlo como incidencia para que el administrador gestione el aviso al vecino.',
+      '2. Solicitar una mediación si el problema es recurrente y necesitas un proceso más formal.',
+      '',
+      '¿Cuál prefieres? Puedo ayudarte con cualquiera de los dos.',
+    ].join('\n'),
+  },
+
+  // ── Parking / garaje ─────────────────────────────────────────────────────
+  {
+    pattern: /parking|garaje|aparcamiento|plaza.{0,10}garaj|puerta.{0,10}garaje|barrera/,
+    reply: [
+      'Los problemas en el parking o garaje se gestionan como incidencias de zonas comunes.',
+      '',
+      'Si es una avería en la puerta automática, barrera o iluminación, repórtalo para que el administrador lo coordine con el técnico. ¿Lo creamos ahora?',
+    ].join('\n'),
+  },
+
+  // ── Limpieza / plagas ─────────────────────────────────────────────────────
+  {
+    pattern: /limpieza|suciedad|sucio|basura.{0,10}(portal|escalera|comun)|ratas?|cucarachas?|plagas?|insectos/,
+    reply: [
+      'Los problemas de limpieza o plagas en zonas comunes son responsabilidad de la comunidad.',
+      '',
+      'Puedo crear una incidencia ahora para que el administrador lo gestione con el servicio de limpieza o control de plagas. ¿Lo hacemos?',
+    ].join('\n'),
+  },
+
+  // ── Calefacción / frío / calor ────────────────────────────────────────────
+  {
+    pattern: /calefaccion|calefacci|radiador|caldera|sin calor|sin agua caliente|aire acondicionado|climatizac/,
+    reply: [
+      'Los problemas de calefacción o agua caliente pueden afectar a toda la comunidad, especialmente en invierno.',
+      '',
+      'Te recomiendo reportarlo como incidencia urgente para que el técnico lo revise rápido. ¿Te ayudo a crearlo?',
+    ].join('\n'),
+  },
+];
+
+function detectTemplate(msg: string): TemplateHit | null {
+  const m = msg
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, ''); // strip accents
+
+  for (const t of TEMPLATES) {
+    if (t.pattern.test(m)) return { reply: t.reply };
+  }
+  return null;
+}
+
+// ── Smart fallback (when nothing matches) ─────────────────────────────────────
+
+const SMART_FALLBACK =
+  'No tengo todos los detalles para responderte con exactitud, pero estoy aquí para ayudarte. ' +
+  'Puedes contarme más sobre lo que necesitas o, si hay algo que revisar en la comunidad, ' +
+  'puedo ayudarte a crear una incidencia ahora mismo.';
+
 // ── Direct Firestore responders (zero Gemini calls) ───────────────────────────
 
 async function directCuotas(comunidadId: string, uid: string): Promise<string | null> {
@@ -678,7 +795,7 @@ export async function POST(req: NextRequest) {
     const intent = detectIntent(message);
     console.log('[AI ROUTER] Intent:', intent ?? 'null → fallback a Gemini');
 
-    // ── Step 2: direct Firestore response — covers ~80% of queries ───────
+    // ── Step 2: direct Firestore response (cuotas / votaciones / anuncios / incidencias) ──
     if (intent) {
       try {
         const directReply = await buildDirectFirestoreResponse(intent, comunidadId, uid, rol);
@@ -689,12 +806,20 @@ export async function POST(req: NextRequest) {
         }
       } catch (err) {
         log.error('ai_chat_direct_response_failed', err, { intent });
-        console.warn('[AI ROUTER] Direct response failed — fallback a Gemini');
-        // Fall through to Gemini
+        console.warn('[AI ROUTER] Direct response failed — continuando');
+        // Fall through
       }
     }
 
-    // ── Step 3: build Firestore context for Gemini (complex queries) ─────
+    // ── Step 2.5: smart templates (common issues — no Gemini, no Firestore) ─
+    const tmpl = detectTemplate(message);
+    if (tmpl) {
+      log.info('ai_chat_template_response', { comunidad_id: comunidadId });
+      console.log('[AI ROUTER] Template matched — respondiendo sin Gemini');
+      return NextResponse.json({ reply: tmpl.reply });
+    }
+
+    // ── Step 3: build Firestore context for Gemini (complex queries only) ──
     let contexto: object;
     try {
       contexto = await buildContext(comunidadId, uid, rol);
@@ -704,28 +829,27 @@ export async function POST(req: NextRequest) {
       contexto = {};
     }
 
-    // ── Step 4: call Gemini ───────────────────────────────────────────────
+    // ── Step 4: Gemini — only for queries that need real intelligence ────────
     let reply: string;
     try {
       const userPrompt = `CONTEXTO DE LA COMUNIDAD:\n${JSON.stringify(contexto, null, 2)}\n\nPREGUNTA DEL USUARIO:\n${message}`;
       const rawReply   = await askGemini(CHAT_SYSTEM_PROMPT, userPrompt);
       const cleaned    = typeof rawReply === 'string' ? rawReply.trim() : '';
-      reply = stripMarkdown(cleaned) || 'No tengo información suficiente para responder eso.';
+      reply = stripMarkdown(cleaned) || SMART_FALLBACK;
       console.log('[AI] Respuesta Gemini generada — longitud:', reply.length, 'chars');
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       const is429  = errMsg.includes('429') || errMsg.toLowerCase().includes('resource exhausted') || errMsg.toLowerCase().includes('too many requests');
       log.error('ai_chat_gemini_failed', err, { comunidad_id: comunidadId });
       console.error('[AI] Gemini falló:', errMsg);
+      // On 429: friendly rate-limit message. On other errors: smart fallback.
       reply = is429
         ? 'Estoy recibiendo muchas solicitudes ahora mismo. Inténtalo en unos segundos.'
-        : 'No pude procesar tu solicitud en este momento. Inténtalo de nuevo.';
+        : SMART_FALLBACK;
     }
 
-    // ── Step 5: never return empty ────────────────────────────────────────
-    if (!reply || reply.trim() === '') {
-      reply = 'No tengo información suficiente para responder eso.';
-    }
+    // ── Step 5: absolute safety net — never return empty ─────────────────
+    if (!reply || reply.trim() === '') reply = SMART_FALLBACK;
 
     log.info('ai_chat_done', { comunidad_id: comunidadId });
     return NextResponse.json({ reply });
