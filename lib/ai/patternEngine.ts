@@ -23,18 +23,21 @@ import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { sendAdminNotification } from '@/lib/email';
 
-// ── Constants ───────────────────────────────────────────────────────────────
+// ── System-wide defaults ─────────────────────────────────────────────────────
+// Used as fallbacks when a community has no config or when a specific config
+// field is absent. Communities override these via comunidades/{id}.config
+// (ComunidadConfig in types/database.ts — no migration required).
 
 /** Minimum incidencias in a zone to trigger zona_caliente */
-const ZONA_CALIENTE_THRESHOLD = 3;
+const DEFAULT_ZONA_CALIENTE_THRESHOLD = 3;
 
 /** How far back to look for open incidencias (days) */
-const INCIDENCIA_WINDOW_DAYS = 60;
+const DEFAULT_INCIDENCIA_WINDOW_DAYS = 60;
 
-/** Do not re-notify the same zone more than once per 24 h */
-const NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1_000;
+/** Do not re-notify the same zone more than once per N ms (default 24 h) */
+const DEFAULT_NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1_000;
 
-/** FCM multicast limit */
+/** FCM multicast limit (hard limit imposed by Firebase, not configurable) */
 const FCM_BATCH_SIZE = 500;
 
 /** States we treat as "resolved" and exclude from pattern analysis */
@@ -78,18 +81,19 @@ export interface EscalationResult {
  */
 function generarMensaje(zona: string, count: number, categoriaNombre: string): string {
   const cat = categoriaNombre && categoriaNombre !== 'Sin categoría'
-    ? ` de tipo "${categoriaNombre}"`
+    ? ` de ${categoriaNombre.toLowerCase()}`
     : '';
+  const zonaLabel = zona.replace(/_/g, ' ');
   if (count >= 5) {
     return (
-      `⚠️ Situación crítica en zona ${zona}${cat}. ` +
-      `Se detectaron ${count} incidencias repetidas. Posible problema estructural. ` +
-      `Se recomienda intervención inmediata y contacto con proveedor.`
+      `Detecté ${count} problemas${cat} concentrados en ${zonaLabel}. ` +
+      `Esto sugiere un problema estructural o recurrente que necesita atención urgente. ` +
+      `Te recomiendo actuar ahora para evitar daños mayores.`
     );
   }
   return (
-    `Se detectaron ${count} incidencias${cat} en zona ${zona}. ` +
-    `Se recomienda inspección preventiva en las próximas 24h para evitar escalamiento.`
+    `Detecté ${count} incidencias${cat} en ${zonaLabel}. ` +
+    `El patrón me parece inusual — una inspección preventiva ahora puede evitar que el problema crezca.`
   );
 }
 
@@ -128,11 +132,15 @@ function calcularScoreRiesgo(
  * @param generado_at  ISO timestamp for the result
  * @param categoryMap  Optional map of { [categoria_id]: nombre } for display names.
  *                     Resolved by detectPatterns(); pass {} or omit in unit tests.
+ * @param threshold    Minimum count to flag a zone as zona_caliente.
+ *                     Defaults to DEFAULT_ZONA_CALIENTE_THRESHOLD (3).
+ *                     Pass the community's config.zona_caliente_threshold to override.
  */
 export function extractPatterns(
   incidencias: Array<Record<string, unknown>>,
   generado_at: string,
   categoryMap: Record<string, string> = {},
+  threshold:   number = DEFAULT_ZONA_CALIENTE_THRESHOLD,
 ): PatternEngineResult {
   console.log('[patternEngine] extractPatterns — input count:', incidencias.length);
 
@@ -172,13 +180,13 @@ export function extractPatterns(
     .map(([k, v]) => `${k}=${v.count}`)
     .join(', ');
   console.log('[patternEngine] buckets:', bucketSummary || '(none)');
-  console.log('[patternEngine] threshold:', ZONA_CALIENTE_THRESHOLD);
+  console.log('[patternEngine] threshold:', threshold);
 
   // ── Build patron list ─────────────────────────────────────────────────────
   const patrones: PatronDetectado[] = [];
 
   for (const bucket of Object.values(byZonaCategoria)) {
-    if (bucket.count < ZONA_CALIENTE_THRESHOLD) continue;
+    if (bucket.count < threshold) continue;
 
     const categoriaNombre = bucket.categoria_id
       ? (categoryMap[bucket.categoria_id] ?? bucket.categoria_id)   // fallback to raw ID
@@ -238,19 +246,29 @@ export async function detectPatterns(
   if (!comunidadId?.trim()) return empty;
 
   try {
-    const db     = getAdminDb();
-    const cutoff = new Date(
-      Date.now() - INCIDENCIA_WINDOW_DAYS * 24 * 60 * 60 * 1_000,
-    ).toISOString();
+    const db = getAdminDb();
 
-    // Single collection query — client-side filters avoid composite index requirements
-    // (same approach used by /api/ai/alerts)
-    const [incSnap, catSnap] = await Promise.all([
+    // ── Load community config + incidencias + categories in parallel ──────
+    const [comunidadSnap, incSnap, catSnap] = await Promise.all([
+      db.collection('comunidades').doc(comunidadId).get(),
       db.collection('incidencias')
         .where('comunidad_id', '==', comunidadId)
         .get(),
       db.collection('categorias_incidencia').get(),
     ]);
+
+    // ── Resolve per-community config with safe fallbacks ──────────────────
+    const cfg = (comunidadSnap.data()?.config ?? {}) as Record<string, unknown>;
+    const threshold  = typeof cfg.zona_caliente_threshold === 'number'
+      ? cfg.zona_caliente_threshold
+      : DEFAULT_ZONA_CALIENTE_THRESHOLD;
+    const windowDays = typeof cfg.pattern_window_days === 'number'
+      ? cfg.pattern_window_days
+      : DEFAULT_INCIDENCIA_WINDOW_DAYS;
+
+    const cutoff = new Date(
+      Date.now() - windowDays * 24 * 60 * 60 * 1_000,
+    ).toISOString();
 
     // Build { [id]: nombre } lookup for category display names
     const categoryMap: Record<string, string> = {};
@@ -269,7 +287,7 @@ export async function detectPatterns(
         return true;
       });
 
-    return extractPatterns(openRecent, generado_at, categoryMap);
+    return extractPatterns(openRecent, generado_at, categoryMap, threshold);
   } catch (err) {
     console.error('[patternEngine] detectPatterns error — returning empty result:', err);
     return empty;
@@ -390,7 +408,7 @@ export async function autoEscalarZonaCaliente(
 export async function sendZonaCalienteNotifications(
   comunidadId: string,
   patrones:    PatronDetectado[],
-  cooldownMs:  number = NOTIFICATION_COOLDOWN_MS,
+  cooldownMs:  number = DEFAULT_NOTIFICATION_COOLDOWN_MS,
 ): Promise<NotificationResult> {
   const sent:    string[] = [];
   const skipped: string[] = [];

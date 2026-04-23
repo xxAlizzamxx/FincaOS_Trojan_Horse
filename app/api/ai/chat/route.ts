@@ -73,15 +73,18 @@ const INCIDENT_KEYWORDS = new Set([
 
 /**
  * Returns true only when the message describes a real problem (not a question).
- * A trailing "?" strongly suggests a question — downgrade even on keyword match.
+ * Any form of question mark (trailing ? or leading ¿) is treated as chat mode.
  */
 function isIncidentMessage(msg: string): boolean {
-  const lower = msg.toLowerCase();
+  const lower    = msg.toLowerCase().trim();
+  const stripped = lower.trimEnd();
 
-  // If the whole message is a question, treat it as chat
-  if (lower.trimEnd().endsWith('?')) return false;
-  // Questions starting with interrogative words
-  if (/^(hay|tengo|debo|cuánto|cuanto|qué|que|cómo|como|cuándo|cuando|quién|quien|puedo|tiene|están|esta)\b/i.test(lower.trim())) return false;
+  // Trailing ? — standard question in any language
+  if (stripped.endsWith('?')) return false;
+  // Leading ¿ — Spanish opening question mark
+  if (stripped.startsWith('¿')) return false;
+  // Interrogative openers
+  if (/^(hay|tengo|debo|cuánto|cuanto|qué|que|cómo|como|cuándo|cuando|quién|quien|puedo|tiene|están|esta|sabes|existe|funciona|cuál|cual)\b/i.test(lower)) return false;
 
   // Keyword scan — Array.from avoids downlevelIteration requirement on es5 target
   return Array.from(INCIDENT_KEYWORDS).some(kw => lower.includes(kw));
@@ -411,8 +414,9 @@ async function createIncidenciaFromChat(
     .then(result => saveInsights(comunidadId, result))
     .catch((err: unknown) => log.error('ai_chat_pattern_refresh_failed', err));
 
+  const respuesta = typeof parsed.respuesta === 'string' ? parsed.respuesta.trim() : '';
   return {
-    reply:         parsed.respuesta || '¡Listo! He creado una incidencia con tu reporte. El administrador será notificado.',
+    reply:         stripMarkdown(respuesta) || '¡Listo! He creado una incidencia con tu reporte. El administrador será notificado.',
     incidencia_id: incidenciaId,
   };
 }
@@ -463,12 +467,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply: 'No se pudo identificar tu comunidad. Cierra sesión y vuelve a entrar.' });
   }
 
-  log.info('ai_chat_start', { comunidad_id: comunidadId, rol, is_incident: isIncidentMessage(message) });
+  const isIncident = isIncidentMessage(message);
+  console.log(`[AI] Chat mensaje recibido | tipo: ${isIncident ? 'INCIDENCIA' : 'CONSULTA'} | comunidad: ${comunidadId} | rol: ${rol}`);
+  log.info('ai_chat_start', { comunidad_id: comunidadId, rol, is_incident: isIncident });
 
   // ── 4. INTENT ROUTING ────────────────────────────────────────────────────
   try {
-    if (isIncidentMessage(message)) {
+    if (isIncident) {
       // ── INCIDENT MODE — create incidencia + confirm ──────────────────
+      console.log('[AI] Modo INCIDENCIA activado — creando incidencia desde chat');
       log.info('ai_chat_incident_detected', { comunidad_id: comunidadId });
       const { reply, incidencia_id } = await createIncidenciaFromChat(uid, comunidadId, message, log);
 
@@ -480,22 +487,38 @@ export async function POST(req: NextRequest) {
     }
 
     // ── CHAT MODE — answer with Firestore context ─────────────────────
+    console.log('[AI] Modo CONSULTA activado — respondiendo con contexto de comunidad');
+
+    // Step 1: build context — failure is non-fatal, fall back to empty ctx
     let contexto: object;
     try {
       contexto = await buildContext(comunidadId, uid, rol);
     } catch (err) {
       log.error('ai_chat_context_failed', err, { comunidad_id: comunidadId });
-      contexto = { error: 'No se pudo cargar el contexto de la comunidad.' };
+      contexto = {};
     }
 
-    const userPrompt = `CONTEXTO DE LA COMUNIDAD:\n${JSON.stringify(contexto, null, 2)}\n\nPREGUNTA DEL USUARIO:\n${message}`;
-    const rawReply   = await askGemini(CHAT_SYSTEM_PROMPT, userPrompt);
-    const reply      = stripMarkdown(rawReply) || 'No tengo datos suficientes en el sistema para responder eso.';
+    // Step 2: call Gemini — isolated try/catch with specific fallback message
+    let reply: string;
+    try {
+      const userPrompt = `CONTEXTO DE LA COMUNIDAD:\n${JSON.stringify(contexto, null, 2)}\n\nPREGUNTA DEL USUARIO:\n${message}`;
+      const rawReply   = await askGemini(CHAT_SYSTEM_PROMPT, userPrompt);
+
+      // Guard: Gemini can return null/undefined/empty on unusual inputs
+      const cleaned = typeof rawReply === 'string' ? rawReply.trim() : '';
+      reply = stripMarkdown(cleaned) || 'No tengo datos suficientes en el sistema para responder eso.';
+      console.log('[AI] Respuesta Gemini generada — longitud:', reply.length, 'chars');
+    } catch (err) {
+      log.error('ai_chat_gemini_failed', err, { comunidad_id: comunidadId });
+      console.error('[AI] Gemini falló — usando respuesta de fallback');
+      reply = 'No pude obtener respuesta en este momento. Inténtalo de nuevo en unos segundos.';
+    }
 
     log.info('ai_chat_done', { comunidad_id: comunidadId });
     return NextResponse.json({ reply });
 
   } catch (err) {
+    // Outer catch — should never reach here, but guarantees client always gets JSON
     log.error('ai_chat_unhandled', err);
     return NextResponse.json({
       reply: 'No pude procesar tu solicitud en este momento. Inténtalo de nuevo.',

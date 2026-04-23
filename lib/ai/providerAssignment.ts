@@ -92,7 +92,12 @@ export async function selectBestProveedor({
     .where('activo', '==', true)
     .get();
 
-  if (snap.empty) return null;
+  console.log('[AI] selectBestProveedor — buscando proveedor para:', tipoProblema || categoriaNombre, '| zona:', zona ?? '(cualquiera)');
+
+  if (snap.empty) {
+    console.log('[AI] selectBestProveedor — no hay proveedores activos');
+    return null;
+  }
 
   const normTipo      = tipoProblema    ? normalise(tipoProblema)    : '';
   const normCategoria = categoriaNombre ? normalise(categoriaNombre) : '';
@@ -145,6 +150,12 @@ export async function selectBestProveedor({
   const best = scored
     .filter(p => p.score > 0)
     .sort((a, b) => b.score - a.score)[0];
+
+  if (best) {
+    console.log('[AI] Mejor proveedor encontrado:', best.data.nombre, `(score: ${best.score})`);
+  } else {
+    console.log('[AI] No se encontró proveedor con coincidencia relevante para:', tipoProblema || categoriaNombre);
+  }
 
   return best ?? null;
 }
@@ -228,6 +239,9 @@ export async function assignBestProvider(params: AssignParams): Promise<void> {
 
     const provId     = result.id;
     const provNombre = String(result.data.nombre ?? 'Proveedor');
+
+    console.log('[AI] Proveedor seleccionado:', provNombre, `(score: ${result.score}, id: ${provId})`);
+    console.log('[AI] Asignando a incidencia:', incidenciaId, '| zona:', zona, '| categoría:', resolvedCategoryName);
 
     // ── Step 3: Assign provider to the incidencia ──────────────────────────
     // NOTE: We do NOT change `estado` here — the state machine must progress

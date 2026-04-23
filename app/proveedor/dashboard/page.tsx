@@ -35,7 +35,7 @@ import { toast } from 'sonner';
 import {
   Star, Briefcase, ClipboardList, Award, User as UserIcon,
   LogOut, Bell, ChevronRight, MapPin, Wrench, Calendar,
-  CheckCircle2, Play, AlertCircle,
+  CheckCircle2, Play, AlertCircle, Zap, Moon,
 } from 'lucide-react';
 
 interface ProveedorProfile {
@@ -52,6 +52,8 @@ interface ProveedorProfile {
   promedio_rating?: number;
   total_reviews?: number;
   createdAt: string;
+  /** Availability shown to admins. Auto-managed by accept/resolve flow. */
+  disponibilidad?: 'disponible' | 'ocupado';
 }
 
 interface Incidencia {
@@ -138,6 +140,10 @@ export default function ProveedorDashboardPage() {
   const [valoraciones, setValoraciones] = useState<Valoracion[]>([]);
   const [loadingValoraciones, setLoadingValoraciones] = useState(false);
 
+  // Availability toggle — reads from proveedor doc, persists to Firestore
+  const [disponibilidad, setDisponibilidad] = useState<'disponible' | 'ocupado'>('disponible');
+  const [togglingDisp, setTogglingDisp] = useState(false);
+
   // Auth + role check (single-role system — proveedores takes priority)
   //
   // Resolution order:
@@ -157,8 +163,10 @@ export default function ProveedorDashboardPage() {
         // Step 1 — is this user a provider? (proveedores always wins)
         const provSnap = await getDoc(doc(db, 'proveedores', firebaseUser.uid));
         if (provSnap.exists()) {
+          const provData = provSnap.data() as ProveedorProfile;
           setUser(firebaseUser);
-          setProveedor(provSnap.data() as ProveedorProfile);
+          setProveedor(provData);
+          setDisponibilidad(provData.disponibilidad ?? 'disponible');
           setAuthLoading(false);
           return;
         }
@@ -405,6 +413,25 @@ export default function ProveedorDashboardPage() {
     toast.success('Solicitud rechazada');
   }
 
+  // Manual availability toggle — persists to Firestore
+  async function handleToggleDisponibilidad() {
+    if (!user || togglingDisp) return;
+    const next: 'disponible' | 'ocupado' = disponibilidad === 'disponible' ? 'ocupado' : 'disponible';
+    setTogglingDisp(true);
+    // Optimistic update
+    setDisponibilidad(next);
+    try {
+      await updateDoc(doc(db, 'proveedores', user.uid), { disponibilidad: next });
+      toast.success(next === 'disponible' ? '✅ Estás disponible' : '🔴 Marcado como ocupado');
+    } catch {
+      // Revert on failure
+      setDisponibilidad(disponibilidad);
+      toast.error('No se pudo actualizar la disponibilidad');
+    } finally {
+      setTogglingDisp(false);
+    }
+  }
+
   // Task 2: Update work status (asignado → en_ejecucion → resuelta)
   async function handleActualizarEstado(incidenciaId: string, nuevoEstado: string) {
     if (!user) return;
@@ -427,6 +454,23 @@ export default function ProveedorDashboardPage() {
         throw new Error(data.error ?? `Error ${res.status}`);
       }
       toast.success('Estado actualizado');
+
+      // ── Auto-manage availability ─────────────────────────────────────────
+      // Starting work → ocupado; completing last job → disponible
+      if (nuevoEstado === 'en_ejecucion' && disponibilidad !== 'ocupado') {
+        setDisponibilidad('ocupado');
+        updateDoc(doc(db, 'proveedores', user.uid), { disponibilidad: 'ocupado' }).catch(() => {});
+      } else if (nuevoEstado === 'resuelta') {
+        // Only flip back if there are no other en_ejecucion jobs remaining
+        const stillBusy = asignados.some(
+          a => a.id !== incidenciaId && a.estado === 'en_ejecucion',
+        );
+        if (!stillBusy) {
+          setDisponibilidad('disponible');
+          updateDoc(doc(db, 'proveedores', user.uid), { disponibilidad: 'disponible' }).catch(() => {});
+        }
+      }
+
       // Reload asignados
       await loadAsignados();
     } catch (err: any) {
@@ -1130,6 +1174,64 @@ export default function ProveedorDashboardPage() {
           </div>
         )}
       </main>
+
+      {/* ── Floating availability toggle — always visible ── */}
+      {/*
+       * Positioned fixed at bottom-right so it's accessible on any tab.
+       * Green = disponible, Red = ocupado.
+       * Pulses when ocupado to signal "currently busy".
+       * Auto-managed: goes ocupado when starting a job, back to disponible when
+       * resolving the last one. Can also be toggled manually.
+       */}
+      <div className="fixed bottom-6 right-4 z-50">
+        <button
+          onClick={handleToggleDisponibilidad}
+          disabled={togglingDisp}
+          className={`
+            relative flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-lg
+            font-semibold text-sm text-white transition-all duration-300
+            active:scale-95 disabled:opacity-70 disabled:cursor-wait
+            ${disponibilidad === 'disponible'
+              ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200'
+              : 'bg-red-500 hover:bg-red-600 shadow-red-200'
+            }
+          `}
+          aria-label={disponibilidad === 'disponible' ? 'Estás disponible — pulsa para marcar como ocupado' : 'Estás ocupado — pulsa para marcar como disponible'}
+        >
+          {/* Pulsing ring when ocupado */}
+          {disponibilidad === 'ocupado' && !togglingDisp && (
+            <span className="absolute inset-0 rounded-2xl animate-ping bg-red-400 opacity-30 pointer-events-none" />
+          )}
+
+          {/* Icon */}
+          <span className={`
+            w-7 h-7 rounded-xl flex items-center justify-center shrink-0
+            transition-transform duration-300
+            ${togglingDisp ? 'animate-spin' : ''}
+            ${disponibilidad === 'disponible' ? 'bg-emerald-400/40' : 'bg-red-400/40'}
+          `}>
+            {disponibilidad === 'disponible'
+              ? <Zap className="w-3.5 h-3.5 text-white" />
+              : <Moon className="w-3.5 h-3.5 text-white" />
+            }
+          </span>
+
+          {/* Label */}
+          <span className="leading-tight">
+            {togglingDisp
+              ? 'Actualizando…'
+              : disponibilidad === 'disponible'
+              ? 'Disponible'
+              : 'Ocupado'}
+          </span>
+
+          {/* Small dot indicator */}
+          <span className={`
+            w-2 h-2 rounded-full shrink-0
+            ${disponibilidad === 'disponible' ? 'bg-emerald-200' : 'bg-red-200'}
+          `} />
+        </button>
+      </div>
     </div>
   );
 }

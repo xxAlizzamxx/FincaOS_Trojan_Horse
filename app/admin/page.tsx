@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { AIStatusWidget }           from '@/components/ai/AIStatusWidget';
 import { PatternAlertWidget }       from '@/components/ai/PatternAlertWidget';
 import { ZonaMetricsWidget }        from '@/components/ai/ZonaMetricsWidget';
 import { ProveedorRankingWidget }   from '@/components/ai/ProveedorRankingWidget';
@@ -181,6 +182,8 @@ export default function AdminDashboard() {
           </Card>
         ))}
       </div>
+
+      <AIStatusWidget />
 
       <PatternAlertWidget />
 

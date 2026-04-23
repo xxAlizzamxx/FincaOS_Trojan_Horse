@@ -422,22 +422,22 @@ function buildNotificationText(
     case 't7':
       return {
         titulo:  `📅 Cuota "${cuotaNombre}" vence en 7 días`,
-        mensaje: `${pendingCount} vecino${plural ? 's' : ''} ${plural ? 'tienen' : 'tiene'} el pago pendiente. Quedan 7 días.`,
+        mensaje: `${pendingCount} vecino${plural ? 's' : ''} todavía ${plural ? 'tienen' : 'tiene'} el pago pendiente. Aún hay tiempo — avísales para que no se les pase.`,
       };
     case 't3':
       return {
-        titulo:  `⚠️ Cuota "${cuotaNombre}" vence en 3 días`,
-        mensaje: `${pendingCount} vecino${plural ? 's' : ''} aún no ha${plural ? 'n' : ''} pagado. Quedan solo 3 días.`,
+        titulo:  `⚠️ Cuota "${cuotaNombre}" — quedan 3 días`,
+        mensaje: `${pendingCount} vecino${plural ? 's' : ''} aún no ha${plural ? 'n' : ''} pagado y el plazo se acerca. Un recordatorio directo ahora suele funcionar bien.`,
       };
     case 't0':
       return {
         titulo:  `🚨 Cuota "${cuotaNombre}" vence HOY`,
-        mensaje: `${pendingCount} pago${plural ? 's' : ''} pendiente${plural ? 's' : ''} a día de hoy. Los impagados pasarán a mora esta noche.`,
+        mensaje: `Hoy es el último día para pagar "${cuotaNombre}". ${pendingCount} pago${plural ? 's' : ''} siguen pendientes — los que no paguen pasarán a mora esta noche.`,
       };
     case 't7_overdue':
       return {
-        titulo:  `💰 Mora: "${cuotaNombre}" — 7 días sin pago`,
-        mensaje: `${pendingCount} vecino${plural ? 's' : ''} lleva${plural ? 'n' : ''} 7 días en mora. Se recomienda gestión directa.`,
+        titulo:  `💰 "${cuotaNombre}" — 7 días sin pago`,
+        mensaje: `${pendingCount} vecino${plural ? 's' : ''} lleva${plural ? 'n' : ''} una semana en mora. Es un buen momento para ponerse en contacto directamente antes de que se complique más.`,
       };
   }
 }
