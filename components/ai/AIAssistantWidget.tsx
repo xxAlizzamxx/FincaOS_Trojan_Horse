@@ -27,7 +27,7 @@ interface Message {
 
 const WELCOME: Message = {
   role: 'assistant',
-  text: '¡Hola! Soy el asistente de tu comunidad. Puedo informarte sobre incidencias, cuotas pendientes, votaciones activas y más. ¿En qué te puedo ayudar?',
+  text: '¡Hola! Soy el Vecino Virtual de tu comunidad. Puedo informarte sobre incidencias, cuotas pendientes, votaciones activas y más. ¿En qué te puedo ayudar?',
 };
 
 export function AIAssistantWidget() {
@@ -116,8 +116,8 @@ export function AIAssistantWidget() {
                 <BotMessageSquare className="w-4 h-4 text-white" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white leading-none">Asistente IA</p>
-                <p className="text-[10px] text-white/80 mt-0.5">Datos en tiempo real</p>
+                <p className="text-sm font-semibold text-white leading-none">Vecino Virtual</p>
+                <p className="text-[10px] text-white/80 mt-0.5">Tu asistente de comunidad</p>
               </div>
             </div>
             <button
@@ -228,7 +228,7 @@ export function AIAssistantWidget() {
             : 'bg-gradient-to-br from-finca-coral to-finca-salmon hover:scale-110 active:scale-95',
         )}
         style={{ width: 52, height: 52 }}
-        aria-label="Abrir asistente IA"
+        aria-label="Abrir Vecino Virtual"
       >
         {open
           ? <X className="w-5 h-5 text-white" />

@@ -190,7 +190,7 @@ interface TemplateHit {
 const TEMPLATES: Array<{ pattern: RegExp; reply: string }> = [
   // ── Gas — critical, must come before generic "agua" ──────────────────────
   {
-    pattern: /gas|olor.{0,10}gas|escape.{0,10}gas|huele.{0,10}gas/,
+    pattern: /\bhumo\b|olor raro|gas|olor.{0,10}gas|escape.{0,10}gas|huele.{0,10}gas/,
     reply: [
       '⚠️ Si detectas olor a gas, actúa de inmediato:',
       '1. Abre ventanas y puertas para ventilar.',
