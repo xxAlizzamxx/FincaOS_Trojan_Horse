@@ -16,6 +16,7 @@ import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getAdminDb } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { updateMetricsOnResolucion } from '@/lib/ai/proveedorMetrics';
 
 if (!getApps().length) {
   initializeApp({
@@ -27,9 +28,11 @@ if (!getApps().length) {
   });
 }
 
+// After aceptarPresupuesto() the incidencia lands on 'presupuestada' (not 'asignado').
+// The provider then drives it through: presupuestada → en_ejecucion → resuelta.
 const ALLOWED_TRANSITIONS: Record<string, string> = {
-  asignado:     'en_ejecucion',
-  en_ejecucion: 'resuelta',
+  presupuestada: 'en_ejecucion',
+  en_ejecucion:  'resuelta',
 };
 
 export async function POST(req: NextRequest) {
@@ -117,6 +120,13 @@ export async function POST(req: NextRequest) {
     }
 
     await incRef.update(update);
+
+    // ── Trigger learning metrics on resolution ────────────────────────────
+    // Fire-and-forget: updateMetricsOnResolucion is fail-safe and never throws.
+    // We call it directly (server-to-server) to avoid an extra HTTP hop.
+    if (nuevo_estado === 'resuelta') {
+      void updateMetricsOnResolucion(db, incidencia_id);
+    }
 
     // ── Notify community admin about progress ─────────────────────────────
     // (fire-and-forget — don't fail the request if notification fails)

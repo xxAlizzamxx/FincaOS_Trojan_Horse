@@ -230,6 +230,11 @@ export default function IncidenciasPage() {
             const children   = childrenByParent[inc.id] ?? [];
             const isExpanded = expandedGroups[inc.id] ?? false;
 
+            // Only count open children for display; hide group if all resolved
+            const openChildren = children.filter(
+              c => !['resuelta', 'cerrada'].includes((c as any).estado ?? '')
+            );
+
             if (isAIParent && children.length > 0) {
               return (
                 <div key={inc.id} className="flex flex-col gap-2">
@@ -246,7 +251,10 @@ export default function IncidenciasPage() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-violet-800 truncate">{inc.titulo}</p>
                           <p className="text-xs text-violet-500 mt-0.5">
-                            {children.length} incidencia{children.length !== 1 ? 's' : ''} agrupada{children.length !== 1 ? 's' : ''} por IA
+                            {openChildren.length > 0
+                              ? `${openChildren.length} incidencia${openChildren.length !== 1 ? 's' : ''} activa${openChildren.length !== 1 ? 's' : ''}`
+                              : 'Todas resueltas ✓'
+                            }
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -262,16 +270,29 @@ export default function IncidenciasPage() {
                     </Card>
                   </button>
 
-                  {/* Expanded children */}
+                  {/* Expanded children — exclude resolved/closed */}
                   {isExpanded && (
                     <div className="flex flex-col gap-2 pl-4 border-l-2 border-violet-200 ml-4">
-                      {sortByPrioridad(children).map(child => (
+                      {sortByPrioridad(
+                        children.filter(c => !['resuelta', 'cerrada'].includes((c as any).estado ?? ''))
+                      ).map(child => (
                         <IncidenciaCard
                           key={child.id}
                           incidencia={child}
                           totalVecinos={totalVecinos}
                         />
                       ))}
+                      {/* Show resolved count if any */}
+                      {(() => {
+                        const resolvedCount = children.filter(c =>
+                          ['resuelta', 'cerrada'].includes((c as any).estado ?? '')
+                        ).length;
+                        return resolvedCount > 0 ? (
+                          <p className="text-[11px] text-muted-foreground px-2 py-1">
+                            + {resolvedCount} resuelta{resolvedCount !== 1 ? 's' : ''} (oculta{resolvedCount !== 1 ? 's' : ''})
+                          </p>
+                        ) : null;
+                      })()}
                     </div>
                   )}
                 </div>

@@ -57,9 +57,14 @@ interface AlertaAdmin {
 
 // ── localStorage helpers ───────────────────────────────────────────────────────
 
-/** Key uniquely identifies: this user + this pattern + this analysis run */
-function lsKey(userId: string, pk: string, generadoAt: string) {
-  return `finca:alert_dismissed:${userId}:${pk}:${generadoAt}`;
+/**
+ * Key uniquely identifies: this user + this pattern.
+ * Intentionally does NOT include generado_at — dismissal is permanent for the
+ * user/pattern pair, regardless of how many new scans run. A new alert only
+ * shows if the zone or category changes (different patternKey).
+ */
+function lsKey(userId: string, pk: string) {
+  return `finca:alert_dismissed:${userId}:${pk}`;
 }
 
 /** patternKey mirrors the bucket key used by patternEngine.ts */
@@ -104,33 +109,28 @@ export function AlertaGlobalBanner() {
   }, [comunidadId]);
 
   // ── Load per-user dismissals from localStorage ───────────────────────────
-  // Re-runs whenever generado_at changes → a new scan resets all dismissals
-  // because old lsKeys won't match the new generado_at.
+  // Runs once when the user is known. Dismissals are permanent — no reset on
+  // new scans. A pattern only reappears if its zona or category changes.
   useEffect(() => {
-    if (!user?.uid || !insights?.generado_at) return;
+    if (!user?.uid) return;
     const active = new Set<string>();
     const prefix = `finca:alert_dismissed:${user.uid}:`;
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (!k?.startsWith(prefix)) continue;
-      // key: finca:alert_dismissed:{uid}:{patternKey}:{generadoAt}
-      // patternKey contains "||" but no ":" — split on last ":"
-      const rest      = k.slice(prefix.length);
-      const lastColon = rest.lastIndexOf(':');
-      const storedAt  = rest.slice(lastColon + 1);
-      const storedPk  = rest.slice(0, lastColon);
-      if (storedAt === insights.generado_at) active.add(storedPk);
+      if (k?.startsWith(prefix)) {
+        active.add(k.slice(prefix.length));
+      }
     }
     setDismissed(active);
-  }, [user?.uid, insights?.generado_at]);
+  }, [user?.uid]);
 
   // ── Dismiss AI pattern (per-user, localStorage) ──────────────────────────
   const dismissPattern = useCallback((patron: PatronDetectado) => {
-    if (!user?.uid || !insights?.generado_at) return;
+    if (!user?.uid) return;
     const pk  = patternKey(patron);
-    try { localStorage.setItem(lsKey(user.uid, pk, insights.generado_at), '1'); } catch { /* quota */ }
+    try { localStorage.setItem(lsKey(user.uid, pk), '1'); } catch { /* quota */ }
     setDismissed(prev => new Set(Array.from(prev).concat(pk)));
-  }, [user?.uid, insights?.generado_at]);
+  }, [user?.uid]);
 
   // ── Dismiss legacy admin alert (shared — marks activa: false for all) ─────
   const dismissAdmin = useCallback((id: string) => {

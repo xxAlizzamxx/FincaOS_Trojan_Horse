@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/pattern-scan",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/stuck-incidencias",
+      "schedule": "10 8 * * *"
     }
   ]
 }

@@ -275,16 +275,16 @@ service cloud.firestore {
 
     // Legacy cuotas collection
     match /cuotas_vecinos/{cuotaId} {
-      allow read:   if isAuth();
-      allow create: if isAuth();
-      allow update: if isAuth();
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAuth() && belongsToCommunity(request.resource.data.comunidad_id);
+      allow update: if isAdminOfCommunity(resource.data.comunidad_id);
     }
 
     // ── Mediaciones ──────────────────────────────────────────────────────
 
     match /mediaciones/{mediacionId} {
-      allow read:   if isAuth();
-      allow create: if isAuth();
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAuth() && belongsToCommunity(request.resource.data.comunidad_id);
       allow update: if isAuth() && (
         request.auth.uid == resource.data.denunciante_id ||
         request.auth.uid == resource.data.solicitado_por ||
@@ -296,7 +296,7 @@ service cloud.firestore {
 
     match /notificaciones/{notifId} {
       allow read:   if isAuth() && request.auth.uid == resource.data.usuario_id;
-      allow create: if isAuth();
+      allow create: if isAuth() && request.resource.data.usuario_id == request.auth.uid;
       allow update: if isAuth() && request.auth.uid == resource.data.usuario_id;
     }
 
@@ -402,6 +402,26 @@ service cloud.firestore {
     match /ai_insights/{comunidadId} {
       allow read:  if isAuth() && belongsToCommunity(comunidadId);
       allow write: if false; // Admin SDK only — server writes bypass these rules
+    }
+
+    // ── AI Metrics (time-to-resolution per zone) ──────────────────────────
+    // Written exclusively by the Admin SDK (/api/ai/metrics).
+    // Community admins/presidentes read their own community's metrics.
+
+    match /ai_metrics/{comunidadId} {
+      allow read:  if isAuth() && belongsToCommunity(comunidadId);
+      allow write: if false; // Admin SDK only
+    }
+
+    // ── Proveedor metricas (learning engine results) ──────────────────────
+    // Written exclusively by the Admin SDK (updateMetricsOnResolucion, incrementReopenCount).
+    // Admins/presidentes can read all provider metrics (no community scope —
+    // providers are shared across communities). Compact cache is also embedded
+    // in the proveedores doc so selectors pay zero extra reads.
+
+    match /proveedor_metricas/{proveedorId} {
+      allow read:  if isAuth() && (profile().rol == 'admin' || profile().rol == 'presidente');
+      allow write: if false; // Admin SDK only
     }
 
     // ── Alertas globales (IA pattern detection) ───────────────────────────

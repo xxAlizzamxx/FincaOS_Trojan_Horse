@@ -1,23 +1,54 @@
 /**
  * lib/ai/providerAssignment.ts
  *
- * Auto-assigns the best available provider to an AI-generated inspection
- * incidencia based on the dominant category of the grouped children.
+ * Two exported functions:
  *
- * Matching strategy (in order of priority):
- *   1. Provider.especialidad === normalised categoria_nombre
- *   2. Provider.servicios array-contains normalised categoria_nombre
- *   3. Provider.especialidad === raw categoria_nombre (case-sensitive fallback)
+ *  selectBestProveedor()   — pure selector; scores all active providers
+ *                            in-memory and returns the best match (or null).
+ *                            No Firestore writes; safe to call anywhere.
  *
- * Within each match group, the highest-rated provider is selected.
+ *  assignBestProvider()    — orchestrator; calls selectBestProveedor, then:
+ *                              1. Updates the incidencia with assignment fields
+ *                              2. Creates a presupuesto request in the
+ *                                 provider's subcollection
+ *                              3. Notifies the provider via notificaciones
+ *                              4. Sends a community-level notification
+ *                            Idempotent — skips if already assigned.
+ *                            Always fail-safe — never throws.
  *
- * Always fail-safe — never throws.
+ * Matching priority:
+ *   +50  tipo_problema matches provider's servicios
+ *   +50  tipo_problema matches provider's especialidad
+ *   +30  categoria_nombre matches servicios (fuzzy)
+ *   +30  categoria_nombre matches especialidad (fuzzy)
+ *   +20  incidencia zona is in provider's zonas[]
+ *   +0–25  rating (0–5) × 5
+ *
+ * Only activo === true providers are considered.
+ * Providers with score === 0 are excluded (no relevant skill match).
  */
 
 import type { Firestore } from 'firebase-admin/firestore';
 import type { Logger }    from '@/lib/logger';
+import type { MetricaCache } from '@/lib/ai/proveedorMetrics';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface ProveedorResult {
+  id:    string;
+  data:  FirebaseFirestore.DocumentData;
+  score: number;
+}
+
+interface SelectParams {
+  db:               Firestore;
+  /** incidencia.tipo_problema (technical routing key) */
+  tipoProblema:     string;
+  /** Human-readable category name for fuzzy matching */
+  categoriaNombre:  string;
+  /** Optional zona for geo-preference bonus */
+  zona?:            string;
+}
 
 interface AssignParams {
   db:                    Firestore;
@@ -26,10 +57,9 @@ interface AssignParams {
   zona:                  string;
   categoriaId:           string | null;
   categoriaNombre:       string;
-  /** Frequency map built from children { [categoria_id]: count } */
+  /** Frequency map from child incidencias { [categoria_id]: count } */
   childrenCategoryFreq:  Record<string, number>;
   now:                   string;  // ISO timestamp
-  /** Logger from createLogger() */
   log:                   Logger;
 }
 
@@ -43,8 +73,92 @@ function normalise(s: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-// ── Main function ─────────────────────────────────────────────────────────────
+// ── selectBestProveedor ───────────────────────────────────────────────────────
 
+/**
+ * Fetches all active providers and returns the highest-scoring match,
+ * or null if no provider has a relevant skill for this incidencia.
+ *
+ * Pure selector — no side effects.
+ */
+export async function selectBestProveedor({
+  db,
+  tipoProblema,
+  categoriaNombre,
+  zona,
+}: SelectParams): Promise<ProveedorResult | null> {
+
+  const snap = await db.collection('proveedores')
+    .where('activo', '==', true)
+    .get();
+
+  if (snap.empty) return null;
+
+  const normTipo      = tipoProblema    ? normalise(tipoProblema)    : '';
+  const normCategoria = categoriaNombre ? normalise(categoriaNombre) : '';
+
+  const scored: ProveedorResult[] = snap.docs.map(d => {
+    const data   = d.data();
+    let score    = 0;
+
+    const svcs  = (data.servicios   as string[] | undefined) ?? [];
+    const zonas = (data.zonas       as string[] | undefined) ?? [];
+    const espec = normalise(String(data.especialidad ?? ''));
+
+    const normSvcs = svcs.map(normalise);
+
+    // Primary signal: tipo_problema match (+50)
+    if (normTipo) {
+      if (normSvcs.includes(normTipo)) score += 50;
+      if (espec === normTipo)          score += 50;
+    }
+
+    // Secondary signal: categoria_nombre match (+30)
+    if (normCategoria) {
+      if (normSvcs.includes(normCategoria)) score += 30;
+      if (espec === normCategoria)           score += 30;
+    }
+
+    // Zona preference (+20)
+    if (zona && zonas.includes(zona)) score += 20;
+
+    // Rating bonus: 0–5 → 0–25
+    score += (Number(data.rating) || Number(data.promedio_rating) || 0) * 5;
+
+    // ── Learning score (Task 6) ─────────────────────────────────────────────
+    // Uses the compact `metricas` cache stored directly on the provider doc.
+    // Zero extra Firestore reads — data is already present in this snapshot.
+    // Fallback safe: if no metricas yet, these lines have no effect.
+    const metricas = data.metricas as MetricaCache | undefined;
+    if (metricas && metricas.total_trabajos > 0) {
+      // Faster resolution = better. Baseline: 30 h → 0 pts; 0 h → +30 pts.
+      score += Math.max(0, 30 - (metricas.tiempo_promedio_resolucion ?? 999));
+      // Cheaper = better. Baseline: 200 € → 0 pts; 0 € → +20 pts.
+      score += Math.max(0, 20 - (metricas.coste_promedio ?? 0) / 10);
+      // Reopen rate penalty: 100 % reopen → −40 pts.
+      score -= (metricas.tasa_reapertura ?? 0) * 40;
+    }
+
+    return { id: d.id, data, score };
+  });
+
+  const best = scored
+    .filter(p => p.score > 0)
+    .sort((a, b) => b.score - a.score)[0];
+
+  return best ?? null;
+}
+
+// ── assignBestProvider ────────────────────────────────────────────────────────
+
+/**
+ * Orchestrator: selects the best provider and writes all side-effects.
+ * Auto-assignment rules:
+ *   - Skips if incidencia already has proveedor_asignado set (idempotent)
+ *   - Skips if no matching active provider found
+ *   - Never changes the incidencia's estado — state machine stays clean
+ *   - Never throws — logs all failures and returns
+ */
 export async function assignBestProvider(params: AssignParams): Promise<void> {
   const {
     db, comunidadId, incidenciaId, zona,
@@ -52,11 +166,23 @@ export async function assignBestProvider(params: AssignParams): Promise<void> {
   } = params;
 
   try {
-    // ── Step 1: resolve dominant category ─────────────────────────────────
-    //
-    // Prefer the most-frequent category found among children.
-    // Fall back to the category that triggered the pattern (passed in body).
+    // ── Step 0: Idempotency guard ──────────────────────────────────────────
+    const incSnap = await db.collection('incidencias').doc(incidenciaId).get();
+    if (!incSnap.exists) {
+      log.info('ai_assign_skip_missing', { incidencia_id: incidenciaId });
+      return;
+    }
+    const incData = incSnap.data()!;
 
+    if (incData.proveedor_asignado) {
+      log.info('ai_assign_skip_already_assigned', {
+        incidencia_id: incidenciaId,
+        proveedor_id:  incData.proveedor_asignado,
+      });
+      return;
+    }
+
+    // ── Step 1: Resolve dominant category from children ────────────────────
     let resolvedCategoryId   = categoriaId;
     let resolvedCategoryName = categoriaNombre;
 
@@ -67,88 +193,50 @@ export async function assignBestProvider(params: AssignParams): Promise<void> {
       )[0];
       resolvedCategoryId = dominant;
 
-      // Fetch category name from Firestore if we changed the ID
       if (dominant !== categoriaId) {
         try {
           const catSnap = await db.collection('categorias_incidencia').doc(dominant).get();
-          if (catSnap.exists) resolvedCategoryName = String(catSnap.data()?.nombre ?? resolvedCategoryName);
+          if (catSnap.exists) {
+            resolvedCategoryName = String(catSnap.data()?.nombre ?? resolvedCategoryName);
+          }
         } catch {
           // Keep original name as fallback
         }
       }
     }
 
-    if (!resolvedCategoryName) {
-      log.info('ai_assign_skip_no_category', { incidencia_id: incidenciaId });
-      return;
-    }
+    // Use incidencia's tipo_problema if present (more specific than categoria)
+    const tipoProblema = String(incData.tipo_problema ?? resolvedCategoryId ?? '');
 
-    const normName = normalise(resolvedCategoryName);
+    // ── Step 2: Select best provider ───────────────────────────────────────
+    const result = await selectBestProveedor({
+      db,
+      tipoProblema,
+      categoriaNombre: resolvedCategoryName,
+      zona,
+    });
 
-    // ── Step 2: find best provider ─────────────────────────────────────────
-    //
-    // Try three query strategies, stop at first match.
-
-    let proveedorDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null;
-
-    // Strategy A: especialidad == normalised name
-    if (!proveedorDoc) {
-      const snap = await db.collection('proveedores')
-        .where('especialidad', '==', normName)
-        .orderBy('rating', 'desc')
-        .limit(1)
-        .get();
-      if (!snap.empty) proveedorDoc = snap.docs[0];
-    }
-
-    // Strategy B: especialidad == raw name (handles mixed-case data)
-    if (!proveedorDoc && normName !== resolvedCategoryName.toLowerCase()) {
-      const snap = await db.collection('proveedores')
-        .where('especialidad', '==', resolvedCategoryName)
-        .orderBy('rating', 'desc')
-        .limit(1)
-        .get();
-      if (!snap.empty) proveedorDoc = snap.docs[0];
-    }
-
-    // Strategy C: servicios array-contains normalised name
-    if (!proveedorDoc) {
-      const snap = await db.collection('proveedores')
-        .where('servicios', 'array-contains', normName)
-        .orderBy('rating', 'desc')
-        .limit(1)
-        .get();
-      if (!snap.empty) proveedorDoc = snap.docs[0];
-    }
-
-    // Strategy D: servicios array-contains raw name
-    if (!proveedorDoc) {
-      const snap = await db.collection('proveedores')
-        .where('servicios', 'array-contains', resolvedCategoryName)
-        .orderBy('rating', 'desc')
-        .limit(1)
-        .get();
-      if (!snap.empty) proveedorDoc = snap.docs[0];
-    }
-
-    if (!proveedorDoc) {
+    if (!result) {
       log.info('ai_assign_no_provider_found', {
-        incidencia_id:   incidenciaId,
+        incidencia_id:    incidenciaId,
+        tipo_problema:    tipoProblema,
         categoria_nombre: resolvedCategoryName,
-        categoria_id:    resolvedCategoryId,
+        categoria_id:     resolvedCategoryId,
       });
       return;
     }
 
-    // ── Step 3: assign provider to the parent incidencia ──────────────────
-    const provData   = proveedorDoc.data();
-    const provId     = proveedorDoc.id;
-    const provNombre = String(provData.nombre ?? 'Proveedor');
+    const provId     = result.id;
+    const provNombre = String(result.data.nombre ?? 'Proveedor');
 
+    // ── Step 3: Assign provider to the incidencia ──────────────────────────
+    // NOTE: We do NOT change `estado` here — the state machine must progress
+    // through the normal presupuesto → acceptance flow.
     await db.collection('incidencias').doc(incidenciaId).update({
       proveedor_asignado: provId,
       proveedor_nombre:   provNombre,
-      estado:             'asignado',
+      asignado_por:       'sistema_ia',
+      asignado_at:        now,
       updated_at:         now,
     });
 
@@ -156,18 +244,61 @@ export async function assignBestProvider(params: AssignParams): Promise<void> {
       incidencia_id:    incidenciaId,
       proveedor_id:     provId,
       proveedor_nombre: provNombre,
-      categoria_nombre: resolvedCategoryName,
+      tipo_problema:    tipoProblema,
+      score:            result.score,
     });
 
-    // ── Step 4: notify provider via community notifications ───────────────
-    // (Optional — non-fatal if it fails)
+    // ── Step 4: Create presupuesto request in provider's subcollection ─────
+    // The provider sees this in their dashboard and fills in an amount.
+    // Written to the denormalized path so no collectionGroup query needed.
     try {
+      const incTitulo = String(incData.titulo ?? 'Incidencia sin título');
+      await db
+        .collection('proveedores').doc(provId)
+        .collection('presupuestos').doc(incidenciaId)
+        .set({
+          incidencia_id:        incidenciaId,
+          incidencia_titulo:    incTitulo,
+          monto:                null,         // provider fills this in
+          mensaje:              '',
+          estado:               'pendiente',
+          solicitud_automatica: true,         // badge hint for the provider UI
+          asignado_por:         'sistema_ia',
+          created_at:           now,
+        });
+    } catch (err) {
+      // Non-fatal — assignment already written to incidencia
+      log.error('ai_assign_presupuesto_request_failed', err, { proveedor_id: provId });
+    }
+
+    // ── Step 5: Notify the provider (user-level) ───────────────────────────
+    // Providers share the same UID as their auth account.
+    // The notificaciones collection is keyed by usuario_id.
+    try {
+      await db.collection('notificaciones').add({
+        usuario_id: provId,
+        tipo:       'nuevo_trabajo',
+        titulo:     '🔧 Nuevo trabajo asignado',
+        mensaje:    `Se te ha asignado automáticamente una incidencia en ${zona}: "${incData.titulo}"`,
+        link:       `/proveedor/dashboard`,
+        leida:      false,
+        created_at: now,
+      });
+    } catch (err) {
+      log.error('ai_assign_provider_notification_failed', err, { proveedor_id: provId });
+    }
+
+    // ── Step 6: Community-level notification ───────────────────────────────
+    try {
+      const catLabel = resolvedCategoryName && resolvedCategoryName !== 'Sin categoría'
+        ? ` de tipo "${resolvedCategoryName}"`
+        : '';
       await db
         .collection('comunidades').doc(comunidadId)
         .collection('notificaciones').add({
-          tipo:          'nuevo_trabajo',
-          titulo:        `🔧 Trabajo asignado: ${resolvedCategoryName} en ${zona}`,
-          mensaje:       `Se ha asignado automáticamente una inspección preventiva de "${resolvedCategoryName}" en la zona "${zona}" al proveedor ${provNombre}.`,
+          tipo:          'proveedor_asignado',
+          titulo:        `🤖 Proveedor asignado automáticamente`,
+          mensaje:       `${provNombre} ha sido asignado${catLabel} en ${zona}.`,
           proveedor_id:  provId,
           incidencia_id: incidenciaId,
           created_at:    now,
@@ -175,11 +306,11 @@ export async function assignBestProvider(params: AssignParams): Promise<void> {
           link:          `/incidencias/${incidenciaId}`,
         });
     } catch (err) {
-      log.error('ai_assign_notification_failed', err, { proveedor_id: provId });
+      log.error('ai_assign_community_notification_failed', err, { proveedor_id: provId });
     }
 
   } catch (err) {
-    // Fail-safe: log but never propagate — parent incidencia is already created
+    // Top-level catch — never propagate; parent incidencia already exists
     log.error('ai_assign_failed', err, {
       incidencia_id: incidenciaId,
       zona,

@@ -15,8 +15,9 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { PatternAlertWidget }  from '@/components/ai/PatternAlertWidget';
-import { ZonaMetricsWidget }   from '@/components/ai/ZonaMetricsWidget';
+import { PatternAlertWidget }       from '@/components/ai/PatternAlertWidget';
+import { ZonaMetricsWidget }        from '@/components/ai/ZonaMetricsWidget';
+import { ProveedorRankingWidget }   from '@/components/ai/ProveedorRankingWidget';
 
 const estadoConfig: Record<string, { label: string; color: string }> = {
   pendiente:    { label: 'Pendiente',    color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
@@ -41,32 +42,59 @@ export default function AdminDashboard() {
   async function fetchData() {
     const cid = perfil!.comunidad_id!;
 
-    // Fetch incidencias
-    const incQuery = query(
-      collection(db, 'incidencias'),
-      where('comunidad_id', '==', cid),
-      orderBy('created_at', 'desc')
+    // ── Step 1: fetch incidencias + vecino count in parallel ─────────────────
+    const [incSnap, vecSnap] = await Promise.all([
+      getDocs(query(
+        collection(db, 'incidencias'),
+        where('comunidad_id', '==', cid),
+        orderBy('created_at', 'desc'),
+      )),
+      getDocs(query(
+        collection(db, 'perfiles'),
+        where('comunidad_id', '==', cid),
+      )),
+    ]);
+
+    // ── Step 2: build raw list (no author data yet) ───────────────────────────
+    const rawList = incSnap.docs.map(d => ({ id: d.id, ...d.data() } as Incidencia));
+
+    // ── Step 3: collect author IDs that are NOT already denormalized ──────────
+    // New incidencias have autor_nombre written at creation time → zero extra reads.
+    // Legacy docs without autor_nombre need a profile fetch.
+    const missingAutorIds = Array.from(
+      new Set(
+        rawList
+          .filter(inc => !inc.autor_nombre && inc.autor_id)
+          .map(inc => inc.autor_id as string),
+      ),
     );
-    const incSnap = await getDocs(incQuery);
-    const incList: Incidencia[] = [];
-    for (const d of incSnap.docs) {
-      const data = { id: d.id, ...d.data() } as Incidencia;
-      // Fetch autor
-      if (data.autor_id) {
-        const autorSnap = await getDoc(doc(db, 'perfiles', data.autor_id));
-        if (autorSnap.exists()) {
-          data.autor = { id: autorSnap.id, ...autorSnap.data() } as any;
-        }
-      }
-      incList.push(data);
+
+    // ── Step 4: fetch missing profiles in parallel (one read per unique author) ─
+    const perfilMap = new Map<string, Record<string, unknown>>();
+
+    if (missingAutorIds.length > 0) {
+      const perfilSnaps = await Promise.all(
+        missingAutorIds.map(id => getDoc(doc(db, 'perfiles', id))),
+      );
+      perfilSnaps.forEach(snap => {
+        if (snap.exists()) perfilMap.set(snap.id, snap.data() as Record<string, unknown>);
+      });
     }
 
-    // Count vecinos
-    const vecQuery = query(
-      collection(db, 'perfiles'),
-      where('comunidad_id', '==', cid)
-    );
-    const vecSnap = await getDocs(vecQuery);
+    // ── Step 5: inject author data without any extra queries ──────────────────
+    const incList: Incidencia[] = rawList.map(inc => {
+      // Prefer denormalized name (no extra read), fall back to fetched profile
+      if (inc.autor_nombre) return inc;
+
+      const perfilData = inc.autor_id ? perfilMap.get(inc.autor_id) : undefined;
+      if (perfilData) {
+        return {
+          ...inc,
+          autor: { id: inc.autor_id, ...perfilData } as any,
+        };
+      }
+      return inc;
+    });
 
     setIncidencias(incList);
     setVecinos(vecSnap.size);
@@ -158,6 +186,8 @@ export default function AdminDashboard() {
 
       <ZonaMetricsWidget />
 
+      <ProveedorRankingWidget />
+
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-semibold text-finca-dark">Estado de incidencias</CardTitle>
@@ -194,7 +224,9 @@ export default function AdminDashboard() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-finca-dark truncate">{inc.titulo}</p>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-muted-foreground">{(inc.autor as any)?.nombre_completo?.split(' ')[0]}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {(inc.autor_nombre ?? (inc.autor as any)?.nombre_completo ?? '').split(' ')[0]}
+                    </span>
                     <span className="text-muted-foreground text-xs">•</span>
                     <span className="text-xs text-muted-foreground">{format(new Date(inc.created_at), 'd MMM', { locale: es })}</span>
                   </div>

@@ -189,13 +189,19 @@ export default function NuevaIncidenciaPage() {
       // ── OPERACIÓN CRÍTICA ─────────────────────────────────────────
       // Solo addDoc puede bloquear el éxito. Si falla, mostramos error.
 
+      const categoriaNombre = CATEGORIAS.find(c => c.id === categoriaId)?.nombre ?? '';
+
       const ref = await addDoc(collection(db, 'incidencias'), {
-        comunidad_id: perfil.comunidad_id,
-        autor_id:     perfil.id,
-        titulo:       titulo.trim(),
-        descripcion:  descripcion.trim() || null,
-        categoria_id: categoriaId,
-        estado:       'pendiente',
+        comunidad_id:     perfil.comunidad_id,
+        autor_id:         perfil.id,
+        /** Denormalized — avoids N+1 getDoc on the admin panel */
+        autor_nombre:     perfil.nombre_completo ?? '',
+        titulo:           titulo.trim(),
+        descripcion:      descripcion.trim() || null,
+        categoria_id:     categoriaId,
+        /** Denormalized — avoids N+1 getDoc on the admin panel */
+        categoria_nombre: categoriaNombre,
+        estado:           'pendiente',
         prioridad,
         ubicacion,                       // texto libre legacy — para display
         zona:         normalizeZona(zona), // enum canónico — para BuildingMap y filtros
@@ -282,7 +288,29 @@ export default function NuevaIncidenciaPage() {
         console.warn('[CREATE INCIDENCIA] play() ignorado:', err);
       }
 
-      // 7. Ping the AI pattern engine in the background so the PatternAlertWidget
+      // 7. Auto-assign provider for urgent/alta incidencias.
+      //    Only fires for prioridad urgente | alta. Fire-and-forget — any
+      //    failure here is silent and never affects the incidencia creation UX.
+      if (['urgente', 'alta'].includes(prioridad) && user && perfil.comunidad_id) {
+        user.getIdToken()
+          .then(token =>
+            fetch('/api/ai/auto-assign', {
+              method:  'POST',
+              headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                incidenciaId: ref.id,
+                comunidadId:  perfil.comunidad_id,
+              }),
+            }),
+          )
+          .then(() => console.log('[CREATE INCIDENCIA] auto-assign triggered'))
+          .catch(() => {}); // silent — never block incidencia creation
+      }
+
+      // 8. Ping the AI pattern engine in the background so the PatternAlertWidget
       //    updates automatically without the admin having to click "Analizar ahora".
       //    Fire-and-forget — failures are silent and never affect the UI.
       if (user && perfil.comunidad_id) {

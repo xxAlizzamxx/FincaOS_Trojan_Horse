@@ -166,6 +166,10 @@ export interface Incidencia {
   created_at: string;
   updated_at: string;
   resuelta_at: string | null;
+  /** Denormalized at creation — eliminates per-incidencia profile fetch */
+  autor_nombre?: string;
+  /** Denormalized at creation — eliminates per-incidencia category fetch */
+  categoria_nombre?: string;
   historial_estados?: EntradaHistorialEstado[];
   autor?: Perfil;
   categoria?: CategoriaIncidencia;

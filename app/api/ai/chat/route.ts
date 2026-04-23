@@ -123,7 +123,36 @@ REGLAS ESTRICTAS:
 4. No reveles datos de otros vecinos a usuarios sin rol admin/presidente.
 5. No des consejos legales ni médicos — redirige a profesionales para esos temas.
 6. Si la pregunta es sobre algo externo (tiempo, noticias, etc.), indícalo amablemente.
-7. Usa un tono profesional pero cercano, como un administrador de fincas experimentado.`;
+7. Usa un tono profesional pero cercano, como un administrador de fincas experimentado.
+8. FORMATO: Responde siempre en texto plano. NO uses markdown: sin asteriscos (*), sin almohadillas (#), sin guiones como viñetas (-), sin negritas (**texto**), sin cursivas. Si necesitas enumerar, usa números seguidos de punto (1. 2. 3.) o escribe los elementos separados por comas o punto y coma.`;
+
+// ── Markdown → plain text (safety net for Gemini responses) ─────────────────
+// Gemini sometimes ignores the "no markdown" instruction.  Strip common
+// formatting tokens before sending the reply to the client so asterisks,
+// hash signs, and bullet hyphens never reach the plain-text chat bubble.
+
+function stripMarkdown(text: string): string {
+  return text
+    // Bold / italic
+    .replace(/\*\*\*(.*?)\*\*\*/g, '$1')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/_(.*?)_/g, '$1')
+    // Headings
+    .replace(/^#{1,6}\s+/gm, '')
+    // Bullets (- item  /  * item)
+    .replace(/^[-*+]\s+/gm, '• ')
+    // Numbered list cleanup (keep the number)
+    .replace(/^(\d+)\.\s+/gm, '$1. ')
+    // Inline code
+    .replace(/`([^`]+)`/g, '$1')
+    // Code blocks
+    .replace(/```[\s\S]*?```/g, '')
+    // Excessive blank lines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 // ── Firestore context builder (CHAT mode only) ───────────────────────────────
 
@@ -460,7 +489,8 @@ export async function POST(req: NextRequest) {
     }
 
     const userPrompt = `CONTEXTO DE LA COMUNIDAD:\n${JSON.stringify(contexto, null, 2)}\n\nPREGUNTA DEL USUARIO:\n${message}`;
-    const reply      = await askGemini(CHAT_SYSTEM_PROMPT, userPrompt);
+    const rawReply   = await askGemini(CHAT_SYSTEM_PROMPT, userPrompt);
+    const reply      = stripMarkdown(rawReply) || 'No tengo datos suficientes en el sistema para responder eso.';
 
     log.info('ai_chat_done', { comunidad_id: comunidadId });
     return NextResponse.json({ reply });

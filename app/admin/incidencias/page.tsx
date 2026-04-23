@@ -1,10 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Search, CircleAlert as AlertCircle, LayoutGrid, List, CheckSquare, Bot, Trash2, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Search, CircleAlert as AlertCircle, LayoutGrid, List, CheckSquare, Bot, Trash2, Loader2, Cpu } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
-import { collection, query, where, orderBy, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
+import {
+  collection, query, where, orderBy, limit, startAfter,
+  getDocs, doc, getDoc, updateDoc,
+  type QueryDocumentSnapshot,
+} from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia } from '@/types/database';
 import { notificarUsuario } from '@/lib/firebase/notifications';
@@ -34,6 +38,9 @@ export default function AdminIncidenciasPage() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
   const [actualizando, setActualizando] = useState<string | null>(null);
   const [vista, setVista] = useState<'lista' | 'kanban'>('lista');
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
@@ -41,45 +48,153 @@ export default function AdminIncidenciasPage() {
   const [eliminando, setEliminando] = useState(false);
   const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
 
+  const PAGE_SIZE = 50;
+
   useEffect(() => {
     if (perfil?.comunidad_id) fetchIncidencias();
   }, [perfil?.comunidad_id]);
 
-  async function fetchIncidencias() {
-    const incQuery = query(
-      collection(db, 'incidencias'),
-      where('comunidad_id', '==', perfil!.comunidad_id!),
-      orderBy('created_at', 'desc')
-    );
-    const incSnap = await getDocs(incQuery);
-    const incList: Incidencia[] = [];
-    for (const d of incSnap.docs) {
-      const data = { id: d.id, ...d.data() } as Incidencia;
-      if (data.autor_id) {
-        const autorSnap = await getDoc(doc(db, 'perfiles', data.autor_id));
-        if (autorSnap.exists()) data.autor = { id: autorSnap.id, ...autorSnap.data() } as any;
+  /**
+   * Fetches a page of incidencias.
+   *
+   * Performance strategy:
+   *  1. Query is limited to PAGE_SIZE (50) docs — avoids loading 1000+ items.
+   *  2. New incidencias already carry `autor_nombre` (denormalized at creation)
+   *     so zero extra reads are needed for them.
+   *  3. Legacy docs without `autor_nombre` are enriched via a single
+   *     Promise.all over the DEDUPLICATED set of missing autor_ids — no
+   *     sequential awaits, no duplicate fetches for the same author.
+   *  4. Cursor-based pagination via startAfter(lastDoc).
+   */
+  async function fetchIncidencias(cursor?: QueryDocumentSnapshot | null) {
+    if (cursor) setLoadingMore(true);
+    else setLoading(true);
+
+    try {
+      const incQuery = cursor
+        ? query(
+            collection(db, 'incidencias'),
+            where('comunidad_id', '==', perfil!.comunidad_id!),
+            orderBy('created_at', 'desc'),
+            limit(PAGE_SIZE),
+            startAfter(cursor),
+          )
+        : query(
+            collection(db, 'incidencias'),
+            where('comunidad_id', '==', perfil!.comunidad_id!),
+            orderBy('created_at', 'desc'),
+            limit(PAGE_SIZE),
+          );
+
+      const incSnap = await getDocs(incQuery);
+
+      // Track cursor for next page
+      const newLastDoc = incSnap.docs[incSnap.docs.length - 1] ?? null;
+      setLastDoc(newLastDoc);
+      setHasMore(incSnap.docs.length === PAGE_SIZE);
+
+      const rawList = incSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Incidencia);
+
+      // ── Enrich legacy docs that lack denormalized autor_nombre ──────────
+      // Collect UNIQUE autor_ids that still need a profile fetch
+      const missingIds = Array.from(new Set(
+        rawList
+          .filter(inc => !inc.autor_nombre && inc.autor_id)
+          .map(inc => inc.autor_id),
+      ));
+
+      // One parallel batch — not a sequential loop
+      const profileMap = new Map<string, any>();
+      if (missingIds.length > 0) {
+        const snaps = await Promise.all(
+          missingIds.map(id => getDoc(doc(db, 'perfiles', id))),
+        );
+        snaps.forEach(snap => {
+          if (snap.exists()) profileMap.set(snap.id, snap.data());
+        });
       }
-      incList.push(data);
+
+      // Merge: prefer denormalized field, fall back to fetched profile
+      const enriched: Incidencia[] = rawList.map(inc => {
+        if (inc.autor_nombre) {
+          // Denormalized — shape into the .autor object the UI already expects
+          return {
+            ...inc,
+            autor: { id: inc.autor_id, nombre_completo: inc.autor_nombre } as any,
+          };
+        }
+        const profileData = profileMap.get(inc.autor_id);
+        return {
+          ...inc,
+          autor: profileData ? { id: inc.autor_id, ...profileData } as any : undefined,
+        };
+      });
+
+      setIncidencias(prev => cursor ? [...prev, ...enriched] : enriched);
+    } catch (err) {
+      console.error('[fetchIncidencias]', err);
+      toast.error('Error al cargar las incidencias');
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
     }
-    setIncidencias(incList);
-    setLoading(false);
   }
 
   async function cambiarEstado(id: string, nuevoEstado: string) {
     setActualizando(id);
+
+    // Capture old state BEFORE update — needed to detect transitions
+    const oldEstado = incidencias.find(i => i.id === id)?.estado ?? '';
+
     try {
+      const ahora = new Date().toISOString();
       await updateDoc(doc(db, 'incidencias', id), {
         estado: nuevoEstado,
-        updated_at: new Date().toISOString(),
-        ...(nuevoEstado === 'resuelta' ? { resuelta_at: new Date().toISOString() } : {}),
+        updated_at: ahora,
+        ...(nuevoEstado === 'resuelta' ? { resuelta_at: ahora } : {}),
       });
+
+      // ── Optimistic local update — no re-fetch needed ──────────────────
+      setIncidencias(prev =>
+        prev.map(i =>
+          i.id === id
+            ? { ...i, estado: nuevoEstado as Incidencia['estado'], updated_at: ahora }
+            : i,
+        ),
+      );
+
+      // ── Learning metrics — fire-and-forget ────────────────────────────
+      // Detect transitions that matter for provider scoring:
+      //   any → resuelta  : update performance metrics
+      //   resuelta → any  : increment reopen counter
+      const metricsType =
+        nuevoEstado === 'resuelta'
+          ? 'resuelta'
+          : oldEstado === 'resuelta'
+          ? 'reopen'
+          : null;
+
+      if (metricsType && user) {
+        user.getIdToken()
+          .then(token =>
+            fetch('/api/ai/metrics/incidencia', {
+              method:  'POST',
+              headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({ incidenciaId: id, tipo: metricsType }),
+            }),
+          )
+          .catch(() => {}); // fire-and-forget, never block UI
+      }
+
       const inc = incidencias.find((i) => i.id === id);
       if (inc?.autor_id && perfil?.comunidad_id) {
         const label = estadoConfig[nuevoEstado]?.label || nuevoEstado;
         notificarUsuario(inc.autor_id, perfil.comunidad_id, 'estado', `Incidencia actualizada`, `"${inc.titulo}" ahora está: ${label}`, `/incidencias/${id}`);
       }
       toast.success('Estado actualizado');
-      fetchIncidencias();
     } catch {
       toast.error('Error al actualizar el estado');
     }
@@ -89,19 +204,45 @@ export default function AdminIncidenciasPage() {
   async function cambiarEstadoLote(nuevoEstado: string) {
     if (seleccionados.size === 0) return;
     setActualizando('lote');
+    const ahora = new Date().toISOString();
     try {
-      const promises = Array.from(seleccionados).map((id) =>
-        updateDoc(doc(db, 'incidencias', id), {
-          estado: nuevoEstado,
-          updated_at: new Date().toISOString(),
-          ...(nuevoEstado === 'resuelta' ? { resuelta_at: new Date().toISOString() } : {}),
-        })
+      // All writes fire in parallel
+      await Promise.all(
+        Array.from(seleccionados).map(id =>
+          updateDoc(doc(db, 'incidencias', id), {
+            estado: nuevoEstado,
+            updated_at: ahora,
+            ...(nuevoEstado === 'resuelta' ? { resuelta_at: ahora } : {}),
+          }),
+        ),
       );
-      await Promise.all(promises);
+
+      // ── Optimistic local update — no re-fetch needed ──────────────────
+      setIncidencias(prev =>
+        prev.map(i =>
+          seleccionados.has(i.id)
+            ? { ...i, estado: nuevoEstado as Incidencia['estado'], updated_at: ahora }
+            : i,
+        ),
+      );
+
+      // ── Learning metrics for batch — fire-and-forget ──────────────────
+      if (nuevoEstado === 'resuelta' && user) {
+        const idsToMark = Array.from(seleccionados);
+        user.getIdToken().then(token => {
+          idsToMark.forEach(incId => {
+            fetch('/api/ai/metrics/incidencia', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ incidenciaId: incId, tipo: 'resuelta' }),
+            }).catch(() => {});
+          });
+        }).catch(() => {});
+      }
+
       toast.success(`${seleccionados.size} incidencias actualizadas`);
       setSeleccionados(new Set());
       setAccionLote(false);
-      fetchIncidencias();
     } catch {
       toast.error('Error al actualizar');
     }
@@ -112,6 +253,7 @@ export default function AdminIncidenciasPage() {
     if (seleccionados.size === 0 || !user) return;
     setEliminando(true);
     setConfirmandoEliminar(false);
+    const ids = Array.from(seleccionados);
     try {
       const token = await user.getIdToken();
       const res = await fetch('/api/incidencias/bulk-action', {
@@ -120,13 +262,16 @@ export default function AdminIncidenciasPage() {
           'Content-Type':  'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ ids: Array.from(seleccionados), accion: 'eliminar' }),
+        body: JSON.stringify({ ids, accion: 'eliminar' }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast.success(`${seleccionados.size} incidencia${seleccionados.size !== 1 ? 's' : ''} eliminada${seleccionados.size !== 1 ? 's' : ''}`);
+
+      // ── Remove deleted items from local state immediately ─────────────
+      setIncidencias(prev => prev.filter(i => !seleccionados.has(i.id)));
+
+      toast.success(`${ids.length} incidencia${ids.length !== 1 ? 's' : ''} eliminada${ids.length !== 1 ? 's' : ''}`);
       setSeleccionados(new Set());
       setAccionLote(false);
-      fetchIncidencias();
     } catch {
       toast.error('Error al eliminar las incidencias');
     }
@@ -149,18 +294,24 @@ export default function AdminIncidenciasPage() {
     }
   }
 
-  const filtradas = incidencias.filter((inc) => {
-    const matchBusqueda = inc.titulo.toLowerCase().includes(busqueda.toLowerCase());
-    const matchEstado = filtroEstado === 'todos' || inc.estado === filtroEstado;
-    return matchBusqueda && matchEstado;
-  });
+  // useMemo — avoids re-filtering on every render unrelated to these deps
+  const filtradas = useMemo(() =>
+    incidencias.filter(inc => {
+      const matchBusqueda = inc.titulo.toLowerCase().includes(busqueda.toLowerCase());
+      const matchEstado   = filtroEstado === 'todos' || inc.estado === filtroEstado;
+      return matchBusqueda && matchEstado;
+    }),
+    [incidencias, busqueda, filtroEstado],
+  );
 
   return (
     <div className="space-y-5 max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-finca-dark">Incidencias</h1>
-          <p className="text-sm text-muted-foreground">{incidencias.length} incidencias en total</p>
+          <p className="text-sm text-muted-foreground">
+            {incidencias.length} incidencias cargadas{hasMore ? ' · hay más' : ''}
+          </p>
         </div>
         <div className="flex gap-1.5">
           <Button variant={vista === 'lista' ? 'default' : 'outline'} size="icon" className="w-9 h-9" onClick={() => setVista('lista')}>
@@ -296,6 +447,12 @@ export default function AdminIncidenciasPage() {
                         {inc.prioridad === 'urgente' && (
                           <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1 py-0.5 rounded">URGENTE</span>
                         )}
+                        {(inc as any).asignado_por === 'sistema_ia' && (
+                          <span className="text-[9px] font-medium text-blue-600 bg-blue-50 px-1 py-0.5 rounded flex items-center gap-0.5">
+                            <Cpu className="w-2.5 h-2.5" />
+                            Auto
+                          </span>
+                        )}
                         <div className="flex gap-1 pt-1 flex-wrap">
                           {KANBAN_COLUMNS.filter((e) => e !== estado).map((e) => (
                             <button
@@ -355,6 +512,12 @@ export default function AdminIncidenciasPage() {
                           <span>{(inc.autor as any)?.nombre_completo}</span>
                         )}
                         <span>· {format(new Date(inc.created_at), "d MMM yyyy", { locale: es })}</span>
+                        {(inc as any).asignado_por === 'sistema_ia' && (
+                          <span className="inline-flex items-center gap-1 text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded-full">
+                            <Cpu className="w-3 h-3" />
+                            🤖 Asignado automáticamente
+                          </span>
+                        )}
                       </div>
                       {inc.estimacion_min != null && inc.estimacion_max != null && (
                         <p className="text-xs text-muted-foreground mt-1">
@@ -400,6 +563,24 @@ export default function AdminIncidenciasPage() {
               </Card>
             );
           })}
+
+          {/* ── Pagination ── */}
+          {hasMore && (
+            <div className="pt-2 flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fetchIncidencias(lastDoc)}
+                disabled={loadingMore}
+                className="text-xs h-8 gap-1.5"
+              >
+                {loadingMore
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : null}
+                {loadingMore ? 'Cargando…' : 'Cargar más'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

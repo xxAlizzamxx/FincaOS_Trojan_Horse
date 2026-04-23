@@ -6,7 +6,7 @@ import Image from 'next/image';
 import {
   ArrowLeft, ArrowRight, MessageSquare, Send,
   UserPlus, UserMinus, Users, Star, ImageIcon,
-  CircleCheck as CheckCircle2, Loader2, History, CreditCard, Trash2, Bot,
+  CircleCheck as CheckCircle2, Loader2, History, CreditCard, Trash2, Bot, Cpu,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -1041,7 +1041,15 @@ export default function IncidenciaDetailPage() {
                     )}
                   </div>
                   {(incidencia as any).proveedor_nombre && (
-                    <p className="text-xs text-muted-foreground">{(incidencia as any).proveedor_nombre}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs text-muted-foreground">{(incidencia as any).proveedor_nombre}</p>
+                      {(incidencia as any).asignado_por === 'sistema_ia' && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded-full">
+                          <Cpu className="w-3 h-3" />
+                          🤖 Asignado automáticamente
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : (
