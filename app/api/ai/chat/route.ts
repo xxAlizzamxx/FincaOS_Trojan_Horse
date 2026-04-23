@@ -157,6 +157,184 @@ function stripMarkdown(text: string): string {
     .trim();
 }
 
+// ── Intent detection (no AI, O(1) keyword scan) ─────────────────────────────
+//
+// Covers ~80% of common user queries without touching Gemini.
+// Normalise: lowercase + strip Spanish diacritics before matching.
+
+type Intent = 'cuotas' | 'votaciones' | 'anuncios' | 'incidencias' | null;
+
+function detectIntent(msg: string): Intent {
+  const m = msg
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, ''); // strip accents → "votación" → "votacion"
+
+  if (/cuota|debo|pago pendiente|deuda|vencimiento|mora|adeudo/.test(m)) return 'cuotas';
+  if (/votac|votar|referend|referendum/.test(m))                          return 'votaciones';
+  if (/anuncio|comunicado|aviso|novedad|noticias|tablon/.test(m))         return 'anuncios';
+  if (/incidencia|averia|reparac|reporte|averias/.test(m))                return 'incidencias';
+  return null;
+}
+
+// ── Direct Firestore responders (zero Gemini calls) ───────────────────────────
+
+async function directCuotas(comunidadId: string, uid: string): Promise<string | null> {
+  const db = getAdminDb();
+  const snap = await db.collection('cuotas').where('comunidad_id', '==', comunidadId).get();
+  if (snap.empty) return 'No hay cuotas registradas en tu comunidad.';
+
+  const results = await Promise.allSettled(
+    snap.docs.map(async (cuotaDoc) => {
+      const pagoSnap = await db
+        .collection('cuotas').doc(cuotaDoc.id)
+        .collection('pagos').doc(uid).get();
+      const pagado = pagoSnap.exists && pagoSnap.data()?.estado === 'pagado';
+      if (pagado) return null;
+      const c = cuotaDoc.data();
+      return {
+        nombre:       (c.nombre       as string | undefined) ?? 'Cuota',
+        monto:        (c.monto        as number | undefined) ?? 0,
+        fecha_limite: (c.fecha_limite as string | undefined),
+      };
+    }),
+  );
+
+  interface CuotaItem { nombre: string; monto: number; fecha_limite?: string }
+  const pendientes: CuotaItem[] = [];
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value !== null) pendientes.push(r.value as CuotaItem);
+  }
+
+  if (pendientes.length === 0) {
+    return '¡Estás al día con todas tus cuotas! No tienes ningún pago pendiente.';
+  }
+
+  const total = pendientes.reduce((s, c) => s + c.monto, 0);
+  const proxima = pendientes
+    .filter(c => c.fecha_limite)
+    .sort((a, b) => (a.fecha_limite! < b.fecha_limite! ? -1 : 1))[0];
+
+  const s = pendientes.length > 1;
+  const lines: string[] = [
+    `Tienes ${pendientes.length} cuota${s ? 's' : ''} pendiente${s ? 's' : ''} por un total de ${total}€:`,
+    ...pendientes.slice(0, 4).map(c => {
+      const fecha = c.fecha_limite
+        ? new Date(c.fecha_limite).toLocaleDateString('es-ES', { day: '2-digit', month: 'long' })
+        : 'sin fecha';
+      return `• ${c.nombre} — ${c.monto}€ (vence el ${fecha})`;
+    }),
+  ];
+  if (pendientes.length > 4) lines.push(`... y ${pendientes.length - 4} más.`);
+  if (proxima?.fecha_limite) {
+    const d = new Date(proxima.fecha_limite).toLocaleDateString('es-ES', { day: '2-digit', month: 'long' });
+    lines.push(`La próxima a vencer es "${proxima.nombre}" el ${d}.`);
+  }
+  return lines.join('\n');
+}
+
+async function directVotaciones(comunidadId: string): Promise<string | null> {
+  const db = getAdminDb();
+  const snap = await db.collection('votaciones')
+    .where('comunidad_id', '==', comunidadId)
+    .where('activa', '==', true)
+    .get();
+
+  if (snap.empty) return 'No hay votaciones activas en este momento.';
+
+  const s = snap.size > 1;
+  const lines: string[] = [
+    `Hay ${snap.size} votación${s ? 'es' : ''} activa${s ? 's' : ''} en tu comunidad:`,
+    ...snap.docs.slice(0, 4).map(d => {
+      const v = d.data();
+      const fecha = v.fecha_fin
+        ? ` — cierra el ${new Date(v.fecha_fin as string).toLocaleDateString('es-ES', { day: '2-digit', month: 'long' })}`
+        : '';
+      return `• "${v.titulo}"${fecha}`;
+    }),
+    'Puedes votar desde la sección de Votaciones.',
+  ];
+  return lines.join('\n');
+}
+
+async function directAnuncios(comunidadId: string): Promise<string | null> {
+  const db = getAdminDb();
+  const snap = await db.collection('anuncios')
+    .where('comunidad_id', '==', comunidadId)
+    .limit(10)
+    .get();
+
+  if (snap.empty) return 'No hay anuncios recientes en tu comunidad.';
+
+  const recientes = snap.docs
+    .map(d => d.data())
+    .sort((a, b) => ((b.created_at as string) ?? '') > ((a.created_at as string) ?? '') ? 1 : -1)
+    .slice(0, 3);
+
+  const lines: string[] = ['Últimos anuncios de tu comunidad:'];
+  for (const a of recientes) {
+    const resumen = a.contenido ? ': ' + String(a.contenido).slice(0, 100) : '';
+    lines.push(`• ${a.titulo}${resumen}`);
+  }
+  return lines.join('\n');
+}
+
+async function directIncidencias(comunidadId: string, uid: string, rol: string): Promise<string | null> {
+  const db  = getAdminDb();
+  const isAdmin = rol === 'admin' || rol === 'presidente';
+
+  const snap = isAdmin
+    ? await db.collection('incidencias')
+        .where('comunidad_id', '==', comunidadId)
+        .limit(30)
+        .get()
+    : await db.collection('incidencias')
+        .where('comunidad_id', '==', comunidadId)
+        .where('autor_id',     '==', uid)
+        .limit(30)
+        .get();
+
+  const abiertas = snap.docs
+    .map(d => d.data())
+    .filter(d => !['resuelta', 'cerrada'].includes(d.estado ?? ''));
+
+  if (abiertas.length === 0) {
+    return isAdmin
+      ? 'No hay incidencias abiertas en la comunidad en este momento.'
+      : 'No tienes incidencias abiertas en este momento.';
+  }
+
+  const s = abiertas.length > 1;
+  const prefix = isAdmin
+    ? `Hay ${abiertas.length} incidencia${s ? 's' : ''} abierta${s ? 's' : ''} en la comunidad:`
+    : `Tienes ${abiertas.length} incidencia${s ? 's' : ''} abierta${s ? 's' : ''}:`;
+
+  const lines: string[] = [
+    prefix,
+    ...abiertas.slice(0, 4).map(inc => {
+      const estado = (inc.estado as string).replace(/_/g, ' ');
+      return `• "${inc.titulo}" — ${estado}`;
+    }),
+  ];
+  if (abiertas.length > 4) lines.push(`... y ${abiertas.length - 4} más.`);
+  return lines.join('\n');
+}
+
+/** Orchestrates direct Firestore responses for known intents. Returns null to fall through to Gemini. */
+async function buildDirectFirestoreResponse(
+  intent: NonNullable<Intent>,
+  comunidadId: string,
+  uid: string,
+  rol: string,
+): Promise<string | null> {
+  switch (intent) {
+    case 'cuotas':      return directCuotas(comunidadId, uid);
+    case 'votaciones':  return directVotaciones(comunidadId);
+    case 'anuncios':    return directAnuncios(comunidadId);
+    case 'incidencias': return directIncidencias(comunidadId, uid, rol);
+  }
+}
+
 // ── Firestore context builder (CHAT mode only) ───────────────────────────────
 
 async function buildContext(comunidadId: string, uid: string, rol: string) {
@@ -493,10 +671,30 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── CHAT MODE — answer with Firestore context ─────────────────────
+    // ── CHAT MODE — hybrid: Firestore first, Gemini as fallback ──────────
     console.log('[AI] Modo CONSULTA activado — respondiendo con contexto de comunidad');
 
-    // Step 1: build context — failure is non-fatal, fall back to empty ctx
+    // ── Step 1: intent detection (no AI, instant) ────────────────────────
+    const intent = detectIntent(message);
+    console.log('[AI ROUTER] Intent:', intent ?? 'null → fallback a Gemini');
+
+    // ── Step 2: direct Firestore response — covers ~80% of queries ───────
+    if (intent) {
+      try {
+        const directReply = await buildDirectFirestoreResponse(intent, comunidadId, uid, rol);
+        if (directReply) {
+          log.info('ai_chat_direct_response', { comunidad_id: comunidadId, intent });
+          console.log(`[AI ROUTER] Respondido directamente sin Gemini — intent: ${intent}`);
+          return NextResponse.json({ reply: directReply });
+        }
+      } catch (err) {
+        log.error('ai_chat_direct_response_failed', err, { intent });
+        console.warn('[AI ROUTER] Direct response failed — fallback a Gemini');
+        // Fall through to Gemini
+      }
+    }
+
+    // ── Step 3: build Firestore context for Gemini (complex queries) ─────
     let contexto: object;
     try {
       contexto = await buildContext(comunidadId, uid, rol);
@@ -506,22 +704,27 @@ export async function POST(req: NextRequest) {
       contexto = {};
     }
 
-    // Step 2: call Gemini — isolated try/catch with specific fallback message
+    // ── Step 4: call Gemini ───────────────────────────────────────────────
     let reply: string;
     try {
       const userPrompt = `CONTEXTO DE LA COMUNIDAD:\n${JSON.stringify(contexto, null, 2)}\n\nPREGUNTA DEL USUARIO:\n${message}`;
       const rawReply   = await askGemini(CHAT_SYSTEM_PROMPT, userPrompt);
-
-      // Guard: Gemini can return null/undefined/empty on unusual inputs
-      const cleaned = typeof rawReply === 'string' ? rawReply.trim() : '';
-      reply = stripMarkdown(cleaned) || 'No tengo datos suficientes en el sistema para responder eso.';
+      const cleaned    = typeof rawReply === 'string' ? rawReply.trim() : '';
+      reply = stripMarkdown(cleaned) || 'No tengo información suficiente para responder eso.';
       console.log('[AI] Respuesta Gemini generada — longitud:', reply.length, 'chars');
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
+      const is429  = errMsg.includes('429') || errMsg.toLowerCase().includes('resource exhausted') || errMsg.toLowerCase().includes('too many requests');
       log.error('ai_chat_gemini_failed', err, { comunidad_id: comunidadId });
       console.error('[AI] Gemini falló:', errMsg);
-      // Temporary: surface the real error in the chat reply so we can diagnose
-      reply = `[DEBUG] Gemini error: ${errMsg.slice(0, 200)}`;
+      reply = is429
+        ? 'Estoy recibiendo muchas solicitudes ahora mismo. Inténtalo en unos segundos.'
+        : 'No pude procesar tu solicitud en este momento. Inténtalo de nuevo.';
+    }
+
+    // ── Step 5: never return empty ────────────────────────────────────────
+    if (!reply || reply.trim() === '') {
+      reply = 'No tengo información suficiente para responder eso.';
     }
 
     log.info('ai_chat_done', { comunidad_id: comunidadId });
