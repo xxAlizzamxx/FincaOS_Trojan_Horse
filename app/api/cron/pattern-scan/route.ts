@@ -83,27 +83,36 @@ export async function GET(req: NextRequest) {
 
   log.info('cron_pattern_scan_started', { max_comunidades: MAX_COMUNIDADES });
 
-  // ── 2. Fetch all active communities ──────────────────────────────────────
-  let comunidadIds: string[];
+  // ── 2. Fetch all active communities (with config) ────────────────────────
+  let comunidadDocs: Array<{ id: string; config: Record<string, unknown> }>;
   try {
     const db   = getAdminDb();
     const snap = await db.collection('comunidades').limit(MAX_COMUNIDADES).get();
-    comunidadIds = snap.docs.map(d => d.id);
+    comunidadDocs = snap.docs.map(d => ({
+      id:     d.id,
+      config: (d.data()?.config ?? {}) as Record<string, unknown>,
+    }));
   } catch (err) {
     log.error('cron_pattern_scan_fetch_comunidades_failed', err);
     return NextResponse.json({ error: 'Error fetching communities' }, { status: 200 });
   }
 
-  log.info('cron_pattern_scan_comunidades_loaded', { count: comunidadIds.length });
+  log.info('cron_pattern_scan_comunidades_loaded', { count: comunidadDocs.length });
 
   // ── 3. Process each community (isolated — one failure never stops others) ─
   const results: ComunidadResult[] = [];
 
-  for (const comunidadId of comunidadIds) {
+  for (const { id: comunidadId, config } of comunidadDocs) {
     const t0 = Date.now();
 
+    // Resolve per-community cooldown (fallback: 24 h)
+    const cooldownHours = typeof config.notification_cooldown_hours === 'number'
+      ? config.notification_cooldown_hours
+      : 24;
+    const cooldownMs = cooldownHours * 60 * 60 * 1_000;
+
     try {
-      // 3a. Detect patterns (never throws)
+      // 3a. Detect patterns — reads its own config internally (never throws)
       const patternResult = await detectPatterns(comunidadId);
 
       // 3b. Persist insights (never throws)
@@ -117,10 +126,11 @@ export async function GET(req: NextRequest) {
       );
       const escalatedTotal = escalationResults.reduce((n, r) => n + r.escalated, 0);
 
-      // 3d. Notify for newly detected zona_caliente (anti-spam built-in, never throws)
+      // 3d. Notify — pass per-community cooldown (anti-spam built-in, never throws)
       const notifResult = await sendZonaCalienteNotifications(
         comunidadId,
         patternResult.patrones,
+        cooldownMs,
       );
 
       const result: ComunidadResult = {
@@ -183,7 +193,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     ok:              true,
-    processed:       comunidadIds.length,
+    processed:       comunidadDocs.length,
     patrones:        totalPatrones,
     escalated_total: totalEscalated,
     notif_sent:      totalNotifSent,

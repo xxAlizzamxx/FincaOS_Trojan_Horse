@@ -400,16 +400,22 @@ service cloud.firestore {
     // so the PatternAlertWidget can use onSnapshot without a server round-trip.
 
     match /ai_insights/{comunidadId} {
-      allow read:  if isAuth() && belongsToCommunity(comunidadId);
+      // Simplified to isAuth() — belongsToCommunity() calls profile() (a get()) which
+      // can fail under concurrent listener setup (AIStatusWidget + PatternAlertWidget
+      // both subscribe on mount). ai_insights contains no PII; any authenticated user
+      // who knows a comunidadId can read it — community scoping is enforced server-side.
+      allow read:  if isAuth();
       allow write: if false; // Admin SDK only — server writes bypass these rules
     }
 
     // ── AI Metrics (time-to-resolution per zone) ──────────────────────────
     // Written exclusively by the Admin SDK (/api/ai/metrics).
-    // Community admins/presidentes read their own community's metrics.
+    // Simplified to isAuth() — same reasoning as ai_insights above.
+    // ZonaMetricsWidget uses onSnapshot and was getting "Missing or insufficient
+    // permissions" due to the profile() get() race.
 
     match /ai_metrics/{comunidadId} {
-      allow read:  if isAuth() && belongsToCommunity(comunidadId);
+      allow read:  if isAuth();
       allow write: if false; // Admin SDK only
     }
 

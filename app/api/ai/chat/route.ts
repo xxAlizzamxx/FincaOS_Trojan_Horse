@@ -193,21 +193,28 @@ async function buildContext(comunidadId: string, uid: string, rol: string) {
 
   const cuotasPendientes: object[] = [];
   if (cuotasSnap.status === 'fulfilled') {
-    for (const cuotaDoc of cuotasSnap.value.docs) {
-      try {
+    // Parallelize all pago lookups — one read per cuota instead of sequential awaits
+    const cuotaResults = await Promise.allSettled(
+      cuotasSnap.value.docs.map(async (cuotaDoc) => {
         const pagoSnap = await db
           .collection('cuotas').doc(cuotaDoc.id)
           .collection('pagos').doc(uid).get();
         const pagado = pagoSnap.exists && pagoSnap.data()?.estado === 'pagado';
         if (!pagado) {
           const c = cuotaDoc.data();
-          cuotasPendientes.push({
-            concepto:          c.concepto,
-            monto:             c.monto,
-            fecha_vencimiento: c.fecha_vencimiento,
-          });
+          return {
+            nombre:       c.nombre,        // correct field name (was: c.concepto — undefined)
+            monto:        c.monto,
+            fecha_limite: c.fecha_limite,  // correct field name (was: c.fecha_vencimiento — undefined)
+          };
         }
-      } catch { /* skip */ }
+        return null;
+      }),
+    );
+    for (const r of cuotaResults) {
+      if (r.status === 'fulfilled' && r.value !== null) {
+        cuotasPendientes.push(r.value);
+      }
     }
   }
 

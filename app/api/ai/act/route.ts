@@ -168,17 +168,20 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 6. Create parent inspection incidencia ──────────────────────────────
-  const zonaLabel   = zona.charAt(0).toUpperCase() + zona.slice(1).replace('_', ' ');
+  const zonaLabel   = zona.charAt(0).toUpperCase() + zona.slice(1).replace(/_/g, ' ');
   const catLabel    = categoriaNombre && categoriaNombre !== 'Sin categoría' ? ` · ${categoriaNombre}` : '';
   const titulo      = `🔍 Inspección preventiva — ${zonaLabel}${catLabel}`;
+
+  // Description: clear summary line + severity recommendation
+  const catFragment = categoriaNombre && categoriaNombre !== 'Sin categoría'
+    ? ` de tipo "${categoriaNombre}"`
+    : '';
   const descripcion =
-    `Inspección solicitada por el sistema IA tras detectar ${count} incidencia${count !== 1 ? 's' : ''} ` +
-    `activa${count !== 1 ? 's' : ''}` +
-    (categoriaNombre && categoriaNombre !== 'Sin categoría' ? ` de tipo "${categoriaNombre}"` : '') +
-    ` en ${zona}. ` +
+    `Se detectaron ${count} incidencia${count !== 1 ? 's' : ''}${catFragment} en la zona ${zona}. ` +
+    `La IA ha generado esta inspección preventiva para evitar daños mayores. ` +
     (severity === 'danger'
       ? 'Situación crítica — se recomienda intervención inmediata.'
-      : 'Inspección preventiva para evitar escalamiento.');
+      : 'Se recomienda revisión en las próximas 24 horas.');
 
   let incidenciaId: string;
   try {
