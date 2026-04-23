@@ -1085,33 +1085,36 @@ export default function ProveedorDashboardPage() {
         {/* ── TAB 5: Mi Perfil ── */}
         {activeTab === 'perfil' && (
           <div className="space-y-3 animate-in fade-in duration-300">
-            {/* Avatar + name card */}
-            <Card className="border-0 shadow-sm rounded-2xl overflow-hidden">
-              <div className="h-16 bg-gradient-to-r from-finca-coral to-orange-400" />
-              <CardContent className="pb-5">
-                <div className="-mt-8 mb-3 flex items-end justify-between gap-2">
-                  <div className="w-16 h-16 rounded-2xl bg-white shadow-md border-2 border-white shrink-0 overflow-hidden flex items-center justify-center">
-                    {photoURL ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={photoURL} alt={proveedor.nombre} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-2xl font-black text-finca-coral">{initials}</span>
-                    )}
-                  </div>
-                  <div className="pb-1 flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span className="text-xs text-emerald-600 font-semibold">Activo</span>
-                  </div>
-                </div>
-                <h2 className="text-lg font-bold text-finca-dark">{proveedor.nombre}</h2>
-                <p className="text-sm text-muted-foreground capitalize">{proveedor.especialidad}</p>
 
-                {/* Stats row */}
-                <div className="grid grid-cols-3 gap-2 mt-4">
+            {/* Services card */}
+            <Card className="border-0 shadow-sm rounded-2xl">
+              <CardContent className="pt-4 pb-4 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Servicios</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(proveedor.servicios && proveedor.servicios.length > 0
+                    ? proveedor.servicios
+                    : [proveedor.especialidad]
+                  ).map((s) => (
+                    <span
+                      key={s}
+                      className="inline-flex items-center gap-1 bg-finca-peach text-finca-coral text-xs font-semibold rounded-full px-2.5 py-1 border border-finca-coral/20"
+                    >
+                      {SERVICIOS_LABELS[s] ?? '🔧'} {s}
+                    </span>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Stats card — summarises numbers not visible on mobile header */}
+            <Card className="border-0 shadow-sm rounded-2xl">
+              <CardContent className="pt-4 pb-4 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Estadísticas</p>
+                <div className="grid grid-cols-3 gap-2">
                   {[
-                    { label: 'Rating', value: `⭐ ${ratingDisplay}` },
-                    { label: 'Trabajos', value: String(trabajosValue) },
-                    { label: 'Zona', value: proveedor.zona || '—' },
+                    { label: 'Rating',    value: `⭐ ${ratingDisplay}` },
+                    { label: 'Trabajos',  value: String(trabajosValue)  },
+                    { label: 'Zona',      value: proveedor.zona || '—'  },
                   ].map((stat) => (
                     <div key={stat.label} className="bg-gray-50 rounded-xl p-2.5 text-center">
                       <p className="text-sm font-bold text-finca-dark">{stat.value}</p>
@@ -1122,36 +1125,14 @@ export default function ProveedorDashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Services card */}
-            {(proveedor.servicios?.length ?? 0) > 0 && (
-              <Card className="border-0 shadow-sm rounded-2xl">
-                <CardContent className="pt-4 pb-4 space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Servicios</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(proveedor.servicios ?? [proveedor.especialidad]).map((s) => (
-                      <span
-                        key={s}
-                        className="inline-flex items-center gap-1 bg-finca-peach text-finca-coral text-xs font-semibold rounded-full px-2.5 py-1 border border-finca-coral/20"
-                      >
-                        {SERVICIOS_LABELS[s] ?? '🔧'} {s}
-                      </span>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Contact info card */}
             <Card className="border-0 shadow-sm rounded-2xl">
               <CardContent className="pt-4 pb-4 space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Datos de contacto</p>
                 <div className="space-y-2">
                   {[
-                    { label: 'Email', value: proveedor.email },
-                    {
-                      label: 'Miembro desde',
-                      value: new Date(proveedor.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
-                    },
+                    { label: 'Email',         value: proveedor.email },
+                    { label: 'Miembro desde', value: new Date(proveedor.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) },
                   ].map((item) => (
                     <div key={item.label} className="flex items-start justify-between gap-2">
                       <p className="text-xs text-muted-foreground">{item.label}</p>
