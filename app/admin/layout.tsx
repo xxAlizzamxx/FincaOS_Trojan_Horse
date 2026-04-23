@@ -43,12 +43,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!user) return null;
 
   const Sidebar = () => (
-    <aside className="w-64 bg-finca-dark flex flex-col h-full">
-      <div className="p-4 border-b border-white/10">
-        <Image src="/Logo sin bg.png" alt="FincaOS" width={130} height={50} className="object-contain brightness-0 invert" />
-        <p className="text-xs text-white/40 mt-1">Panel Administrador</p>
+    <aside className="w-64 bg-white border-r border-border flex flex-col h-full">
+      {/* Logo — coral gradient header */}
+      <div className="px-5 py-4 bg-gradient-to-br from-finca-coral to-finca-salmon">
+        <Image
+          src="/Logo sin bg.png"
+          alt="FincaOS"
+          width={120}
+          height={44}
+          className="object-contain brightness-0 invert"
+        />
+        <p className="text-[11px] text-white/70 mt-1 font-medium tracking-wide uppercase">
+          Panel Administrador
+        </p>
       </div>
-      <nav className="flex-1 p-3 space-y-1">
+
+      {/* Navigation */}
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -57,29 +68,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               href={item.href}
               onClick={() => setSidebarOpen(false)}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
                 isActive
-                  ? 'bg-finca-coral text-white'
-                  : 'text-white/60 hover:text-white hover:bg-white/10'
+                  ? 'bg-finca-coral text-white shadow-sm shadow-finca-coral/30'
+                  : 'text-finca-dark/60 hover:text-finca-dark hover:bg-finca-peach/50'
               )}
             >
-              <item.icon className="w-4.5 h-4.5 shrink-0" />
+              <item.icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-finca-coral/70')} />
               {item.label}
             </Link>
           );
         })}
       </nav>
-      <div className="p-3 border-t border-white/10 space-y-1">
+
+      {/* Bottom actions */}
+      <div className="p-3 border-t border-border space-y-0.5">
         <Link
           href="/inicio"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-finca-dark/60 hover:text-finca-dark hover:bg-finca-peach/50 transition-colors"
         >
-          <Users className="w-4 h-4" />
+          <Users className="w-4 h-4 text-finca-coral/70" />
           Vista vecino
         </Link>
         <button
           onClick={signOut}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-400 hover:text-red-300 hover:bg-white/10 transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:text-red-600 hover:bg-red-50 transition-colors"
         >
           <LogOut className="w-4 h-4" />
           Cerrar sesión
@@ -89,7 +102,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-screen bg-gray-50/80 overflow-hidden">
       <div className="hidden md:flex flex-col">
         <Sidebar />
       </div>

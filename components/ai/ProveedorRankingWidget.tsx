@@ -44,11 +44,15 @@ interface ProveedorMetrica {
 // ── Scoring (mirrors selectBestProveedor, metrics part only) ──────────────────
 
 function computeAIScore(m: ProveedorMetrica): number {
-  if (m.total_trabajos === 0) return 0;
-  const speed  = Math.max(0, 30 - m.tiempo_promedio_resolucion);
-  const cost   = Math.max(0, 20 - m.coste_promedio / 10);
-  const reopen = m.tasa_reapertura * 40;
-  return Math.round((speed + cost - reopen) * 10) / 10;
+  if (!m.total_trabajos) return 0;
+  // Guard against undefined/null Firestore fields — coerce to safe numbers
+  const tiempo  = Number(m.tiempo_promedio_resolucion) || 0;
+  const coste   = Number(m.coste_promedio)             || 0;
+  const reopen  = Number(m.tasa_reapertura)            || 0;
+  const speed   = Math.max(0, 30 - tiempo);
+  const cost    = Math.max(0, 20 - coste / 10);
+  const penalty = reopen * 40;
+  return Math.round((speed + cost - penalty) * 10) / 10;
 }
 
 function scoreBadge(score: number) {
@@ -197,30 +201,27 @@ export function ProveedorRankingWidget() {
                     </span>
 
                     {/* Avg resolution time */}
-                    <span className={cn(
-                      'text-xs text-center font-medium',
-                      m.tiempo_promedio_resolucion <= 24 ? 'text-emerald-600' :
-                      m.tiempo_promedio_resolucion <= 72 ? 'text-yellow-600' : 'text-red-600',
-                    )}>
-                      {m.tiempo_promedio_resolucion < 1
-                        ? `${Math.round(m.tiempo_promedio_resolucion * 60)}m`
-                        : `${Math.round(m.tiempo_promedio_resolucion)}h`}
-                    </span>
+                    {(() => {
+                      const t = Number(m.tiempo_promedio_resolucion) || 0;
+                      const color = t === 0 ? 'text-muted-foreground' : t <= 24 ? 'text-emerald-600' : t <= 72 ? 'text-yellow-600' : 'text-red-600';
+                      const label = t === 0 ? '—' : t < 1 ? `${Math.round(t * 60)}m` : `${Math.round(t)}h`;
+                      return <span className={cn('text-xs text-center font-medium', color)}>{label}</span>;
+                    })()}
 
                     {/* Avg cost */}
-                    <span className={cn(
-                      'text-xs text-center font-medium',
-                      m.coste_promedio <= 100 ? 'text-emerald-600' :
-                      m.coste_promedio <= 300 ? 'text-yellow-600' : 'text-red-600',
-                    )}>
-                      {m.coste_promedio > 0
-                        ? `${Math.round(m.coste_promedio)}€`
-                        : '—'}
-                    </span>
+                    {(() => {
+                      const c = Number(m.coste_promedio) || 0;
+                      const color = c === 0 ? 'text-muted-foreground' : c <= 100 ? 'text-emerald-600' : c <= 300 ? 'text-yellow-600' : 'text-red-600';
+                      return (
+                        <span className={cn('text-xs text-center font-medium', color)}>
+                          {c > 0 ? `${Math.round(c)}€` : '—'}
+                        </span>
+                      );
+                    })()}
 
                     {/* AI Score badge */}
                     <Badge className={cn('text-[10px] border justify-center', cls)}>
-                      {score > 0 ? `+${score}` : score}
+                      {isNaN(score) ? '—' : score > 0 ? `+${score}` : score}
                     </Badge>
                   </div>
                 );
