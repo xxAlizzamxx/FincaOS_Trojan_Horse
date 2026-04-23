@@ -497,20 +497,13 @@ export async function POST(req: NextRequest) {
     console.log('[AI] Modo CONSULTA activado — respondiendo con contexto de comunidad');
 
     // Step 1: build context — failure is non-fatal, fall back to empty ctx
-    // Quick check — catch missing API key before the full context build
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ reply: '[DEBUG] GEMINI_API_KEY no está configurada en las variables de entorno.' });
-    }
-
     let contexto: object;
     try {
       contexto = await buildContext(comunidadId, uid, rol);
       console.log('[AI] Contexto construido — tamaño JSON:', JSON.stringify(contexto).length, 'chars');
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
       log.error('ai_chat_context_failed', err, { comunidad_id: comunidadId });
-      console.error('[AI] buildContext falló:', errMsg);
-      contexto = { _error: errMsg.slice(0, 100) };
+      contexto = {};
     }
 
     // Step 2: call Gemini — isolated try/catch with specific fallback message
