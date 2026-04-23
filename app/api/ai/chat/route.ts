@@ -497,12 +497,20 @@ export async function POST(req: NextRequest) {
     console.log('[AI] Modo CONSULTA activado — respondiendo con contexto de comunidad');
 
     // Step 1: build context — failure is non-fatal, fall back to empty ctx
+    // Quick check — catch missing API key before the full context build
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json({ reply: '[DEBUG] GEMINI_API_KEY no está configurada en las variables de entorno.' });
+    }
+
     let contexto: object;
     try {
       contexto = await buildContext(comunidadId, uid, rol);
+      console.log('[AI] Contexto construido — tamaño JSON:', JSON.stringify(contexto).length, 'chars');
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       log.error('ai_chat_context_failed', err, { comunidad_id: comunidadId });
-      contexto = {};
+      console.error('[AI] buildContext falló:', errMsg);
+      contexto = { _error: errMsg.slice(0, 100) };
     }
 
     // Step 2: call Gemini — isolated try/catch with specific fallback message
@@ -516,9 +524,11 @@ export async function POST(req: NextRequest) {
       reply = stripMarkdown(cleaned) || 'No tengo datos suficientes en el sistema para responder eso.';
       console.log('[AI] Respuesta Gemini generada — longitud:', reply.length, 'chars');
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       log.error('ai_chat_gemini_failed', err, { comunidad_id: comunidadId });
-      console.error('[AI] Gemini falló — usando respuesta de fallback');
-      reply = 'No pude obtener respuesta en este momento. Inténtalo de nuevo en unos segundos.';
+      console.error('[AI] Gemini falló:', errMsg);
+      // Temporary: surface the real error in the chat reply so we can diagnose
+      reply = `[DEBUG] Gemini error: ${errMsg.slice(0, 200)}`;
     }
 
     log.info('ai_chat_done', { comunidad_id: comunidadId });
