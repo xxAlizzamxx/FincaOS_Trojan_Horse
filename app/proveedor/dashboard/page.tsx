@@ -35,7 +35,7 @@ import { toast } from 'sonner';
 import {
   Star, Briefcase, ClipboardList, Award, User as UserIcon,
   LogOut, Bell, ChevronRight, MapPin, Wrench, Calendar,
-  CheckCircle2, Play, AlertCircle, Zap, Moon,
+  CheckCircle2, Play, AlertCircle, Zap, Moon, Building2,
 } from 'lucide-react';
 
 interface ProveedorProfile {
@@ -69,6 +69,9 @@ interface Incidencia {
   fotos?: Array<{ storage_path?: string; url?: string }>;
   created_at: string;
   zona?: string;
+  comunidad_id?: string;
+  comunidad_nombre?: string;      // enriched from comunidades collection
+  comunidad_direccion?: string;   // enriched from comunidades collection
   proveedor_asignado?: string;
 }
 
@@ -274,7 +277,27 @@ export default function ProveedorDashboardPage() {
           !rejected.has(inc.id)
       );
 
-      setIncidencias(filtered);
+      // Enrich incidencias with community name + address
+      const comunidadIds = [...new Set(filtered.map(i => i.comunidad_id).filter(Boolean) as string[])];
+      const comunidadMap: Record<string, { nombre: string; direccion: string }> = {};
+      await Promise.all(
+        comunidadIds.map(async (cid) => {
+          try {
+            const snap = await getDoc(doc(db, 'comunidades', cid));
+            if (snap.exists()) {
+              const d = snap.data();
+              comunidadMap[cid] = { nombre: d.nombre ?? '', direccion: d.direccion ?? '' };
+            }
+          } catch { /* community fetch is best-effort */ }
+        })
+      );
+      const enriched = filtered.map(inc => ({
+        ...inc,
+        comunidad_nombre:   inc.comunidad_id ? (comunidadMap[inc.comunidad_id]?.nombre   ?? undefined) : undefined,
+        comunidad_direccion: inc.comunidad_id ? (comunidadMap[inc.comunidad_id]?.direccion ?? undefined) : undefined,
+      }));
+
+      setIncidencias(enriched);
     } catch {
       toast.error('Error al cargar incidencias');
     } finally {
@@ -300,7 +323,28 @@ export default function ProveedorDashboardPage() {
         id: d.id,
         ...(d.data() as Omit<Incidencia, 'id'>),
       }));
-      setAsignados(data);
+
+      // Enrich assigned incidencias with community name + address
+      const comunidadIds = [...new Set(data.map(i => i.comunidad_id).filter(Boolean) as string[])];
+      const comunidadMap: Record<string, { nombre: string; direccion: string }> = {};
+      await Promise.all(
+        comunidadIds.map(async (cid) => {
+          try {
+            const snap = await getDoc(doc(db, 'comunidades', cid));
+            if (snap.exists()) {
+              const d = snap.data();
+              comunidadMap[cid] = { nombre: d.nombre ?? '', direccion: d.direccion ?? '' };
+            }
+          } catch { /* best-effort */ }
+        })
+      );
+      const enriched = data.map(inc => ({
+        ...inc,
+        comunidad_nombre:    inc.comunidad_id ? (comunidadMap[inc.comunidad_id]?.nombre    ?? undefined) : undefined,
+        comunidad_direccion: inc.comunidad_id ? (comunidadMap[inc.comunidad_id]?.direccion ?? undefined) : undefined,
+      }));
+
+      setAsignados(enriched);
     } catch {
       toast.error('Error al cargar trabajos asignados');
     } finally {
@@ -584,8 +628,8 @@ export default function ProveedorDashboardPage() {
                 <span className="text-2xl font-bold text-white">{initials}</span>
               </div>
             )}
-            {/* Online indicator */}
-            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-400 border-2 border-white" />
+            {/* Online indicator — reflects real disponibilidad state */}
+            <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-white transition-colors duration-300 ${disponibilidad === 'disponible' ? 'bg-emerald-400' : 'bg-red-500'}`} />
           </div>
 
           {/* Name + info */}
@@ -726,7 +770,17 @@ export default function ProveedorDashboardPage() {
 
                       {/* Meta row */}
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        {inc.zona && (
+                        {inc.comunidad_nombre && (
+                          <span className="flex items-center gap-1 font-medium text-finca-dark">
+                            <Building2 className="w-3 h-3 text-finca-coral" /> {inc.comunidad_nombre}
+                          </span>
+                        )}
+                        {inc.comunidad_direccion && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" /> {inc.comunidad_direccion}
+                          </span>
+                        )}
+                        {!inc.comunidad_direccion && inc.zona && (
                           <span className="flex items-center gap-1">
                             <MapPin className="w-3 h-3" /> {inc.zona}
                           </span>
@@ -864,7 +918,19 @@ export default function ProveedorDashboardPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        {inc.zona && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {inc.zona}</span>}
+                        {inc.comunidad_nombre && (
+                          <span className="flex items-center gap-1 font-medium text-finca-dark">
+                            <Building2 className="w-3 h-3 text-finca-coral" /> {inc.comunidad_nombre}
+                          </span>
+                        )}
+                        {inc.comunidad_direccion && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" /> {inc.comunidad_direccion}
+                          </span>
+                        )}
+                        {!inc.comunidad_direccion && inc.zona && (
+                          <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {inc.zona}</span>
+                        )}
                         {inc.tipo_problema && <span className="flex items-center gap-1"><Wrench className="w-3 h-3" /> {inc.tipo_problema}</span>}
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
