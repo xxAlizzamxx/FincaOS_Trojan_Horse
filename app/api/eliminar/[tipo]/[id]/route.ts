@@ -20,6 +20,7 @@ import { NextRequest, NextResponse }  from 'next/server';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getAuth }                      from 'firebase-admin/auth';
 import { getAdminDb }                   from '@/lib/firebase/admin';
+import { detectPatterns, saveInsights } from '@/lib/ai/patternEngine';
 
 /* ─── Bootstrap Firebase Admin (idempotente) ─── */
 if (!getApps().length) {
@@ -165,6 +166,58 @@ export async function DELETE(
     }
 
     await docRef.delete();
+
+    // ── Post-delete side effects for incidencias ─────────────────────────────
+    if (coleccion === 'incidencias' && comunidadRecurso) {
+      const comunidadId = comunidadRecurso;
+
+      // A) Refresh AI pattern engine so alert banners clear immediately
+      //    Fire-and-forget: never blocks the HTTP response
+      detectPatterns(comunidadId)
+        .then(result => saveInsights(comunidadId, result))
+        .catch((e: unknown) => console.error('[DELETE] pattern refresh failed:', e));
+
+      // B) If this incidencia had a parentId (was a child of an inspection),
+      //    close the parent inspection if ALL its children are now gone/resolved.
+      const parentId = data.parentId as string | undefined;
+      if (parentId) {
+        (async () => {
+          try {
+            const parentRef  = db.collection('incidencias').doc(parentId);
+            const parentSnap = await parentRef.get();
+            if (!parentSnap.exists) return;
+
+            const parentData = parentSnap.data()!;
+            const hijosIds   = (parentData.hijos as string[] | undefined) ?? [];
+
+            // Remove deleted child from parent's hijos list
+            const remainingIds = hijosIds.filter((hid: string) => hid !== id);
+
+            // Check how many of those are still open
+            if (remainingIds.length === 0) {
+              // No children left — close the inspection
+              await parentRef.update({
+                hijos:       [],
+                total_hijos: 0,
+                estado:      'cerrada',
+                updated_at:  new Date().toISOString(),
+              });
+              console.log(`[DELETE] Parent inspection ${parentId} closed — no children remain`);
+            } else {
+              // Still has children — just remove this one from the list
+              await parentRef.update({
+                hijos:       remainingIds,
+                total_hijos: remainingIds.length,
+                updated_at:  new Date().toISOString(),
+              });
+            }
+          } catch (e) {
+            console.error('[DELETE] Failed to update parent inspection:', e);
+          }
+        })();
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(`[DELETE /api/eliminar/${tipo}/${id}]`, err);
