@@ -9,7 +9,7 @@ import { db } from '@/lib/firebase/client';
 import { collection, addDoc, doc, setDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
-import { notificarAdmins, crearNotificacionComunidad } from '@/lib/firebase/notifications';
+import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -248,18 +248,10 @@ export default function NuevaIncidenciaPage() {
         );
       }
 
-      // 3. Notificar admins (escribe en colección notificaciones)
-      notificarAdmins(
-        perfil.comunidad_id,
-        'incidencia',
-        titulo.trim(),
-        `Reportado por ${perfil.nombre_completo}`,
-        `/incidencias/${ref.id}`,
-      ).catch((err) => {
-        console.error('[FIRESTORE WRITE FAILED] notificarAdmins:', err?.code, err?.message);
-      });
-
-      // 4. Notificación de comunidad (subcollección comunidades/{id}/notificaciones)
+      // 3. Notificación de comunidad (subcollección comunidades/{id}/notificaciones)
+      //    (notificarAdmins eliminada: escribía en la colección global 'notificaciones'
+      //     con usuario_id ajeno, lo que Firestore deniega para vecinos.
+      //     crearNotificacionComunidad cubre el mismo caso sin ese problema.)
       crearNotificacionComunidad(perfil.comunidad_id, {
         tipo:       'incidencia',
         titulo:     titulo.trim(),

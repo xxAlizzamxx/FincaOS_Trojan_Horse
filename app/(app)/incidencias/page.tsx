@@ -113,26 +113,58 @@ export default function IncidenciasPage() {
     return matchBusqueda && matchFiltro;
   });
 
-  // Separate AI parent groups from regular incidencias
-  // Children (those with parentId) are hidden from top-level list
-  const childIds = new Set(
-    incidenciasFiltradas
-      .filter((inc: any) => (inc as any).parentId)
-      .map((inc: any) => (inc as any).parentId as string)
-  );
+  // ── Inspection grouping ────────────────────────────────────────────────────
+  //
+  // Two sources of truth for parent→child relationships:
+  //   1. inc.hijos[]  — stored on the parent (set when the inspection is created)
+  //   2. child.parentId — set on each child via batch update (may lag or fail)
+  //
+  // We use BOTH to be resilient. A child is hidden from top-level if:
+  //   • it has a parentId pointing to a known inspection, OR
+  //   • its ID appears in the `hijos` array of any inspection incidencia.
 
-  // Build a lookup of parentId → children array
+  // Build the set of hijos IDs declared by AI parent inspections (source 1)
+  const hijosFromParent = new Set<string>();
+  incidenciasFiltradas.forEach((inc: any) => {
+    if ((inc as any).tipo_problema === 'inspeccion_preventiva') {
+      const hijos: string[] = (inc as any).hijos ?? [];
+      hijos.forEach((id: string) => hijosFromParent.add(id));
+    }
+  });
+
+  // Build lookup parentId → children, combining both sources (source 2)
   const childrenByParent: Record<string, Incidencia[]> = {};
   incidenciasFiltradas.forEach((inc: any) => {
-    if ((inc as any).parentId) {
-      const pid = (inc as any).parentId as string;
+    const pid = (inc as any).parentId as string | undefined;
+    if (pid) {
       if (!childrenByParent[pid]) childrenByParent[pid] = [];
       childrenByParent[pid].push(inc);
     }
   });
 
-  // Top-level: exclude children (those with parentId)
-  const topLevel = incidenciasFiltradas.filter((inc: any) => !(inc as any).parentId);
+  // For each inspection, also add children found via hijos[] (in case parentId not yet set)
+  incidenciasFiltradas.forEach((inc: any) => {
+    if ((inc as any).tipo_problema === 'inspeccion_preventiva') {
+      const hijos: string[] = (inc as any).hijos ?? [];
+      if (hijos.length === 0) return;
+      if (!childrenByParent[inc.id]) childrenByParent[inc.id] = [];
+      const alreadyAdded = new Set(childrenByParent[inc.id].map((c: any) => c.id));
+      hijos.forEach((hid: string) => {
+        if (!alreadyAdded.has(hid)) {
+          const child = incidenciasFiltradas.find((c: any) => c.id === hid);
+          if (child) {
+            childrenByParent[inc.id].push(child);
+            alreadyAdded.add(hid);
+          }
+        }
+      });
+    }
+  });
+
+  // Top-level: exclude children (those with parentId OR those in hijosFromParent)
+  const topLevel = incidenciasFiltradas.filter((inc: any) =>
+    !(inc as any).parentId && !hijosFromParent.has(inc.id)
+  );
 
   function toggleGroup(id: string) {
     setExpandedGroups(prev => ({ ...prev, [id]: !prev[id] }));
@@ -226,16 +258,20 @@ export default function IncidenciasPage() {
       ) : (
         <StaggerList className="flex flex-col gap-3" stagger={0.06}>
           {sortByPrioridad(topLevel).map((inc) => {
-            const isAIParent = (inc as any).creado_por_avatar === 'ia' || (inc as any).autor_id === 'sistema_ia';
-            const children   = childrenByParent[inc.id] ?? [];
-            const isExpanded = expandedGroups[inc.id] ?? false;
+            const isAIParent = (inc as any).tipo_problema === 'inspeccion_preventiva'
+              || (inc as any).autor_id === 'sistema_ia'
+              || (inc as any).creado_por_avatar === 'ia';
+            const children     = childrenByParent[inc.id] ?? [];
+            // Fallback: use stored total_hijos from the doc if no children in local state
+            const storedHijos  = (inc as any).total_hijos as number ?? 0;
+            const isExpanded   = expandedGroups[inc.id] ?? false;
 
             // Only count open children for display; hide group if all resolved
             const openChildren = children.filter(
               c => !['resuelta', 'cerrada'].includes((c as any).estado ?? '')
             );
 
-            if (isAIParent && children.length > 0) {
+            if (isAIParent && (children.length > 0 || storedHijos > 0)) {
               return (
                 <div key={inc.id} className="flex flex-col gap-2">
                   {/* AI parent group header */}
@@ -253,7 +289,9 @@ export default function IncidenciasPage() {
                           <p className="text-xs text-violet-500 mt-0.5">
                             {openChildren.length > 0
                               ? `${openChildren.length} incidencia${openChildren.length !== 1 ? 's' : ''} activa${openChildren.length !== 1 ? 's' : ''}`
-                              : 'Todas resueltas ✓'
+                              : storedHijos > 0
+                                ? `${storedHijos} incidencia${storedHijos !== 1 ? 's' : ''} agrupada${storedHijos !== 1 ? 's' : ''}`
+                                : 'Todas resueltas ✓'
                             }
                           </p>
                         </div>
