@@ -10,8 +10,8 @@
  *  - Reads real-time from ai_insights/{comunidadId} via onSnapshot
  *  - One banner row per active pattern (danger = red, warning = amber)
  *  - Each user dismisses individually via the X button
- *  - Dismissal persisted in localStorage keyed by userId + patternKey + generado_at
- *    → auto-reappears for everyone when a NEW scan produces a fresh generado_at
+ *  - Dismissal is SESSION-ONLY (in-memory React state) — reloading the page
+ *    brings the banner back automatically if the pattern still exists.
  *  - In-flow (sticky top-0) so it pushes AppHeader + content down naturally
  *  - Also renders legacy admin-created alertas_globales (shared dismiss)
  */
@@ -55,17 +55,7 @@ interface AlertaAdmin {
   created_at?: unknown;
 }
 
-// ── localStorage helpers ───────────────────────────────────────────────────────
-
-/**
- * Key uniquely identifies: this user + this pattern.
- * Intentionally does NOT include generado_at — dismissal is permanent for the
- * user/pattern pair, regardless of how many new scans run. A new alert only
- * shows if the zone or category changes (different patternKey).
- */
-function lsKey(userId: string, pk: string) {
-  return `finca:alert_dismissed:${userId}:${pk}`;
-}
+// ── patternKey ────────────────────────────────────────────────────────────────
 
 /** patternKey mirrors the bucket key used by patternEngine.ts */
 function patternKey(p: PatronDetectado) {
@@ -75,7 +65,7 @@ function patternKey(p: PatronDetectado) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function AlertaGlobalBanner() {
-  const { user, perfil } = useAuth();
+  const { perfil } = useAuth();
   const comunidadId = perfil?.comunidad_id;
 
   const [insights,     setInsights]     = useState<AIInsightDoc | null>(null);
@@ -108,29 +98,13 @@ export function AlertaGlobalBanner() {
     );
   }, [comunidadId]);
 
-  // ── Load per-user dismissals from localStorage ───────────────────────────
-  // Runs once when the user is known. Dismissals are permanent — no reset on
-  // new scans. A pattern only reappears if its zona or category changes.
-  useEffect(() => {
-    if (!user?.uid) return;
-    const active = new Set<string>();
-    const prefix = `finca:alert_dismissed:${user.uid}:`;
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k?.startsWith(prefix)) {
-        active.add(k.slice(prefix.length));
-      }
-    }
-    setDismissed(active);
-  }, [user?.uid]);
-
-  // ── Dismiss AI pattern (per-user, localStorage) ──────────────────────────
+  // ── Dismiss AI pattern (session-only — in-memory, no localStorage) ──────
+  // Cerrando el banner lo oculta hasta que se recargue la página.
+  // Al recargar reaparece automáticamente si el patrón sigue activo.
   const dismissPattern = useCallback((patron: PatronDetectado) => {
-    if (!user?.uid) return;
-    const pk  = patternKey(patron);
-    try { localStorage.setItem(lsKey(user.uid, pk), '1'); } catch { /* quota */ }
+    const pk = patternKey(patron);
     setDismissed(prev => new Set(Array.from(prev).concat(pk)));
-  }, [user?.uid]);
+  }, []);
 
   // ── Dismiss legacy admin alert (shared — marks activa: false for all) ─────
   const dismissAdmin = useCallback((id: string) => {
