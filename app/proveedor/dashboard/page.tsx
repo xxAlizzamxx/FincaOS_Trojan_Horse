@@ -325,7 +325,7 @@ export default function ProveedorDashboardPage() {
       }));
 
       // Enrich assigned incidencias with community name + address
-      const comunidadIds = [...new Set(data.map(i => i.comunidad_id).filter(Boolean) as string[])];
+      const comunidadIds = Array.from(new Set(data.map(i => i.comunidad_id).filter(Boolean) as string[]));
       const comunidadMap: Record<string, { nombre: string; direccion: string }> = {};
       await Promise.all(
         comunidadIds.map(async (cid) => {
