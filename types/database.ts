@@ -312,7 +312,7 @@ export interface ProveedorReview {
 
 /* ─── Mediaciones ─── */
 
-export type EstadoMediacion = 'solicitada' | 'asignada' | 'en_proceso' | 'finalizada';
+export type EstadoMediacion = 'solicitada' | 'ia_procesando' | 'ia_propuesta' | 'mediador_requerido' | 'asignada' | 'en_proceso' | 'finalizada';
 export type EstadoPagoMediacion = 'pendiente' | 'pagado';
 
 export interface EntradaHistorialMediacion {

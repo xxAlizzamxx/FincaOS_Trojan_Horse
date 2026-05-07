@@ -95,7 +95,7 @@ export default function MediacionDetailPage() {
        * escalar automáticamente a mediador_requerido y notificar.
        */
       if (
-        (data.estado === 'ia_propuesta' || (data as any).estado === 'ia_procesando') &&
+        (data.estado === 'ia_propuesta' || data.estado === 'ia_procesando') &&
         data.created_at &&
         differenceInHours(new Date(), new Date(data.created_at)) >= 48
       ) {
@@ -557,7 +557,7 @@ export default function MediacionDetailPage() {
         )}
 
         {/* ── Banner de auto-escalado (si se acerca a las 48h) ── */}
-        {(estado === 'ia_propuesta' || (estado as string) === 'ia_procesando') && mediacion.created_at && (() => {
+        {(estado === 'ia_propuesta' || estado === 'ia_procesando') && mediacion.created_at && (() => {
           const horasTranscurridas = differenceInHours(new Date(), new Date(mediacion.created_at));
           if (horasTranscurridas >= 24 && horasTranscurridas < 48) {
             return (
