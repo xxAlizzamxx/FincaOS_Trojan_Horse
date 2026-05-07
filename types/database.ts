@@ -312,7 +312,7 @@ export interface ProveedorReview {
 
 /* ─── Mediaciones ─── */
 
-export type EstadoMediacion = 'solicitada' | 'asignada' | 'en_proceso' | 'finalizada';
+export type EstadoMediacion = 'solicitada' | 'ia_procesando' | 'ia_propuesta' | 'mediador_requerido' | 'asignada' | 'en_proceso' | 'finalizada';
 export type EstadoPagoMediacion = 'pendiente' | 'pagado';
 
 export interface EntradaHistorialMediacion {
@@ -361,6 +361,9 @@ export interface Mediacion {
     stripe_session_id: string | null;
     paid_at: string | null;
   };
+  /** Valoración del mediador post-resolución */
+  valoracion_rating?: number;
+  valoracion_comentario?: string | null;
   created_at: string;
   updated_at: string;
 }
