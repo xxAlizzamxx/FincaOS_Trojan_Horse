@@ -220,26 +220,26 @@ export default function InicioPage() {
         <p className="text-sm text-muted-foreground">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-3 lg:gap-4">
         {[
           { icon: AlertCircle, value: stats.abiertas, label: 'Abiertas', color: 'text-yellow-600', bg: 'bg-yellow-50' },
           { icon: CheckCircle2, value: stats.resueltas, label: 'Resueltas', color: 'text-green-600', bg: 'bg-green-50' },
           { icon: TrendingUp, value: stats.vecinos, label: 'Vecinos', color: 'text-finca-coral', bg: 'bg-finca-peach/30' },
         ].map((stat) => (
           <Card key={stat.label} className="border-0 shadow-sm">
-            <CardContent className="p-3 text-center">
-              <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-1.5', stat.bg)}>
-                <stat.icon className={cn('w-4 h-4', stat.color)} />
+            <CardContent className="p-3 lg:p-5 text-center">
+              <div className={cn('w-8 h-8 lg:w-10 lg:h-10 rounded-lg flex items-center justify-center mx-auto mb-1.5', stat.bg)}>
+                <stat.icon className={cn('w-4 h-4 lg:w-5 lg:h-5', stat.color)} />
               </div>
-              <p className="text-xl font-bold text-finca-dark">{stat.value}</p>
-              <p className="text-xs text-muted-foreground">{stat.label}</p>
+              <p className="text-xl lg:text-2xl font-bold text-finca-dark">{stat.value}</p>
+              <p className="text-xs lg:text-sm text-muted-foreground">{stat.label}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
       <div>
-        <Button className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 text-base font-medium shadow-md shadow-finca-coral/20" asChild>
+        <Button className="w-full lg:w-auto lg:px-8 bg-finca-coral hover:bg-finca-coral/90 text-white h-12 text-base font-medium shadow-md shadow-finca-coral/20" asChild>
           <Link href="/nueva/incidencia">
             <Plus className="w-5 h-5 mr-2" />
             Reportar incidencia
@@ -333,7 +333,7 @@ export default function InicioPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col lg:grid lg:grid-cols-2 gap-3">
             {incidencias.map((inc) => {
               const estado = estadoConfig[inc.estado] || estadoConfig.pendiente;
               return (

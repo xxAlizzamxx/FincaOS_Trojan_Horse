@@ -39,7 +39,7 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-border safe-top">
-      <div className="flex items-center justify-between h-14 px-4 max-w-lg mx-auto">
+      <div className="flex items-center justify-between h-14 px-4 max-w-lg md:max-w-2xl lg:max-w-5xl mx-auto">
         <Image
           src="/Logo sin bg.png"
           alt="FincaOS"

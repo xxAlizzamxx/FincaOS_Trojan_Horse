@@ -190,7 +190,7 @@ export default function ChatMediacion({ mediacionId, esAnonimo, participantes }:
               <div key={msg.id} className={cn('flex gap-2', isMine ? 'flex-row-reverse' : 'flex-row')}>
                 {/* Avatar */}
                 <div className="shrink-0">
-                  {esAnonimo && !isMine ? (
+                  {esAnonimo ? (
                     <IncognitoAvatar />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-finca-peach text-finca-coral flex items-center justify-center text-xs font-bold">
