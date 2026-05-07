@@ -1,0 +1,250 @@
+export type Rol = 'vecino' | 'presidente' | 'admin' | 'mediador';
+export type EstadoIncidencia =
+  | 'pendiente'      // inicial / "Reportada" en UI
+  | 'en_revision'
+  | 'presupuestada'
+  | 'en_ejecucion'
+  | 'resuelta'
+  | 'aprobada'       // legacy
+  | 'cerrada';       // legacy
+
+export interface EntradaHistorialEstado {
+  estado:       EstadoIncidencia;
+  fecha:        string;            // ISO string
+  cambiado_por: string;            // uid
+}
+export type PrioridadIncidencia = 'baja' | 'normal' | 'alta' | 'urgente';
+
+export interface Comunidad {
+  id: string;
+  nombre: string;
+  direccion: string | null;
+  codigo: string;
+  num_viviendas: number;
+  created_at: string;
+}
+
+export interface Perfil {
+  id: string;
+  comunidad_id: string | null;
+  nombre_completo: string;
+  numero_piso: string | null;   // campo combinado legacy "Torre A · 3º · B"
+  torre: string | null;         // campo individual
+  piso: string | null;          // campo individual
+  puerta: string | null;        // campo individual (también guardado como "apartamento")
+  rol: Rol;
+  coeficiente: number | null;   // % de participación según LPH (ej: 5.2 = 5.2%)
+  avatar_url: string | null;
+  telefono: string | null;
+  created_at: string;
+  updated_at: string;
+  comunidad?: Comunidad;
+  /** ISO timestamp: última vez que el usuario leyó las notificaciones.
+   *  Notificación no leída = created_at > notificaciones_last_read */
+  notificaciones_last_read?: string;
+}
+
+/* ─── Notificaciones de comunidad ────────────────────────────────────────────
+   Subcolección: comunidades/{comunidadId}/notificaciones/{notifId}
+   Un único documento por evento — NO uno por vecino.
+   "No leída" se determina comparando created_at con perfil.notificaciones_last_read.
+──────────────────────────────────────────────────────────────────────────── */
+export type TipoNotificacion =
+  | 'incidencia'
+  | 'votacion'
+  | 'anuncio'
+  | 'documento';
+
+export interface NotificacionComunidad {
+  id         : string;
+  tipo       : TipoNotificacion;
+  titulo     : string;
+  mensaje    : string;
+  created_at : string;   // ISO — comparar con notificaciones_last_read
+  created_by : string;   // uid del autor (excluido de su propio contador)
+  related_id : string;   // id del objeto original
+  link       : string;   // ruta de navegación al pulsar
+}
+
+export interface CategoriaIncidencia {
+  id: string;
+  nombre: string;
+  icono: string | null;
+}
+
+export interface IncidenciaFoto {
+  id: string;
+  incidencia_id: string;
+  storage_path: string;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
+export interface Comentario {
+  id: string;
+  incidencia_id: string;
+  autor_id: string;
+  contenido: string;
+  es_nota_admin: boolean;
+  created_at: string;
+  autor?: Perfil;
+}
+
+export interface Incidencia {
+  id: string;
+  comunidad_id: string;
+  autor_id: string;
+  categoria_id: string | null;
+  titulo: string;
+  descripcion: string | null;
+  estado: EstadoIncidencia;
+  prioridad: PrioridadIncidencia;
+  ubicacion: string | null;
+  estimacion_min: number | null;
+  estimacion_max: number | null;
+  presupuesto_proveedor: number | null;   // presupuesto real del proveedor
+  proveedor_nombre: string | null;        // nombre del proveedor
+  created_at: string;
+  updated_at: string;
+  resuelta_at: string | null;
+  historial_estados?: EntradaHistorialEstado[];
+  autor?: Perfil;
+  categoria?: CategoriaIncidencia;
+  fotos?: IncidenciaFoto[];
+  comentarios?: Comentario[];
+  quorum?: QuorumIncidencia;
+  escalada_por_quorum?: boolean;
+  prioridad_original?: PrioridadIncidencia;
+}
+
+export interface Anuncio {
+  id: string;
+  comunidad_id: string;
+  autor_id: string;
+  titulo: string;
+  contenido: string;
+  fijado: boolean;
+  publicado_at: string;
+  expires_at: string | null;
+  created_at: string;
+  autor?: Perfil;
+}
+
+export type TipoDocumento = 'pdf' | 'word' | 'excel';
+
+export interface Documento {
+  id: string;
+  comunidad_id: string;
+  subido_por: string | null;    // uid del autor
+  created_by: string | null;    // alias semántico (mismo valor)
+  nombre: string;
+  descripcion: string | null;
+  url: string;                  // downloadURL de Storage
+  storage_path: string;
+  tipo: TipoDocumento;
+  tipo_mime: string | null;     // MIME original (retrocompatibilidad)
+  created_at: string;
+}
+
+/* ─── Votaciones ─── */
+
+export interface OpcionVotacion {
+  id: string;    // uuid generado en cliente
+  texto: string;
+  votos: number;
+  peso_total: number;  // suma de coeficientes de quienes votaron esta opción
+}
+
+export interface Votacion {
+  id: string;
+  comunidad_id: string;
+  created_by: string;          // uid del presidente/admin
+  titulo: string;
+  descripcion: string | null;
+  opciones: OpcionVotacion[];
+  activa: boolean;
+  usar_coeficientes: boolean;  // true = ponderado por LPH, false = 1 persona = 1 voto
+  quorum_requerido: number | null; // % mínimo de participación (ej: 50)
+  created_at: string;
+  cierre_at: string | null;    // fecha opcional de cierre
+}
+
+export interface VotoUsuario {
+  opcion_id: string;
+  coeficiente: number; // coeficiente del votante en el momento del voto
+  created_at: string;
+}
+
+/* ─── Cuotas ─── */
+
+export type EstadoPago = 'pendiente' | 'pagado';
+
+export interface Cuota {
+  id: string;
+  comunidad_id: string;
+  nombre: string;
+  monto: number;
+  fecha_limite: string;   // ISO string
+  created_at: string;
+}
+
+export interface PagoCuota {
+  usuario_id: string;
+  estado: EstadoPago;
+  fecha_pago: string | null;
+}
+
+/* ─── Mediaciones ─── */
+
+export type EstadoMediacion = 'solicitada' | 'asignada' | 'en_proceso' | 'finalizada';
+export type EstadoPagoMediacion = 'pendiente' | 'pagado';
+
+export interface EntradaHistorialMediacion {
+  estado: EstadoMediacion;
+  fecha: string;       // ISO string
+  usuario_id: string;
+  nota?: string;
+}
+
+/* ─── Quórum ─── */
+export type TipoQuorum =
+  | 'simple'        // >X% de afectados de la incidencia
+  | 'absoluta'      // >50% de TODOS los vecinos
+  | 'cualificada'   // ≥66.6% (LPH obras accesibilidad)
+  | 'unanimidad'    // 100%
+  | 'lph_ponderado';// % coeficientes LPH
+
+export interface QuorumIncidencia {
+  tipo: TipoQuorum;
+  umbral: number;              // % requerido (ej: 30)
+  afectados_count: number;
+  peso_afectados: number;      // suma coeficientes afectados
+  alcanzado: boolean;
+  alcanzado_at: string | null; // ISO
+}
+
+export interface Mediacion {
+  id: string;
+  comunidad_id: string;
+  solicitado_por: string;      // uid vecino (alias de denunciante_id)
+  denunciante_id?: string;     // campo legacy
+  tipo: 'ia' | 'profesional';
+  estado: EstadoMediacion;
+  mediador_id: string | null;
+  precio_min: number;
+  precio_max: number;
+  precio_acordado: number | null;
+  estado_pago: EstadoPagoMediacion;
+  descripcion?: string;
+  propuesta_ia?: string;
+  es_anonimo?: boolean;
+  historial?: EntradaHistorialMediacion[];
+  pago?: {
+    estado: string;
+    precio_final: number | null;
+    stripe_session_id: string | null;
+    paid_at: string | null;
+  };
+  created_at: string;
+  updated_at: string;
+}

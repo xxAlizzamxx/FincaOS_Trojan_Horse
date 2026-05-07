@@ -1,0 +1,19 @@
+{
+  "name": "FincaOS — Gestión de comunidades",
+  "short_name": "FincaOS",
+  "description": "La plataforma digital para comunidades de propietarios en España.",
+  "theme_color": "#FF6E61",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/inicio",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/image.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
