@@ -5,14 +5,15 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Loader2, History, CheckCircle2,
   Euro, CircleCheck, ClipboardList, CreditCard,
+  Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  doc, getDoc, updateDoc, serverTimestamp, arrayUnion,
+  doc, getDoc, updateDoc, serverTimestamp, arrayUnion, addDoc, collection,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { notificarUsuario } from '@/lib/firebase/notifications';
+import { notificarUsuario, notificarMediadores } from '@/lib/firebase/notifications';
 import type { Mediacion, Perfil } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,8 +24,10 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { cn } from '@/lib/utils';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, differenceInHours } from 'date-fns';
 import { es } from 'date-fns/locale';
+import ChatMediacion from '@/components/mediaciones/ChatMediacion';
+import RatingMediador from '@/components/mediaciones/RatingMediador';
 
 /* ─── Constantes ─── */
 const ESTADO_CFG: Record<string, { label: string; badge: string; dot: string; step: number }> = {
@@ -85,6 +88,56 @@ export default function MediacionDetailPage() {
       if (solUid) {
         const solSnap = await getDoc(doc(db, 'perfiles', solUid));
         if (solSnap.exists()) setSolicitante({ id: solSnap.id, ...solSnap.data() } as Perfil);
+      }
+
+      /* ── Auto-escalado 48h ──
+       * Si la mediación lleva más de 48h en estado ia_propuesta sin resolución,
+       * escalar automáticamente a mediador_requerido y notificar.
+       */
+      if (
+        (data.estado === 'ia_propuesta' || data.estado === 'ia_procesando') &&
+        data.created_at &&
+        differenceInHours(new Date(), new Date(data.created_at)) >= 48
+      ) {
+        try {
+          await updateDoc(doc(db, 'mediaciones', id), {
+            estado: 'mediador_requerido',
+            updated_at: serverTimestamp(),
+            historial: arrayUnion({
+              estado:     'mediador_requerido',
+              fecha:      new Date().toISOString(),
+              usuario_id: 'sistema',
+              nota:       'Escalado automático: sin resolución tras 48h',
+            }),
+          });
+          // Insertar mensaje de sistema en el chat (usa uid real para cumplir regla Firestore)
+          if (uid) {
+            await addDoc(collection(db, 'mediaciones', id, 'mensajes'), {
+              autor_id: uid,
+              autor_nombre: 'Sistema',
+              texto: 'Esta mediación ha sido escalada automáticamente a un mediador profesional tras 48h sin resolución.',
+              tipo: 'sistema',
+              es_anonimo: false,
+              created_at: new Date().toISOString(),
+            });
+          }
+          // Notificar mediadores de la comunidad
+          if (data.comunidad_id) {
+            await notificarMediadores(
+              data.comunidad_id,
+              id,
+              'Mediación escalada automáticamente (48h sin resolución)',
+            );
+          }
+          toast.info('Mediación escalada automáticamente a mediador profesional');
+          // Recargar para reflejar el nuevo estado
+          const updatedSnap = await getDoc(doc(db, 'mediaciones', id));
+          if (updatedSnap.exists()) {
+            setMediacion({ id: updatedSnap.id, ...updatedSnap.data() } as Mediacion);
+          }
+        } catch (escaladoErr) {
+          console.error('[Auto-escalado] Error:', escaladoErr);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -281,19 +334,25 @@ export default function MediacionDetailPage() {
           <CardContent className="p-4 space-y-3">
             {solicitante && (
               <div className="flex items-center gap-3">
-                {/* Si es anónimo y el que ve no es mediador/admin, ocultamos la foto */}
-                {mediacion.es_anonimo && !esMediador && !esAdmin ? (
-                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0 ring-2 ring-gray-300">
-                    <span className="text-sm font-bold text-muted-foreground">?</span>
+                {/* Anónimo: avatar incógnito para TODOS los usuarios */}
+                {mediacion.es_anonimo ? (
+                  <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center shrink-0 ring-2 ring-slate-400 shadow-sm">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      {/* Sombrero */}
+                      <path d="M4 11c0 0 2-6 8-6s8 6 8 6" stroke="#e2e8f0" strokeWidth="2" strokeLinecap="round"/>
+                      <path d="M2 11h20" stroke="#e2e8f0" strokeWidth="2" strokeLinecap="round"/>
+                      {/* Gafas */}
+                      <circle cx="9" cy="15" r="2.5" stroke="#e2e8f0" strokeWidth="1.5"/>
+                      <circle cx="15" cy="15" r="2.5" stroke="#e2e8f0" strokeWidth="1.5"/>
+                      <path d="M11.5 15h1" stroke="#e2e8f0" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
                   </div>
                 ) : (
                   <AvatarVecino perfil={solicitante} size="md" />
                 )}
                 <div>
                   <p className="text-sm font-medium text-finca-dark">
-                    {mediacion.es_anonimo && !esMediador && !esAdmin
-                      ? 'Vecino anónimo'
-                      : solicitante.nombre_completo}
+                    {mediacion.es_anonimo ? 'Anónimo' : solicitante.nombre_completo}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Solicitado {formatDistanceToNow(new Date(mediacion.created_at), { addSuffix: true, locale: es })}
@@ -495,6 +554,62 @@ export default function MediacionDetailPage() {
               </p>
             </CardContent>
           </Card>
+        )}
+
+        {/* ── Banner de auto-escalado (si se acerca a las 48h) ── */}
+        {(estado === 'ia_propuesta' || estado === 'ia_procesando') && mediacion.created_at && (() => {
+          const horasTranscurridas = differenceInHours(new Date(), new Date(mediacion.created_at));
+          if (horasTranscurridas >= 24 && horasTranscurridas < 48) {
+            return (
+              <Card className="border-0 shadow-sm border-l-4 border-l-amber-400 bg-amber-50/30">
+                <CardContent className="p-4 flex items-start gap-3">
+                  <Clock className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                      Escalado automático próximo
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Si no se resuelve con la propuesta IA, se asignará un mediador profesional en {48 - horasTranscurridas}h.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          }
+          return null;
+        })()}
+
+        {/* ── Chat de mediación (visible cuando hay mediador asignado o en proceso) ── */}
+        {mediacion && ['asignada', 'en_proceso', 'solicitada', 'mediador_requerido'].includes(estado) && (
+          <ChatMediacion
+            mediacionId={id}
+            esAnonimo={!!mediacion.es_anonimo}
+            participantes={{
+              denunciante_id: mediacion.denunciante_id ?? mediacion.solicitado_por,
+              mediador_id: mediacion.mediador_id,
+            }}
+          />
+        )}
+
+        {/* ── Chat en modo lectura cuando está finalizada ── */}
+        {mediacion && estado === 'finalizada' && (
+          <ChatMediacion
+            mediacionId={id}
+            esAnonimo={!!mediacion.es_anonimo}
+            participantes={{
+              denunciante_id: mediacion.denunciante_id ?? mediacion.solicitado_por,
+              mediador_id: mediacion.mediador_id,
+            }}
+          />
+        )}
+
+        {/* ── Rating del mediador (solo cuando finalizada y hay mediador) ── */}
+        {mediacion && estado === 'finalizada' && mediacion.mediador_id && (
+          <RatingMediador
+            mediacionId={id}
+            mediadorId={mediacion.mediador_id}
+            soySolicitante={soySolicitante}
+          />
         )}
 
         {/* ── Historial ── */}
