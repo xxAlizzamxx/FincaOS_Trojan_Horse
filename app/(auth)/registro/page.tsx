@@ -108,6 +108,7 @@ export default function RegistroPage() {
       toast.error('Completa todos los campos');
       return;
     }
+    isRegistering.current = true;
     setLoading(true);
 
     const q = query(collection(db, 'comunidades'), where('codigo', '==', codigoComunidad.toUpperCase()));
@@ -115,6 +116,7 @@ export default function RegistroPage() {
 
     if (snap.empty) {
       toast.error('Código de comunidad no encontrado');
+      isRegistering.current = false;
       setLoading(false);
       return;
     }
@@ -139,6 +141,7 @@ export default function RegistroPage() {
       router.replace('/inicio');
     } catch (err: any) {
       toast.error(err.message || 'Error al crear la cuenta');
+      isRegistering.current = false;
     }
     setLoading(false);
   }
@@ -149,6 +152,7 @@ export default function RegistroPage() {
       toast.error('Completa todos los campos obligatorios');
       return;
     }
+    isRegistering.current = true;
     setLoading(true);
 
     const codigo = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -180,6 +184,7 @@ export default function RegistroPage() {
       router.replace('/inicio');
     } catch (err: any) {
       toast.error(err.message || 'Error al crear la cuenta');
+      isRegistering.current = false;
     }
     setLoading(false);
   }

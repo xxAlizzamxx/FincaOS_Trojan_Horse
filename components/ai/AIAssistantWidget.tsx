@@ -16,7 +16,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
-import { BotMessageSquare, X, Send, Loader2, ChevronDown, CheckCircle2, ExternalLink } from 'lucide-react';
+import { BotMessageSquare, X, Send, Loader2, ChevronDown, CheckCircle2, ExternalLink, Receipt, Vote, Megaphone, AlertTriangle, Scale, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 
 interface Message {
@@ -44,6 +44,15 @@ export function AIAssistantWidget() {
   const comunidadId = perfil?.comunidad_id;
   const rol         = (perfil as any)?.rol ?? 'vecino';
 
+  const QUICK_ACTIONS = [
+    { label: '¿Debo cuotas?',            icon: Receipt,        message: '¿Tengo cuotas pendientes?' },
+    { label: '¿Hay votaciones?',          icon: Vote,           message: '¿Hay votaciones activas?' },
+    { label: 'Anuncios',                  icon: Megaphone,      message: '¿Cuáles son los últimos anuncios?' },
+    { label: 'Mis incidencias',           icon: AlertTriangle,  message: '¿Qué incidencias tengo abiertas?' },
+    { label: 'Normativa',                 icon: Scale,          message: '¿Qué dice la normativa sobre ruidos y horarios?' },
+    { label: 'Resumen comunidad',         icon: BookOpen,       message: '¿Cuál es el estado general de la comunidad?' },
+  ];
+
   // Scroll to bottom whenever messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,11 +66,11 @@ export function AIAssistantWidget() {
   // Don't render if user has no community
   if (!comunidadId) return null;
 
-  const send = useCallback(async () => {
-    const text = input.trim();
+  const send = useCallback(async (directText?: string) => {
+    const text = (directText ?? input).trim();
     if (!text || loading) return;
 
-    setInput('');
+    if (!directText) setInput('');
     setMessages(prev => [...prev, { role: 'user', text }]);
     setLoading(true);
 
@@ -92,8 +101,10 @@ export function AIAssistantWidget() {
     }
   }, [input, loading, user, comunidadId, rol]);
 
+  const showQuickActions = messages.length <= 1 && !loading;
+
   const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); }
   };
 
   return (
@@ -165,6 +176,22 @@ export function AIAssistantWidget() {
               </div>
             ))}
 
+            {/* Quick action chips */}
+            {showQuickActions && (
+              <div className="flex flex-wrap gap-1.5 px-1 pb-1">
+                {QUICK_ACTIONS.map(({ label, icon: Icon, message }) => (
+                  <button
+                    key={label}
+                    onClick={() => send(message)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-finca-coral bg-finca-peach/40 hover:bg-finca-peach/70 border border-finca-coral/20 rounded-full px-3 py-1.5 transition-colors active:scale-95"
+                  >
+                    <Icon className="w-3 h-3" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {loading && (
               <div className="flex justify-start">
                 <div className="w-6 h-6 rounded-full bg-finca-peach flex items-center justify-center mr-1.5 shrink-0">
@@ -198,7 +225,7 @@ export function AIAssistantWidget() {
                 className="flex-1 bg-transparent text-sm text-finca-dark placeholder:text-muted-foreground outline-none min-w-0"
               />
               <button
-                onClick={send}
+                onClick={() => send()}
                 disabled={loading || !input.trim()}
                 className={cn(
                   'w-7 h-7 rounded-lg flex items-center justify-center transition-colors shrink-0',
