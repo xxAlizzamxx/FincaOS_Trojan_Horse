@@ -16,7 +16,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
-import { BotMessageSquare, X, Send, Loader2, ChevronDown, CheckCircle2, ExternalLink, Receipt, Vote, Megaphone, AlertTriangle, Scale, BookOpen } from 'lucide-react';
+import { BotMessageSquare, Send, Loader2, ChevronDown, CheckCircle2, ExternalLink, Receipt, Vote, Megaphone, AlertTriangle, Scale, BookOpen, Package, DoorOpen, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
 interface Message {
@@ -44,14 +44,25 @@ export function AIAssistantWidget() {
   const comunidadId = perfil?.comunidad_id;
   const rol         = (perfil as any)?.rol ?? 'vecino';
 
-  const QUICK_ACTIONS = [
-    { label: '¿Debo cuotas?',            icon: Receipt,        message: '¿Tengo cuotas pendientes?' },
-    { label: '¿Hay votaciones?',          icon: Vote,           message: '¿Hay votaciones activas?' },
-    { label: 'Anuncios',                  icon: Megaphone,      message: '¿Cuáles son los últimos anuncios?' },
-    { label: 'Mis incidencias',           icon: AlertTriangle,  message: '¿Qué incidencias tengo abiertas?' },
-    { label: 'Normativa',                 icon: Scale,          message: '¿Qué dice la normativa sobre ruidos y horarios?' },
-    { label: 'Resumen comunidad',         icon: BookOpen,       message: '¿Cuál es el estado general de la comunidad?' },
+  const QUICK_ACTIONS_VECINO = [
+    { label: '¿Debo cuotas?',        icon: Receipt,       message: '¿Tengo cuotas pendientes?' },
+    { label: '¿Hay votaciones?',      icon: Vote,          message: '¿Hay votaciones activas?' },
+    { label: 'Anuncios',              icon: Megaphone,     message: '¿Cuáles son los últimos anuncios?' },
+    { label: 'Mis incidencias',       icon: AlertTriangle, message: '¿Qué incidencias tengo abiertas?' },
+    { label: 'Normativa',             icon: Scale,         message: '¿Qué dice la normativa sobre ruidos y horarios?' },
+    { label: 'Resumen comunidad',     icon: BookOpen,      message: '¿Cuál es el estado general de la comunidad?' },
   ];
+
+  const QUICK_ACTIONS_VIGILANTE = [
+    { label: '¿Hay recibos en portería?',  icon: Package,      message: '¿Cuántos paquetes o recibos hay pendientes en portería?' },
+    { label: '¿Visitas pendientes?',       icon: DoorOpen,     message: '¿Cuántas visitas están esperando autorización?' },
+    { label: '¿Alertas activas?',          icon: ShieldAlert,  message: '¿Qué alertas comunitarias están activas?' },
+    { label: 'Incidencias abiertas',       icon: AlertTriangle,message: '¿Qué incidencias hay abiertas en la comunidad?' },
+    { label: 'Resumen del turno',          icon: BookOpen,     message: '¿Cómo está la comunidad en este momento?' },
+    { label: 'Normativa de accesos',       icon: Scale,        message: '¿Cuál es la normativa para el control de accesos y visitantes?' },
+  ];
+
+  const QUICK_ACTIONS = rol === 'vigilante' ? QUICK_ACTIONS_VIGILANTE : QUICK_ACTIONS_VECINO;
 
   // Scroll to bottom whenever messages change
   useEffect(() => {
@@ -101,7 +112,7 @@ export function AIAssistantWidget() {
     }
   }, [input, loading, user, comunidadId, rol]);
 
-  const showQuickActions = messages.length <= 1 && !loading;
+  const showQuickActions = !loading;
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); }
@@ -176,22 +187,6 @@ export function AIAssistantWidget() {
               </div>
             ))}
 
-            {/* Quick action chips */}
-            {showQuickActions && (
-              <div className="flex flex-wrap gap-1.5 px-1 pb-1">
-                {QUICK_ACTIONS.map(({ label, icon: Icon, message }) => (
-                  <button
-                    key={label}
-                    onClick={() => send(message)}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-finca-coral bg-finca-peach/40 hover:bg-finca-peach/70 border border-finca-coral/20 rounded-full px-3 py-1.5 transition-colors active:scale-95"
-                  >
-                    <Icon className="w-3 h-3" />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {loading && (
               <div className="flex justify-start">
                 <div className="w-6 h-6 rounded-full bg-finca-peach flex items-center justify-center mr-1.5 shrink-0">
@@ -211,8 +206,26 @@ export function AIAssistantWidget() {
             <div ref={bottomRef} />
           </div>
 
+          {/* Quick action chips — always visible above input */}
+          {showQuickActions && (
+            <div className="px-3 pt-2 pb-1 border-t border-border/40 shrink-0">
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_ACTIONS.map(({ label, icon: Icon, message }) => (
+                  <button
+                    key={label}
+                    onClick={() => send(message)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-finca-coral bg-finca-peach/40 hover:bg-finca-peach/70 border border-finca-coral/20 rounded-full px-2.5 py-1 transition-colors active:scale-95"
+                  >
+                    <Icon className="w-3 h-3" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Input */}
-          <div className="px-3 pb-3 pt-2 border-t border-border/40 shrink-0">
+          <div className="px-3 pb-3 pt-2 shrink-0">
             <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 border border-border/60 focus-within:border-finca-coral/60 transition-colors">
               <input
                 ref={inputRef}
@@ -244,24 +257,17 @@ export function AIAssistantWidget() {
         </div>
       </div>
 
-      {/* ── Floating button ── */}
-      <button
-        onClick={() => setOpen(v => !v)}
-        className={cn(
-          'fixed bottom-20 right-3 z-50 w-13 h-13 rounded-full shadow-lg',
-          'flex items-center justify-center transition-all duration-300',
-          open
-            ? 'bg-gray-800 scale-90'
-            : 'bg-gradient-to-br from-finca-coral to-finca-salmon hover:scale-110 active:scale-95',
-        )}
-        style={{ width: 52, height: 52 }}
-        aria-label="Abrir Vecino Virtual"
-      >
-        {open
-          ? <X className="w-5 h-5 text-white" />
-          : <BotMessageSquare className="w-5 h-5 text-white" />
-        }
-      </button>
+      {/* ── Floating button — hidden when panel is open (header ChevronDown closes it) ── */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="fixed bottom-20 right-3 z-50 flex items-center justify-center rounded-full shadow-lg bg-gradient-to-br from-finca-coral to-finca-salmon hover:scale-110 active:scale-95 transition-all duration-300"
+          style={{ width: 52, height: 52 }}
+          aria-label="Abrir Vecino Virtual"
+        >
+          <BotMessageSquare className="w-5 h-5 text-white" />
+        </button>
+      )}
     </>
   );
 }

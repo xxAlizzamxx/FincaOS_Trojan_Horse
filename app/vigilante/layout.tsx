@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase/client';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -28,6 +30,29 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
   const router   = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [enTurno, setEnTurno] = useState(true);
+  const [togglingTurno, setTogglingTurno] = useState(false);
+
+  // Sync turno status from Firestore perfiles doc
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = onSnapshot(doc(db, 'perfiles', user.uid), (snap) => {
+      if (snap.exists() && snap.data().en_turno !== undefined) {
+        setEnTurno(!!snap.data().en_turno);
+      }
+    });
+    return () => unsub();
+  }, [user?.uid]);
+
+  async function toggleTurno() {
+    if (!user?.uid || togglingTurno) return;
+    setTogglingTurno(true);
+    try {
+      await updateDoc(doc(db, 'perfiles', user.uid), { en_turno: !enTurno });
+    } catch { /* ignore */ } finally {
+      setTogglingTurno(false);
+    }
+  }
 
   useEffect(() => {
     if (!loading && (!user || (perfil && perfil.rol !== 'vigilante'))) {
@@ -142,9 +167,19 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs bg-finca-peach/60 text-finca-coral px-2 py-0.5 rounded-full font-medium">
-              En turno
-            </span>
+            <button
+              onClick={toggleTurno}
+              disabled={togglingTurno}
+              title="Toca para cambiar estado"
+              className={cn(
+                'text-xs px-2 py-0.5 rounded-full font-medium transition-colors',
+                enTurno
+                  ? 'bg-finca-peach/60 text-finca-coral hover:bg-finca-peach'
+                  : 'bg-gray-200 text-gray-500 hover:bg-gray-300',
+              )}
+            >
+              {enTurno ? 'En turno' : 'En descanso'}
+            </button>
             {perfil && <AvatarVecino perfil={perfil} size="sm" />}
           </div>
         </header>

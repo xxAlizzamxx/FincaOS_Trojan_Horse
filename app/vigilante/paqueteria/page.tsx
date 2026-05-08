@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Package, Plus, X, Clock, CheckCircle2, Loader2, UserCheck,
-  Flame, Zap, Droplets, FileText, Building2, Truck, Bell, Mail,
+  Flame, Zap, Droplets, FileText, Building2, Truck, Bell, Mail, Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -51,12 +51,19 @@ const estadoConfig: Record<string, { label: string; color: string }> = {
   entregado:  { label: 'Entregado',    color: 'bg-green-100 text-green-700 border-green-200'   },
 };
 
+interface Vecino { id: string; nombre_completo: string; torre?: string | null; piso?: string | null; puerta?: string | null; }
+
 export default function PaqueteriaPage() {
   const { perfil, user } = useAuth();
   const [paquetes, setPaquetes] = useState<Paquete[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Vecino search
+  const [vecinos, setVecinos] = useState<Vecino[]>([]);
+  const [busquedaVecino, setBusquedaVecino] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Form
   const [nombre, setNombre] = useState('');
@@ -66,6 +73,27 @@ export default function PaqueteriaPage() {
   const [descripcion, setDescripcion] = useState('');
 
   const comunidadId = perfil?.comunidad_id;
+
+  // Load vecinos once for autocomplete
+  useEffect(() => {
+    if (!comunidadId) return;
+    getDocs(query(collection(db, 'perfiles'), where('comunidad_id', '==', comunidadId)))
+      .then(snap => setVecinos(snap.docs.map(d => ({ id: d.id, ...d.data() } as Vecino)).filter(v => v.nombre_completo)))
+      .catch(() => {});
+  }, [comunidadId]);
+
+  const sugerencias = vecinos.filter(v =>
+    busquedaVecino.length >= 2 &&
+    v.nombre_completo.toLowerCase().includes(busquedaVecino.toLowerCase())
+  ).slice(0, 6);
+
+  function seleccionarVecino(v: Vecino) {
+    setNombre(v.nombre_completo);
+    const apto = [v.torre && `Torre ${v.torre}`, v.piso && `Piso ${v.piso}`, v.puerta && `Apto ${v.puerta}`].filter(Boolean).join(' - ');
+    setApartamento(apto || v.puerta || '');
+    setBusquedaVecino(v.nombre_completo);
+    setShowSuggestions(false);
+  }
 
   useEffect(() => {
     if (!comunidadId) return;
@@ -223,15 +251,41 @@ export default function PaqueteriaPage() {
         <Card className="border-2 border-amber-200 shadow-md">
           <CardContent className="p-4">
             <form onSubmit={handleRegistrar} className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="p-nombre">Destinatario *</Label>
-                  <Input id="p-nombre" placeholder="Nombre del residente" value={nombre} onChange={e => setNombre(e.target.value)} required />
+              {/* Busqueda de vecino */}
+              <div className="space-y-1.5">
+                <Label>Destinatario *</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar residente por nombre..."
+                    value={busquedaVecino}
+                    onChange={e => { setBusquedaVecino(e.target.value); setNombre(e.target.value); setShowSuggestions(true); }}
+                    onFocus={() => setShowSuggestions(true)}
+                    className="pl-9"
+                    required
+                  />
+                  {showSuggestions && sugerencias.length > 0 && (
+                    <div className="absolute z-10 top-full mt-1 left-0 right-0 bg-white border border-border rounded-xl shadow-lg overflow-hidden">
+                      {sugerencias.map(v => (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => seleccionarVecino(v)}
+                          className="w-full text-left px-3 py-2.5 hover:bg-finca-peach/30 transition-colors border-b last:border-0 border-border/40"
+                        >
+                          <p className="text-sm font-medium text-finca-dark">{v.nombre_completo}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {[v.torre && `Torre ${v.torre}`, v.piso && `Piso ${v.piso}`, v.puerta && `Apto ${v.puerta}`].filter(Boolean).join(' · ') || 'Sin ubicacion'}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="p-apto">Apartamento *</Label>
-                  <Input id="p-apto" placeholder="Ej: 504, Torre A - 302" value={apartamento} onChange={e => setApartamento(e.target.value)} required />
-                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="p-apto">Apartamento / Ubicacion *</Label>
+                <Input id="p-apto" placeholder="Se rellena al seleccionar residente" value={apartamento} onChange={e => setApartamento(e.target.value)} required />
               </div>
 
               {/* Tipo selector */}
