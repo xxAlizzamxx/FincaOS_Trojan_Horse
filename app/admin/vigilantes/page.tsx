@@ -111,7 +111,7 @@ export default function AdminVigilantesPage() {
 
   if (loading) {
     return (
-      <div className="space-y-5 max-w-3xl">
+      <div className="space-y-5">
         <Skeleton className="h-8 w-56" />
         <div className="grid grid-cols-3 gap-3">
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-2xl" />)}
@@ -135,7 +135,7 @@ export default function AdminVigilantesPage() {
   }
 
   return (
-    <div className="space-y-5 max-w-3xl">
+    <div className="space-y-5">
 
       {/* Header */}
       <div>
