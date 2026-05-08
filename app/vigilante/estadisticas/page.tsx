@@ -75,33 +75,44 @@ export default function EstadisticasPage() {
   const [alertas,  setAlertas]  = useState<AlertaRaw[]>([]);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
+  // Nota: filtramos por fecha en cliente para evitar índices compuestos en Firestore.
+  // Para comunidades residenciales el volumen es manejable (< algunos miles de docs).
   useEffect(() => {
     if (!comunidadId) return;
 
-    const desde = subDays(startOfDay(new Date()), periodo - 1).toISOString();
+    const desdeDate = subDays(startOfDay(new Date()), periodo - 1);
     setLoading(true);
 
     Promise.all([
       getDocs(query(
         collection(db, 'accesos'),
         where('comunidad_id', '==', comunidadId),
-        where('hora_entrada', '>=', desde),
       )),
       getDocs(query(
         collection(db, 'paqueteria'),
         where('comunidad_id', '==', comunidadId),
-        where('created_at', '>=', desde),
       )),
       getDocs(query(
         collection(db, 'alertas_comunidad'),
         where('comunidad_id', '==', comunidadId),
-        where('created_at', '>=', desde),
       )),
     ])
       .then(([accSnap, paqSnap, altSnap]) => {
-        setAccesos(accSnap.docs.map(d => d.data() as AccesoRaw));
-        setPaquetes(paqSnap.docs.map(d => d.data() as PaqueteRaw));
-        setAlertas(altSnap.docs.map(d => d.data() as AlertaRaw));
+        setAccesos(
+          accSnap.docs
+            .map(d => d.data() as AccesoRaw)
+            .filter(a => a.hora_entrada && new Date(a.hora_entrada) >= desdeDate),
+        );
+        setPaquetes(
+          paqSnap.docs
+            .map(d => d.data() as PaqueteRaw)
+            .filter(p => p.created_at && new Date(p.created_at) >= desdeDate),
+        );
+        setAlertas(
+          altSnap.docs
+            .map(d => d.data() as AlertaRaw)
+            .filter(a => a.created_at && new Date(a.created_at) >= desdeDate),
+        );
       })
       .catch(console.error)
       .finally(() => setLoading(false));
