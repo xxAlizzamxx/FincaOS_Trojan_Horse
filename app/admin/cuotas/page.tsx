@@ -217,7 +217,7 @@ export default function AdminCuotasPage() {
 
   /* ════════════════════════════════════════════════════════ */
   return (
-    <div className="space-y-5 max-w-5xl">
+    <div className="space-y-5">
 
       {/* Header */}
       <div>

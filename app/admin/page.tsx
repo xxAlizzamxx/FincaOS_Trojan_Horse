@@ -142,7 +142,7 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="space-y-6 max-w-5xl">
+      <div className="space-y-6">
         <div>
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-4 w-32 mt-1" />
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-finca-dark">Panel de control</h1>
         <p className="text-sm text-muted-foreground mt-0.5">

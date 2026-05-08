@@ -305,7 +305,7 @@ export default function AdminIncidenciasPage() {
   );
 
   return (
-    <div className="space-y-5 max-w-6xl">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-finca-dark">Incidencias</h1>

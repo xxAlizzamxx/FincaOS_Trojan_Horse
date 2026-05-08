@@ -79,7 +79,7 @@ export default function AdminVecinosPage() {
   );
 
   return (
-    <div className="space-y-5 max-w-3xl">
+    <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-finca-dark">Vecinos</h1>
         <p className="text-sm text-muted-foreground">{vecinos.length} vecinos registrados</p>

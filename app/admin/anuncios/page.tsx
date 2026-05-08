@@ -96,7 +96,7 @@ export default function AdminAnunciosPage() {
   }
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-finca-dark">Tablón de anuncios</h1>

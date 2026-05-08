@@ -160,7 +160,7 @@ export default function AdminCobrosPage() {
   const totalMoroso = cuotas.filter((c) => c.estado === 'moroso').reduce((s, c) => s + c.importe, 0);
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-finca-dark">Cobros y cuotas</h1>
