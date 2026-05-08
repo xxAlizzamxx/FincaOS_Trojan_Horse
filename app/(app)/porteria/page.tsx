@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   collection, query, where, orderBy, onSnapshot,
   doc, updateDoc, addDoc,
@@ -14,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   DoorOpen, Package, CheckCircle2, XCircle, Clock,
-  MessageSquare, Send, Loader2, ShieldCheck, ChevronRight,
+  MessageSquare, Send, Loader2, ShieldCheck, ChevronRight, ArrowLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -55,6 +56,7 @@ type Tab = 'visitas' | 'mensajes';
 
 export default function PorteriaPage() {
   const { perfil, user } = useAuth();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>('visitas');
 
   // Visitas pendientes
@@ -307,9 +309,18 @@ export default function PorteriaPage() {
 
   return (
     <div className="px-4 py-5 max-w-2xl mx-auto space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-finca-dark">Portería</h1>
-        <p className="text-sm text-muted-foreground">Visitas y mensajes de vigilancia</p>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => router.back()}
+          className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-finca-dark hover:bg-gray-100 transition-colors shrink-0"
+          aria-label="Volver"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-finca-dark">Portería</h1>
+          <p className="text-sm text-muted-foreground">Visitas y mensajes de vigilancia</p>
+        </div>
       </div>
 
       {/* Tabs */}
