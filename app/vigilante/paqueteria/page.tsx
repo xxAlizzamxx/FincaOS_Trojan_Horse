@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, query, where, addDoc, onSnapshot, orderBy, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, addDoc, getDocs, onSnapshot, orderBy, updateDoc, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Package, Plus, X, Clock, CheckCircle2, Loader2, UserCheck,
-  Flame, Zap, Droplets, FileText, Building2, Truck,
+  Flame, Zap, Droplets, FileText, Building2, Truck, Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -125,6 +125,77 @@ export default function PaqueteriaPage() {
     } catch (err) {
       console.error('[Paqueteria] Error:', err);
       toast.error('Error al actualizar');
+    }
+  }
+
+  async function notificarVecino(p: Paquete) {
+    if (!user || !comunidadId) return;
+
+    // Buscar vecino por nombre del destinatario
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'perfiles'),
+        where('comunidad_id', '==', comunidadId),
+      ));
+      const coincidencia = snap.docs.find((d: import('firebase/firestore').QueryDocumentSnapshot) => {
+        const nombre = (d.data().nombre_completo || '').toLowerCase();
+        return nombre.includes(p.destinatario_nombre.toLowerCase().split(' ')[0]);
+      });
+
+      if (!coincidencia) {
+        toast.error('No se encontró el residente en el sistema');
+        return;
+      }
+
+      const vecinoId = coincidencia.id;
+      const vecinoNombre = coincidencia.data().nombre_completo;
+      const chatId  = `${user.uid}_${vecinoId}`;
+      const chatRef = doc(db, 'chats_vigilancia', chatId);
+      const chatSnap = await getDoc(chatRef);
+
+      if (!chatSnap.exists()) {
+        await setDoc(chatRef, {
+          comunidad_id:        comunidadId,
+          vigilante_id:        user.uid,
+          vecino_id:           vecinoId,
+          vecino_nombre:       vecinoNombre,
+          ultimo_mensaje:      '',
+          no_leidos_vigilante: 0,
+          no_leidos_vecino:    0,
+          updated_at:          new Date().toISOString(),
+        });
+      }
+
+      const reciboInfo = p.tipo === 'recibo' && p.recibo_tipo
+        ? tiposRecibo.find(r => r.value === p.recibo_tipo)
+        : null;
+
+      const texto = p.tipo === 'recibo'
+        ? `📄 Llego un recibo${reciboInfo ? ` de ${reciboInfo.label}` : ''} para su apartamento. Puede recogerlo en portería.`
+        : `📦 Llego un paquete para su apartamento. Puede recogerlo en portería.`;
+
+      await addDoc(collection(db, 'chats_vigilancia', chatId, 'mensajes'), {
+        sender_id:     user.uid,
+        texto,
+        tipo:          'plantilla',
+        plantilla_tipo: p.tipo === 'recibo' ? 'recibo' : 'paquete',
+        paquete_id:    p.id,
+        leido:         false,
+        created_at:    new Date().toISOString(),
+      });
+
+      await updateDoc(chatRef, {
+        ultimo_mensaje:   texto,
+        no_leidos_vecino: 1,
+        updated_at:       new Date().toISOString(),
+      });
+
+      await updateDoc(doc(db, 'paqueteria', p.id), { estado: 'notificado' });
+
+      toast.success(`${vecinoNombre} notificado`);
+    } catch (err) {
+      console.error('[Paqueteria] Error notificando:', err);
+      toast.error('Error al notificar al residente');
     }
   }
 
@@ -265,8 +336,19 @@ export default function PaqueteriaPage() {
                             Apto {p.apartamento} - {p.tipo === 'recibo' && reciboInfo ? `Recibo ${reciboInfo.label}` : p.tipo} - {format(new Date(p.created_at), 'dd/MM HH:mm', { locale: es })}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                           <Badge className={cn('text-[10px] border', est.color)}>{est.label}</Badge>
+                          {p.estado === 'recibido' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
+                              onClick={() => notificarVecino(p)}
+                            >
+                              <Bell className="w-3 h-3 mr-1" />
+                              Notificar
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"

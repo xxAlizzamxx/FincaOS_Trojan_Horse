@@ -2,15 +2,37 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users } from 'lucide-react';
-import { useState } from 'react';
+import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, DoorOpen } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase/client';
 
 export function BottomTabBar() {
   const pathname = usePathname();
   const { perfil, user } = useAuth();
   const [imgError, setImgError] = useState(false);
+  const [porteriaBadge, setPorteriaBadge] = useState(0);
+
+  // Badge portería: visitas pendientes + mensajes no leídos
+  useEffect(() => {
+    if (!user || !perfil?.comunidad_id) return;
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+
+    const unsubChats = onSnapshot(
+      query(collection(db, 'chats_vigilancia'),
+        where('comunidad_id', '==', perfil.comunidad_id),
+        where('vecino_id', '==', user.uid),
+      ),
+      (snap) => {
+        const noLeidos = snap.docs.reduce((sum, d) => sum + (d.data().no_leidos_vecino || 0), 0);
+        setPorteriaBadge(noLeidos);
+      },
+    );
+
+    return () => { unsubChats(); };
+  }, [user, perfil?.comunidad_id]);
 
   const fotoUrl  = perfil?.avatar_url || user?.photoURL || null;
   const hasPhoto = !!fotoUrl && !imgError;
@@ -26,6 +48,7 @@ export function BottomTabBar() {
     { href: '/inicio',      icon: Home,        label: 'Inicio'      },
     { href: '/incidencias', icon: AlertCircle, label: 'Incidencias' },
     { href: '/nueva',       icon: Plus,        label: 'Nuevo', isFab: true },
+    { href: '/porteria',    icon: DoorOpen,    label: 'Portería', badge: porteriaBadge },
     { href: '/comunidad',   icon: Users,       label: 'Comunidad'   },
   ];
 
@@ -57,12 +80,19 @@ export function BottomTabBar() {
               href={tab.href}
               className="flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-xl transition-colors"
             >
-              <Icon
-                className={cn(
-                  'w-5 h-5 transition-colors',
-                  isActive ? 'text-finca-coral' : 'text-finca-gray'
+              <div className="relative">
+                <Icon
+                  className={cn(
+                    'w-5 h-5 transition-colors',
+                    isActive ? 'text-finca-coral' : 'text-finca-gray'
+                  )}
+                />
+                {'badge' in tab && (tab.badge ?? 0) > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-finca-coral text-white rounded-full text-[9px] flex items-center justify-center font-bold">
+                    {(tab.badge ?? 0) > 9 ? '9+' : tab.badge}
+                  </span>
                 )}
-              />
+              </div>
               <span
                 className={cn(
                   'text-[10px] font-medium transition-colors',
