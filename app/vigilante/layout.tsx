@@ -1,0 +1,159 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
+import {
+  LayoutDashboard, MessageSquare, DoorOpen, Package, AlertTriangle,
+  ClipboardList, LogOut, Menu, Users, ShieldCheck,
+} from 'lucide-react';
+import { AvatarVecino } from '@/components/ui/avatar-vecino';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { PageTransition } from '@/components/animation/PageTransition';
+import { cn } from '@/lib/utils';
+
+const navItems = [
+  { href: '/vigilante',           icon: LayoutDashboard, label: 'Dashboard'    },
+  { href: '/vigilante/chats',     icon: MessageSquare,   label: 'Chats'        },
+  { href: '/vigilante/accesos',   icon: DoorOpen,        label: 'Accesos'      },
+  { href: '/vigilante/paqueteria',icon: Package,         label: 'Paqueteria'   },
+  { href: '/vigilante/alertas',   icon: AlertTriangle,   label: 'Alertas'      },
+  { href: '/vigilante/bitacora',  icon: ClipboardList,   label: 'Bitacora'     },
+];
+
+export default function VigilanteLayout({ children }: { children: React.ReactNode }) {
+  const { user, perfil, loading, signOut } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (!loading && (!user || (perfil && perfil.rol !== 'vigilante'))) {
+      router.replace('/inicio');
+    }
+  }, [user, perfil, loading, router]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  const Sidebar = () => (
+    <aside className="w-64 bg-white border-r border-border flex flex-col h-full">
+      {/* Logo */}
+      <div className="px-5 py-4 bg-gradient-to-br from-emerald-600 to-emerald-700">
+        <Image
+          src="/Logo sin bg.png"
+          alt="FincaOS"
+          width={120}
+          height={44}
+          className="object-contain brightness-0 invert"
+        />
+        <p className="text-[11px] text-white/70 mt-1 font-medium tracking-wide uppercase">
+          Panel Vigilancia
+        </p>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href
+            || (item.href !== '/vigilante' && pathname.startsWith(item.href));
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setSidebarOpen(false)}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
+                isActive
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
+                  : 'text-finca-dark/60 hover:text-finca-dark hover:bg-emerald-50'
+              )}
+            >
+              <item.icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-emerald-600/70')} />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Bottom */}
+      <div className="p-3 border-t border-border space-y-0.5">
+        <Link
+          href="/inicio"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-finca-dark/60 hover:text-finca-dark hover:bg-emerald-50 transition-colors"
+        >
+          <Users className="w-4 h-4 text-emerald-600/70" />
+          Vista comunidad
+        </Link>
+        <button
+          onClick={signOut}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          Cerrar sesion
+        </button>
+      </div>
+    </aside>
+  );
+
+  return (
+    <div className="flex h-screen bg-gray-50/80 overflow-hidden">
+      {/* Desktop sidebar */}
+      <div className="hidden md:flex flex-col">
+        <Sidebar />
+      </div>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          <div className="flex flex-col w-64">
+            <Sidebar />
+          </div>
+          <div className="flex-1 bg-black/50" onClick={() => setSidebarOpen(false)} />
+        </div>
+      )}
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="h-14 bg-white border-b border-border flex items-center px-4 gap-3 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="w-5 h-5" />
+          </Button>
+          <div className="flex-1 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <p className="text-sm font-medium text-finca-dark">
+              {navItems.find((n) =>
+                pathname === n.href || (n.href !== '/vigilante' && pathname.startsWith(n.href))
+              )?.label || 'Vigilancia'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
+              En turno
+            </span>
+            {perfil && <AvatarVecino perfil={perfil} size="sm" />}
+          </div>
+        </header>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          <PageTransition duration={0.3}>
+            {children}
+          </PageTransition>
+        </main>
+      </div>
+    </div>
+  );
+}

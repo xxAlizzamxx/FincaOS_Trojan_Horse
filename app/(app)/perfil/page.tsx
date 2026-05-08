@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  LogOut, User, Building2, Bell, Shield, ChevronRight,
+  LogOut, User, Building2, Bell, Shield, ShieldCheck, ChevronRight,
   Share2, Pencil, Check, X, DoorOpen, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -44,6 +44,7 @@ export default function PerfilPage() {
     presidente: 'Presidente',
     admin:      'Administrador',
     mediador:   'Mediador',
+    vigilante:  'Vigilante',
   };
 
   /* ── Cerrar sesión ── */
@@ -268,10 +269,17 @@ export default function PerfilPage() {
         </CardContent>
       </Card>
 
-      {perfil?.rol === 'admin' && (
+      {(perfil?.rol === 'admin' || perfil?.rol === 'presidente') && (
         <Button variant="outline" className="w-full border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white" onClick={() => router.push('/admin')}>
           <Shield className="w-4 h-4 mr-2" />
           Panel de administrador
+        </Button>
+      )}
+
+      {perfil?.rol === 'vigilante' && (
+        <Button variant="outline" className="w-full border-emerald-500 text-emerald-600 hover:bg-emerald-500 hover:text-white" onClick={() => router.push('/vigilante')}>
+          <ShieldCheck className="w-4 h-4 mr-2" />
+          Panel de vigilancia
         </Button>
       )}
 
