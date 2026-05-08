@@ -532,6 +532,27 @@ service cloud.firestore {
                         || isAdminOfCommunity(request.resource.data.comunidad_id));
     }
 
+    // ── Rondas de seguridad (GPS + checkpoints) ───────────────────────────
+
+    match /rondas_vigilancia/{rondaId} {
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAuth()
+                    && (isVigilanteOfCommunity(request.resource.data.comunidad_id)
+                        || isAdminOfCommunity(request.resource.data.comunidad_id));
+      allow update: if isAuth()
+                    && (isVigilanteOfCommunity(resource.data.comunidad_id)
+                        || isAdminOfCommunity(resource.data.comunidad_id));
+
+      match /checkpoints/{checkpointId} {
+        allow read:   if isAuth();
+        allow create: if isAuth()
+                      && (isVigilanteOfCommunity(
+                            get(/databases/$(database)/documents/rondas_vigilancia/$(rondaId)).data.comunidad_id)
+                          || isAdminOfCommunity(
+                            get(/databases/$(database)/documents/rondas_vigilancia/$(rondaId)).data.comunidad_id));
+      }
+    }
+
     // ── Pagos (top-level, complementary to cuotas subcollection) ──────────
 
     match /pagos/{pagoId} {

@@ -287,6 +287,26 @@
         { "fieldPath": "comunidad_id", "order": "ASCENDING" },
         { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
+    },
+
+    // ── Rondas vigilancia ─────────────────────────────────────────────────
+
+    {
+      "collectionGroup": "rondas_vigilancia",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "iniciada_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "rondas_vigilancia",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "vigilante_id", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
