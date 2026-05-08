@@ -68,7 +68,8 @@ const config: Config = {
           salmon: '#FF9F7F',
           peach:  '#FFBFA3',
           gray:   '#A8A8A8',
-          dark:   '#4B4B4B',
+          // CSS-variable-backed — adapts to dark mode automatically
+          dark:   'hsl(var(--finca-dark))',
         },
       },
       keyframes: {

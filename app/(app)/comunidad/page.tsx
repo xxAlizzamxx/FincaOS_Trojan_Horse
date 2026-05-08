@@ -341,15 +341,15 @@ export default function ComunidadPage() {
       </Button>
 
       <Tabs defaultValue="tablón">
-        <div className="overflow-x-auto scrollbar-none -mx-4 px-4">
-          <TabsList className="inline-flex w-max min-w-full gap-0.5 h-9">
-            <TabsTrigger value="tablón"    className="px-3 text-xs shrink-0">Tablón</TabsTrigger>
-            <TabsTrigger value="votaciones" className="px-3 text-xs shrink-0">Votos</TabsTrigger>
-            <TabsTrigger value="finanzas"  className="px-3 text-xs shrink-0">Cuotas</TabsTrigger>
-            <TabsTrigger value="vecinos"   className="px-3 text-xs shrink-0">Vecinos</TabsTrigger>
-            <TabsTrigger value="docs"      className="px-3 text-xs shrink-0">Docs</TabsTrigger>
-            <TabsTrigger value="vigilancia" className="px-3 text-xs shrink-0 relative">
-              Seguridad
+        <div className="-mx-4">
+          <TabsList className="flex w-full h-9 rounded-none px-0 gap-0">
+            <TabsTrigger value="tablón"    className="flex-1 text-xs min-w-0 px-1">Tablón</TabsTrigger>
+            <TabsTrigger value="votaciones" className="flex-1 text-xs min-w-0 px-1">Votos</TabsTrigger>
+            <TabsTrigger value="finanzas"  className="flex-1 text-xs min-w-0 px-1">Cuotas</TabsTrigger>
+            <TabsTrigger value="vecinos"   className="flex-1 text-xs min-w-0 px-1">Vecinos</TabsTrigger>
+            <TabsTrigger value="docs"      className="flex-1 text-xs min-w-0 px-1">Docs</TabsTrigger>
+            <TabsTrigger value="vigilancia" className="flex-1 text-xs min-w-0 px-1 relative">
+              <span className="truncate">Seguridad</span>
               {(paquetes.length > 0 || alertas.length > 0) && (
                 <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-finca-coral" />
               )}

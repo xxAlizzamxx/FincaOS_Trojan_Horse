@@ -16,7 +16,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
-import { BotMessageSquare, Send, Loader2, ChevronDown, CheckCircle2, ExternalLink, Receipt, Vote, Megaphone, AlertTriangle, Scale, BookOpen, Package, DoorOpen, ShieldAlert, Bell } from 'lucide-react';
+import { BotMessageSquare, Send, Loader2, ChevronDown, CheckCircle2, ExternalLink, Receipt, Vote, Megaphone, AlertTriangle, Scale, BookOpen, Package, DoorOpen, ShieldAlert, Bell, CalendarDays } from 'lucide-react';
 import Link from 'next/link';
 
 interface Message {
@@ -49,6 +49,7 @@ export function AIAssistantWidget() {
     { label: '¿Hay votaciones?',      icon: Vote,          message: '¿Hay votaciones activas?' },
     { label: 'Anuncios',              icon: Megaphone,     message: '¿Cuáles son los últimos anuncios?' },
     { label: 'Mis incidencias',       icon: AlertTriangle, message: '¿Qué incidencias tengo abiertas?' },
+    { label: 'Calendario',            icon: CalendarDays,  message: '¿Qué eventos hay en el calendario este mes? Incluye cuotas con fecha límite, votaciones activas y cualquier evento importante de la comunidad.' },
     { label: 'Normativa',             icon: Scale,         message: '¿Qué dice la normativa sobre ruidos y horarios?' },
     { label: 'Resumen comunidad',     icon: BookOpen,      message: 'Dame un resumen del estado de mi comunidad' },
     { label: 'Actividad en portería', icon: Bell,          message: '¿Qué hay pendiente en portería? Paquetes, visitas o recibos.' },
@@ -128,7 +129,7 @@ export function AIAssistantWidget() {
           ? 'opacity-100 scale-100 pointer-events-auto'
           : 'opacity-0 scale-90 pointer-events-none',
       )}>
-        <div className="bg-white rounded-2xl shadow-2xl border border-border/60 flex flex-col overflow-hidden"
+        <div className="bg-card rounded-2xl shadow-2xl border border-border/60 flex flex-col overflow-hidden"
              style={{ height: '420px' }}>
 
           {/* Header */}
@@ -167,7 +168,7 @@ export function AIAssistantWidget() {
                     'rounded-2xl px-3 py-2 text-sm leading-snug',
                     msg.role === 'user'
                       ? 'bg-finca-coral text-white rounded-br-sm'
-                      : 'bg-gray-100 text-finca-dark rounded-bl-sm',
+                      : 'bg-muted text-foreground rounded-bl-sm',
                   )}>
                     {msg.text}
                   </div>
@@ -192,7 +193,7 @@ export function AIAssistantWidget() {
                 <div className="w-6 h-6 rounded-full bg-finca-peach flex items-center justify-center mr-1.5 shrink-0">
                   <BotMessageSquare className="w-3.5 h-3.5 text-finca-coral" />
                 </div>
-                <div className="bg-gray-100 rounded-2xl rounded-bl-sm px-3 py-2.5 flex items-center gap-1">
+                <div className="bg-muted rounded-2xl rounded-bl-sm px-3 py-2.5 flex items-center gap-1">
                   {[0, 150, 300].map(delay => (
                     <span
                       key={delay}
@@ -226,7 +227,7 @@ export function AIAssistantWidget() {
 
           {/* Input */}
           <div className="px-3 pb-3 pt-2 shrink-0">
-            <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 border border-border/60 focus-within:border-finca-coral/60 transition-colors">
+            <div className="flex items-center gap-2 bg-muted/50 rounded-xl px-3 py-2 border border-border/60 focus-within:border-finca-coral/60 transition-colors">
               <input
                 ref={inputRef}
                 type="text"
@@ -235,7 +236,7 @@ export function AIAssistantWidget() {
                 onKeyDown={handleKey}
                 placeholder="Escribe tu pregunta…"
                 disabled={loading}
-                className="flex-1 bg-transparent text-sm text-finca-dark placeholder:text-muted-foreground outline-none min-w-0"
+                className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none min-w-0"
               />
               <button
                 onClick={() => send()}
@@ -244,7 +245,7 @@ export function AIAssistantWidget() {
                   'w-7 h-7 rounded-lg flex items-center justify-center transition-colors shrink-0',
                   input.trim() && !loading
                     ? 'bg-finca-coral text-white hover:bg-finca-salmon'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed',
+                    : 'bg-muted text-muted-foreground cursor-not-allowed',
                 )}
               >
                 {loading
