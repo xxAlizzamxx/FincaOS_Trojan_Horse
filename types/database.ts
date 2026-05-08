@@ -124,7 +124,8 @@ export type TipoNotificacion =
   | 'anuncio'
   | 'documento'
   | 'comentario'
-  | 'estado';
+  | 'estado'
+  | 'alerta';
 
 export interface NotificacionComunidad {
   id         : string;
