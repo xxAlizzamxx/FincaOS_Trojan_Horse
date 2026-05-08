@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  collection, query, where, orderBy, getDocs, onSnapshot,
-  doc, limit,
+  collection, query, where, orderBy, getDocs, onSnapshot, limit,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -66,20 +65,23 @@ export default function AdminVigilantesPage() {
       const rowsData: VigilanteRow[] = await Promise.all(
         vigilantes.map(async (v) => {
           try {
+            // Note: orderBy removed — uses existing comunidad+vigilante+estado index.
+            // Results are sorted client-side to avoid requiring the new compound index
+            // until Firestore finishes building it.
             const rondasSnap = await getDocs(
               query(
                 collection(db, 'rondas_vigilancia'),
                 where('comunidad_id', '==', comunidadId),
                 where('vigilante_id', '==', v.id),
-                orderBy('iniciada_at', 'desc'),
-                limit(10),
+                limit(20),
               ),
             );
 
-            const rondas = rondasSnap.docs.map(d => ({
-              id: d.id,
-              ...(d.data() as Omit<RondaResumen, 'id'>),
-            }));
+            const rondas = rondasSnap.docs
+              .map(d => ({ id: d.id, ...(d.data() as Omit<RondaResumen, 'id'>) }))
+              .sort((a, b) =>
+                new Date(b.iniciada_at).getTime() - new Date(a.iniciada_at).getTime()
+              );
 
             const rondaActiva  = rondas.find(r => r.estado === 'activa') ?? null;
             const ultimaRonda  = rondas.find(r => r.estado !== 'activa') ?? null;
@@ -88,7 +90,8 @@ export default function AdminVigilantesPage() {
             ).length;
 
             return { perfil: v, rondaActiva, ultimaRonda, totalRondasHoy };
-          } catch {
+          } catch (err) {
+            console.error('[AdminVigilantes] rondas query error for', v.id, err);
             return { perfil: v, rondaActiva: null, ultimaRonda: null, totalRondasHoy: 0 };
           }
         }),
