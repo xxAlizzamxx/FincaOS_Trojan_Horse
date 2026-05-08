@@ -131,7 +131,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <AlertaGlobalBanner />
       <AppHeader />
       <PushNotificationPrompt />
-      <main className="flex-1 overflow-y-auto pb-safe max-w-lg md:max-w-2xl lg:max-w-5xl mx-auto w-full">
+      <main className="flex-1 overflow-y-auto pb-safe w-full">
         <PageTransition className="min-h-full">
           {children}
         </PageTransition>

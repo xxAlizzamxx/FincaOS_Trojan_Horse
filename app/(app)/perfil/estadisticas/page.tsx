@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,25 +43,22 @@ export default function EstadisticasPage() {
         getDocs(query(collection(db, 'comentarios'), where('autor_id', '==', uid))),
       ]);
 
-      // Count personal votes from subcollections
+      // Count personal votes from subcollections — use getDoc (not where/__name__)
       let votosEmitidos = 0;
       await Promise.all(
         votSnap.docs.map(async d => {
-          const votoSnap = await getDocs(
-            query(collection(db, 'votaciones', d.id, 'votos'), where('__name__', '==', uid)),
-          );
-          if (!votoSnap.empty) votosEmitidos++;
+          const votoSnap = await getDoc(doc(db, 'votaciones', d.id, 'votos', uid));
+          if (votoSnap.exists()) votosEmitidos++;
         }),
       );
 
-      // Count cuotas pagadas for this user
+      // Count cuotas pagadas for this user — read individual doc from /pagos subcollection
       let cuotasPagadas = 0;
       let cuotasPendientes = 0;
       await Promise.all(
         cuotasSnap.docs.map(async d => {
-          const pagoSnap = await getDocs(collection(db, 'cuotas', d.id, 'cuotas_vecinos'));
-          const miPago = pagoSnap.docs.find(p => p.id === uid);
-          if (miPago) {
+          const miPago = await getDoc(doc(db, 'cuotas', d.id, 'pagos', uid));
+          if (miPago.exists()) {
             if (miPago.data().estado === 'pagado') cuotasPagadas++;
             else cuotasPendientes++;
           }

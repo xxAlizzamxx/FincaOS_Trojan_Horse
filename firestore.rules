@@ -227,6 +227,12 @@ service cloud.firestore {
       allow delete: if isAuth()
                     && (resource.data.autor_id == request.auth.uid
                         || (profile().rol == 'admin' || profile().rol == 'presidente'));
+
+      // Reacciones — cualquier vecino autenticado puede leer/escribir su propia reacción
+      match /reacciones/{userId} {
+        allow read:   if isAuth();
+        allow write:  if isAuth() && request.auth.uid == userId;
+      }
     }
 
     // ── Documentos ───────────────────────────────────────────────────────
