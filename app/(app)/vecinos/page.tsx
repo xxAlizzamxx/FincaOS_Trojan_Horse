@@ -64,6 +64,15 @@ const ROL_CONFIG: Record<string, {
     emoji:       '⚖️',
     ring:        'ring-violet-400',
   },
+  vigilante:  {
+    label:       'Vigilante',
+    descripcion: 'Controla accesos y seguridad de la comunidad',
+    bg:          'bg-emerald-100',
+    text:        'text-emerald-700',
+    hover:       'hover:bg-emerald-500 hover:text-white',
+    emoji:       '🛡️',
+    ring:        'ring-emerald-400',
+  },
   presidente: {
     label:       'Presidente',
     descripcion: 'Máxima autoridad de la comunidad',
@@ -76,14 +85,15 @@ const ROL_CONFIG: Record<string, {
 };
 
 /* Roles asignables por el presidente / admin */
-const ROLES_ASIGNABLES: Rol[] = ['vecino', 'admin', 'mediador'];
+const ROLES_ASIGNABLES: Rol[] = ['vecino', 'admin', 'mediador', 'vigilante'];
 
 /* Orden de aparición de roles para sort secundario */
 const ROL_ORDER: Record<string, number> = {
   presidente: 0,
   admin:      1,
   mediador:   2,
-  vecino:     3,
+  vigilante:  3,
+  vecino:     4,
 };
 
 type OrdenTipo = 'nombre' | 'rol';
