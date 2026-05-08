@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { LayoutDashboard, CircleAlert as AlertCircle, Users, Building2, Megaphone, Settings, LogOut, Menu, X, Wallet, CreditCard } from 'lucide-react';
+import { LayoutDashboard, CircleAlert as AlertCircle, Users, Megaphone, LogOut, Menu, Wallet, CreditCard, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -12,12 +12,14 @@ import { PageTransition } from '@/components/animation/PageTransition';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/admin', icon: LayoutDashboard, label: 'Panel' },
-  { href: '/admin/incidencias', icon: AlertCircle, label: 'Incidencias' },
-  { href: '/admin/vecinos', icon: Users, label: 'Vecinos' },
-  { href: '/admin/anuncios', icon: Megaphone, label: 'Anuncios' },
-  { href: '/admin/cobros', icon: Wallet, label: 'Cobros' },
-  { href: '/admin/cuotas', icon: CreditCard, label: 'Cuotas' },
+  { href: '/admin',             icon: LayoutDashboard,  label: 'Panel'        },
+  { href: '/admin/incidencias', icon: AlertCircle,       label: 'Incidencias'  },
+  { href: '/admin/vecinos',     icon: Users,             label: 'Vecinos'      },
+  { href: '/admin/vigilantes',  icon: ShieldCheck,       label: 'Vigilantes'   },
+  { href: '/admin/anuncios',    icon: Megaphone,         label: 'Anuncios'     },
+  { href: '/admin/cobros',      icon: Wallet,            label: 'Cobros'       },
+  { href: '/admin/cuotas',      icon: CreditCard,        label: 'Cuotas'       },
+  { href: '/admin/reportes',    icon: FileSpreadsheet,   label: 'Reportes'     },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -61,7 +63,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href
+            || (item.href !== '/admin' && pathname.startsWith(item.href));
           return (
             <Link
               key={item.href}
@@ -128,7 +131,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Button>
           <div className="flex-1">
             <p className="text-sm font-medium text-finca-dark">
-              {navItems.find((n) => n.href === pathname)?.label || 'Admin'}
+              {navItems.find((n) =>
+              pathname === n.href || (n.href !== '/admin' && pathname.startsWith(n.href)),
+            )?.label || 'Admin'}
             </p>
           </div>
           <div className="flex items-center gap-2">

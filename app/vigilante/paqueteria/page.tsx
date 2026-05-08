@@ -125,7 +125,7 @@ export default function PaqueteriaPage() {
     setSaving(true);
 
     try {
-      await addDoc(collection(db, 'paqueteria'), {
+      const paqueteRef = await addDoc(collection(db, 'paqueteria'), {
         comunidad_id:        comunidadId,
         vigilante_id:        user.uid,
         destinatario_nombre: nombre,
@@ -139,6 +139,24 @@ export default function PaqueteriaPage() {
         created_at:   new Date().toISOString(),
         entregado_at: null,
       });
+
+      // Push notification al vecino si está vinculado
+      if (vecinoId) {
+        const tipoLabel  = tipo === 'recibo' ? 'Recibo' : tipo === 'sobre' ? 'Carta / Sobre' : tipo === 'domicilio' ? 'Pedido a domicilio' : 'Paquete';
+        const pushTitle  = `${tipoLabel} en portería`;
+        const pushBody   = remitente ? `De: ${remitente}` : `Apdo. ${apartamento} — pasa a recogerlo`;
+        fetch('/api/notificaciones/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            comunidad_id:  comunidadId,
+            title:         pushTitle,
+            body:          pushBody,
+            url:           '/porteria',
+            targetUserIds: [vecinoId],
+          }),
+        }).catch(() => {/* fire-and-forget */});
+      }
 
       toast.success(tipo === 'recibo' ? 'Recibo registrado' : 'Paquete registrado');
       setShowForm(false);

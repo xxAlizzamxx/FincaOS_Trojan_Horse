@@ -289,6 +289,35 @@
       ]
     },
 
+    // ── Admin dashboard ───────────────────────────────────────────────────
+
+    {
+      "collectionGroup": "perfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "rol", "order": "ASCENDING" },
+        { "fieldPath": "en_turno", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "paqueteria",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "vecino_id", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "accesos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "hora_entrada", "order": "DESCENDING" }
+      ]
+    },
+
     // ── Rondas vigilancia ─────────────────────────────────────────────────
 
     {

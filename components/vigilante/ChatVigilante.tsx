@@ -161,6 +161,19 @@ export default function ChatVigilante({
         updated_at:       new Date().toISOString(),
       });
 
+      // Push notification al vecino (fire-and-forget)
+      fetch('/api/notificaciones/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comunidad_id:  comunidadId,
+          title:         'Mensaje de portería',
+          body:          text.trim().slice(0, 100),
+          url:           '/porteria',
+          targetUserIds: [vecinoId],
+        }),
+      }).catch(() => {/* fire-and-forget */});
+
       setTexto('');
       setShowPlantillas(false);
     } catch (err) {

@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Users, TrendingUp, Clock, ArrowRight } from 'lucide-react';
+import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Users, TrendingUp, Clock, ArrowRight, Package, ShieldCheck, DoorOpen } from 'lucide-react';
 import Link from 'next/link';
 import { db } from '@/lib/firebase/client';
-import { collection, query, where, orderBy, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, getDoc, limit } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +35,9 @@ export default function AdminDashboard() {
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [vecinos, setVecinos] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [paquetesPendientes, setPaquetesPendientes] = useState(0);
+  const [accesosDia, setAccesosDia] = useState(0);
+  const [vigilantesActivos, setVigilantesActivos] = useState(0);
 
   useEffect(() => {
     if (perfil?.comunidad_id) fetchData();
@@ -43,8 +46,9 @@ export default function AdminDashboard() {
   async function fetchData() {
     const cid = perfil!.comunidad_id!;
 
-    // ── Step 1: fetch incidencias + vecino count in parallel ─────────────────
-    const [incSnap, vecSnap] = await Promise.all([
+    // ── Step 1: fetch all data in parallel ────────────────────────────────
+    const hoyInicio = new Date(); hoyInicio.setHours(0, 0, 0, 0);
+    const [incSnap, vecSnap, paqSnap, accSnap, vigSnap] = await Promise.all([
       getDocs(query(
         collection(db, 'incidencias'),
         where('comunidad_id', '==', cid),
@@ -53,6 +57,25 @@ export default function AdminDashboard() {
       getDocs(query(
         collection(db, 'perfiles'),
         where('comunidad_id', '==', cid),
+      )),
+      getDocs(query(
+        collection(db, 'paqueteria'),
+        where('comunidad_id', '==', cid),
+        where('estado', '==', 'recibido'),
+        limit(100),
+      )),
+      getDocs(query(
+        collection(db, 'accesos'),
+        where('comunidad_id', '==', cid),
+        where('hora_entrada', '>=', hoyInicio.toISOString()),
+        limit(200),
+      )),
+      getDocs(query(
+        collection(db, 'perfiles'),
+        where('comunidad_id', '==', cid),
+        where('rol', '==', 'vigilante'),
+        where('en_turno', '==', true),
+        limit(20),
       )),
     ]);
 
@@ -99,6 +122,9 @@ export default function AdminDashboard() {
 
     setIncidencias(incList);
     setVecinos(vecSnap.size);
+    setPaquetesPendientes(paqSnap.size);
+    setAccesosDia(accSnap.size);
+    setVigilantesActivos(vigSnap.size);
     setLoading(false);
   }
 
@@ -114,10 +140,13 @@ export default function AdminDashboard() {
   ];
 
   const kpis = [
-    { icon: AlertCircle, label: 'Abiertas', value: abiertas, color: 'text-yellow-600', bg: 'bg-yellow-50' },
-    { icon: CheckCircle2, label: 'Resueltas', value: resueltas, color: 'text-green-600', bg: 'bg-green-50' },
-    { icon: Users, label: 'Vecinos', value: vecinos, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { icon: TrendingUp, label: 'Urgentes', value: urgentes, color: 'text-red-600', bg: 'bg-red-50' },
+    { icon: AlertCircle,   label: 'Inc. abiertas',  value: abiertas,            color: 'text-yellow-600', bg: 'bg-yellow-50' },
+    { icon: TrendingUp,    label: 'Urgentes',        value: urgentes,            color: 'text-red-600',    bg: 'bg-red-50'    },
+    { icon: Users,         label: 'Vecinos',         value: vecinos,             color: 'text-blue-600',   bg: 'bg-blue-50'   },
+    { icon: CheckCircle2,  label: 'Resueltas',       value: resueltas,           color: 'text-green-600',  bg: 'bg-green-50'  },
+    { icon: Package,       label: 'Pkts. pendientes',value: paquetesPendientes,  color: 'text-amber-600',  bg: 'bg-amber-50'  },
+    { icon: DoorOpen,      label: 'Accesos hoy',     value: accesosDia,          color: 'text-violet-600', bg: 'bg-violet-50' },
+    { icon: ShieldCheck,   label: 'Vigil. en turno', value: vigilantesActivos,   color: 'text-teal-600',   bg: 'bg-teal-50'   },
   ];
 
   if (loading) {
@@ -169,7 +198,7 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:grid-cols-7">
         {kpis.map((kpi) => (
           <Card key={kpi.label} className="border-0 shadow-sm">
             <CardContent className="p-4">
