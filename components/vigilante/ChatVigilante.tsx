@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  collection, addDoc, onSnapshot, query, orderBy, doc, getDoc, setDoc, updateDoc, serverTimestamp,
+  collection, addDoc, onSnapshot, query, orderBy, doc, getDoc, setDoc, updateDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,12 +16,14 @@ import {
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 interface ChatVigilanteProps {
   comunidadId: string;
   vigilanteId: string;
   vecinoId: string;
   vecinoNombre: string;
+  vecinoAvatar?: string | null;
 }
 
 interface Mensaje {
@@ -48,18 +50,21 @@ function getChatId(vigilanteId: string, vecinoId: string): string {
   return `${vigilanteId}_${vecinoId}`;
 }
 
-export default function ChatVigilante({ comunidadId, vigilanteId, vecinoId, vecinoNombre }: ChatVigilanteProps) {
+export default function ChatVigilante({
+  comunidadId, vigilanteId, vecinoId, vecinoNombre, vecinoAvatar,
+}: ChatVigilanteProps) {
   const { perfil } = useAuth();
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [texto, setTexto] = useState('');
   const [sending, setSending] = useState(false);
   const [showPlantillas, setShowPlantillas] = useState(true);
+  const [imgError, setImgError] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const chatId = getChatId(vigilanteId, vecinoId);
 
-  // Realtime listener
+  // Realtime listener — subcollection orderBy sin where, no necesita índice compuesto
   useEffect(() => {
     const q = query(
       collection(db, 'chats_vigilancia', chatId, 'mensajes'),
@@ -69,6 +74,9 @@ export default function ChatVigilante({ comunidadId, vigilanteId, vecinoId, veci
     const unsub = onSnapshot(q, (snap) => {
       const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Mensaje));
       setMensajes(msgs);
+    }, (err) => {
+      console.error('[Chat] onSnapshot error:', err);
+      toast.error('Error cargando mensajes — verifica las reglas de Firestore');
     });
 
     return () => unsub();
@@ -83,18 +91,18 @@ export default function ChatVigilante({ comunidadId, vigilanteId, vecinoId, veci
 
   // Ensure chat doc exists
   async function ensureChatDoc() {
-    const chatRef = doc(db, 'chats_vigilancia', chatId);
+    const chatRef  = doc(db, 'chats_vigilancia', chatId);
     const chatSnap = await getDoc(chatRef);
     if (!chatSnap.exists()) {
       await setDoc(chatRef, {
-        comunidad_id: comunidadId,
-        vigilante_id: vigilanteId,
-        vecino_id: vecinoId,
-        vecino_nombre: vecinoNombre,
-        ultimo_mensaje: '',
+        comunidad_id:        comunidadId,
+        vigilante_id:        vigilanteId,
+        vecino_id:           vecinoId,
+        vecino_nombre:       vecinoNombre,
+        ultimo_mensaje:      '',
         no_leidos_vigilante: 0,
-        no_leidos_vecino: 0,
-        updated_at: new Date().toISOString(),
+        no_leidos_vecino:    0,
+        updated_at:          new Date().toISOString(),
       });
     }
   }
@@ -109,24 +117,25 @@ export default function ChatVigilante({ comunidadId, vigilanteId, vecinoId, veci
       const chatRef = doc(db, 'chats_vigilancia', chatId);
 
       await addDoc(collection(db, 'chats_vigilancia', chatId, 'mensajes'), {
-        sender_id: vigilanteId,
-        texto: text.trim(),
+        sender_id:  vigilanteId,
+        texto:      text.trim(),
         tipo,
         ...(plantillaTipo ? { plantilla_tipo: plantillaTipo } : {}),
-        leido: false,
+        leido:      false,
         created_at: new Date().toISOString(),
       });
 
       await updateDoc(chatRef, {
-        ultimo_mensaje: text.trim().slice(0, 100),
+        ultimo_mensaje:   text.trim().slice(0, 100),
         no_leidos_vecino: (mensajes.filter(m => m.sender_id === vigilanteId && !m.leido).length + 1),
-        updated_at: new Date().toISOString(),
+        updated_at:       new Date().toISOString(),
       });
 
       setTexto('');
       setShowPlantillas(false);
     } catch (err) {
       console.error('[Chat] Error enviando mensaje:', err);
+      toast.error('Error al enviar — despliega las reglas de Firestore (firebase deploy --only firestore:rules)');
     } finally {
       setSending(false);
     }
@@ -143,14 +152,17 @@ export default function ChatVigilante({ comunidadId, vigilanteId, vecinoId, veci
     emergencia: AlertTriangle, vehiculo: Car, correspondencia: Mail, tecnico: Wrench,
   };
 
+  const hasVecinoPhoto = !!vecinoAvatar && !imgError;
+
   return (
     <Card className="border-0 shadow-sm">
       <CardContent className="p-4 space-y-3">
-        {/* Plantillas rapidas */}
+
+        {/* Plantillas rápidas */}
         <div>
           <button
             onClick={() => setShowPlantillas(!showPlantillas)}
-            className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 mb-2"
+            className="flex items-center gap-1.5 text-xs font-medium text-finca-coral hover:text-finca-salmon mb-2"
           >
             {showPlantillas ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             Mensajes rapidos
@@ -163,7 +175,7 @@ export default function ChatVigilante({ comunidadId, vigilanteId, vecinoId, veci
                   key={p.tipo}
                   onClick={() => handlePlantilla(p)}
                   disabled={sending}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-3 py-1.5 hover:bg-emerald-100 transition-colors active:scale-95 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium bg-finca-peach/20 text-finca-coral border border-finca-peach rounded-full px-3 py-1.5 hover:bg-finca-peach/50 transition-colors active:scale-95 disabled:opacity-50"
                 >
                   <p.icon className="w-3 h-3" />
                   {p.label}
@@ -173,51 +185,58 @@ export default function ChatVigilante({ comunidadId, vigilanteId, vecinoId, veci
           )}
         </div>
 
-        {/* Messages */}
-        <div
-          ref={scrollRef}
-          className="h-80 overflow-y-auto space-y-2 rounded-xl bg-gray-50 p-3"
-        >
+        {/* Mensajes */}
+        <div ref={scrollRef} className="h-80 overflow-y-auto space-y-2 rounded-xl bg-gray-50 p-3">
           {mensajes.length === 0 && (
             <div className="text-center py-12 space-y-2">
               <Send className="w-8 h-8 text-muted-foreground mx-auto opacity-40" />
-              <p className="text-xs text-muted-foreground">
-                No hay mensajes con este residente.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Usa los mensajes rapidos o escribe directamente.
-              </p>
+              <p className="text-xs text-muted-foreground">No hay mensajes con este residente.</p>
+              <p className="text-xs text-muted-foreground">Usa los mensajes rapidos o escribe directamente.</p>
             </div>
           )}
 
           {mensajes.map((msg) => {
-            const mine = isMine(msg);
+            const mine        = isMine(msg);
             const PlantillaIcon = msg.plantilla_tipo ? plantillaIconMap[msg.plantilla_tipo] : null;
 
             return (
               <div key={msg.id} className={cn('flex gap-2', mine ? 'flex-row-reverse' : 'flex-row')}>
                 {/* Avatar */}
                 <div className="shrink-0">
-                  <div className={cn(
-                    'w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold',
-                    mine ? 'bg-emerald-100 text-emerald-700' : 'bg-finca-peach text-finca-coral',
-                  )}>
-                    {mine ? 'V' : vecinoNombre[0]?.toUpperCase()}
-                  </div>
+                  {!mine && hasVecinoPhoto ? (
+                    // Foto real del vecino
+                    <div className="w-7 h-7 rounded-full overflow-hidden ring-1 ring-finca-peach">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={vecinoAvatar!}
+                        alt={vecinoNombre}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                        onError={() => setImgError(true)}
+                      />
+                    </div>
+                  ) : (
+                    <div className={cn(
+                      'w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold',
+                      mine ? 'bg-finca-peach/40 text-finca-coral' : 'bg-finca-peach text-finca-coral',
+                    )}>
+                      {mine ? (perfil?.nombre_completo?.[0]?.toUpperCase() ?? 'V') : vecinoNombre[0]?.toUpperCase()}
+                    </div>
+                  )}
                 </div>
 
-                {/* Bubble */}
+                {/* Burbuja */}
                 <div className={cn(
                   'max-w-[75%] rounded-2xl px-3 py-2',
                   mine
-                    ? 'bg-emerald-600 text-white rounded-br-md'
+                    ? 'bg-finca-coral text-white rounded-br-md'
                     : 'bg-white border border-border rounded-bl-md',
                 )}>
                   {/* Plantilla badge */}
                   {msg.tipo === 'plantilla' && PlantillaIcon && (
                     <div className={cn(
                       'flex items-center gap-1 mb-1 text-[10px] font-medium',
-                      mine ? 'text-emerald-200' : 'text-emerald-600',
+                      mine ? 'text-white/70' : 'text-finca-coral',
                     )}>
                       <PlantillaIcon className="w-3 h-3" />
                       {msg.plantilla_tipo}
@@ -237,9 +256,8 @@ export default function ChatVigilante({ comunidadId, vigilanteId, vecinoId, veci
           })}
         </div>
 
-        {/* Input + acciones futuras */}
+        {/* Input */}
         <div className="space-y-2">
-          {/* Botones de audio/llamada/video (deshabilitados - proximamente) */}
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" className="w-8 h-8 opacity-40 cursor-not-allowed" disabled title="Proximamente">
               <Mic className="w-4 h-4 text-muted-foreground" />
@@ -253,7 +271,6 @@ export default function ChatVigilante({ comunidadId, vigilanteId, vecinoId, veci
             <span className="text-[10px] text-muted-foreground ml-1">Proximamente</span>
           </div>
 
-          {/* Text input */}
           <div className="flex items-center gap-2">
             <Input
               ref={inputRef}
@@ -266,15 +283,11 @@ export default function ChatVigilante({ comunidadId, vigilanteId, vecinoId, veci
             />
             <Button
               size="icon"
-              className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
+              className="bg-finca-coral hover:bg-finca-salmon shrink-0"
               onClick={() => sendMessage(texto)}
               disabled={!texto.trim() || sending}
             >
-              {sending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
+              {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </Button>
           </div>
         </div>

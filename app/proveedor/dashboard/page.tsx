@@ -129,6 +129,10 @@ export default function ProveedorDashboardPage() {
   const [comentario, setComentario] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Community filters
+  const [filtroComunidad, setFiltroComunidad] = useState<string>('');
+  const [filtroComunidadAsignados, setFiltroComunidadAsignados] = useState<string>('');
+
   // Tab 2: Asignados (Task 1)
   const [asignados, setAsignados] = useState<Incidencia[]>([]);
   const [loadingAsignados, setLoadingAsignados] = useState(false);
@@ -724,6 +728,65 @@ export default function ProveedorDashboardPage() {
         {/* ── TAB 1: Disponibles ── */}
         {activeTab === 'disponibles' && (
           <>
+            {/* Filtro por comunidad */}
+            {!loadingIncidencias && incidencias.length > 0 && (() => {
+              const comunidades = Array.from(
+                new Map(
+                  incidencias
+                    .filter(i => i.comunidad_id && i.comunidad_nombre)
+                    .map(i => [i.comunidad_id, { id: i.comunidad_id!, nombre: i.comunidad_nombre!, direccion: i.comunidad_direccion }])
+                ).values()
+              );
+              if (comunidades.length < 2) return null;
+              return (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                    <Building2 className="w-3 h-3" /> Filtrar por comunidad
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setFiltroComunidad('')}
+                      className={`text-xs font-semibold rounded-full px-3 py-1.5 border transition-all ${
+                        !filtroComunidad
+                          ? 'bg-finca-coral text-white border-finca-coral shadow-sm'
+                          : 'bg-white text-finca-dark border-border hover:bg-finca-peach/30'
+                      }`}
+                    >
+                      Todas ({incidencias.length})
+                    </button>
+                    {comunidades.map(c => {
+                      const count = incidencias.filter(i => i.comunidad_id === c.id).length;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => setFiltroComunidad(c.id)}
+                          className={`text-xs font-semibold rounded-full px-3 py-1.5 border transition-all ${
+                            filtroComunidad === c.id
+                              ? 'bg-finca-coral text-white border-finca-coral shadow-sm'
+                              : 'bg-white text-finca-dark border-border hover:bg-finca-peach/30'
+                          }`}
+                        >
+                          {c.nombre} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {filtroComunidad && (() => {
+                    const com = comunidades.find(c => c.id === filtroComunidad);
+                    return com?.direccion ? (
+                      <div className="flex items-start gap-1.5 bg-finca-peach/30 rounded-xl px-3 py-2 border border-finca-peach">
+                        <MapPin className="w-3.5 h-3.5 text-finca-coral shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-semibold text-finca-coral">{com.nombre}</p>
+                          <p className="text-xs text-finca-dark/70">{com.direccion}</p>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              );
+            })()}
+
             {loadingIncidencias && (
               <div className="flex justify-center py-12">
                 <div className="w-7 h-7 rounded-full border-[3px] border-finca-coral border-t-transparent animate-spin" />
@@ -741,7 +804,9 @@ export default function ProveedorDashboardPage() {
                 </p>
               </div>
             )}
-            {incidencias.map((inc, idx) => {
+            {incidencias
+              .filter(inc => !filtroComunidad || inc.comunidad_id === filtroComunidad)
+              .map((inc, idx) => {
               const serviceEmoji = SERVICIOS_LABELS[inc.tipo_problema ?? ''] ?? '🔧';
               const hasEstimacion = inc.estimacion_min || inc.estimacion_max ||
                 inc.estimacion_ia?.min || inc.estimacion_ia?.max;
@@ -876,6 +941,65 @@ export default function ProveedorDashboardPage() {
         {/* ── TAB 2: Trabajos asignados ── */}
         {activeTab === 'asignados' && (
           <>
+            {/* Filtro por comunidad */}
+            {!loadingAsignados && asignados.length > 0 && (() => {
+              const comunidades = Array.from(
+                new Map(
+                  asignados
+                    .filter(i => i.comunidad_id && i.comunidad_nombre)
+                    .map(i => [i.comunidad_id, { id: i.comunidad_id!, nombre: i.comunidad_nombre!, direccion: i.comunidad_direccion }])
+                ).values()
+              );
+              if (comunidades.length < 2) return null;
+              return (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                    <Building2 className="w-3 h-3" /> Filtrar por comunidad
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setFiltroComunidadAsignados('')}
+                      className={`text-xs font-semibold rounded-full px-3 py-1.5 border transition-all ${
+                        !filtroComunidadAsignados
+                          ? 'bg-finca-coral text-white border-finca-coral shadow-sm'
+                          : 'bg-white text-finca-dark border-border hover:bg-finca-peach/30'
+                      }`}
+                    >
+                      Todas ({asignados.length})
+                    </button>
+                    {comunidades.map(c => {
+                      const count = asignados.filter(i => i.comunidad_id === c.id).length;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => setFiltroComunidadAsignados(c.id)}
+                          className={`text-xs font-semibold rounded-full px-3 py-1.5 border transition-all ${
+                            filtroComunidadAsignados === c.id
+                              ? 'bg-finca-coral text-white border-finca-coral shadow-sm'
+                              : 'bg-white text-finca-dark border-border hover:bg-finca-peach/30'
+                          }`}
+                        >
+                          {c.nombre} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {filtroComunidadAsignados && (() => {
+                    const com = comunidades.find(c => c.id === filtroComunidadAsignados);
+                    return com?.direccion ? (
+                      <div className="flex items-start gap-1.5 bg-finca-peach/30 rounded-xl px-3 py-2 border border-finca-peach">
+                        <MapPin className="w-3.5 h-3.5 text-finca-coral shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-semibold text-finca-coral">{com.nombre}</p>
+                          <p className="text-xs text-finca-dark/70">{com.direccion}</p>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              );
+            })()}
+
             {loadingAsignados && (
               <div className="flex justify-center py-12">
                 <div className="w-7 h-7 rounded-full border-[3px] border-finca-coral border-t-transparent animate-spin" />
@@ -892,7 +1016,9 @@ export default function ProveedorDashboardPage() {
                 </p>
               </div>
             )}
-            {asignados.map((inc, idx) => {
+            {asignados
+              .filter(inc => !filtroComunidadAsignados || inc.comunidad_id === filtroComunidadAsignados)
+              .map((inc, idx) => {
               const isUpdating = updatingEstado === inc.id;
               const statusConfig = {
                 presupuestada:{ label: 'Asignado',     cls: 'bg-blue-50 text-blue-700 border-blue-200',   bar: 'bg-blue-500'   },
