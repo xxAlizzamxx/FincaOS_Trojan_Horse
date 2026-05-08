@@ -1,58 +1,20 @@
 /**
- * FincaOS Service Worker — v5
+ * FincaOS Service Worker — v6
  *
  * Handles:
- *  1. FCM background push notifications (Firebase Messaging compat SDK)
+ *  1. Push notifications via native push event (no Firebase SDK dependency)
  *  2. Cache strategies for offline / PWA support
  *
- * Cache versioning: bump CACHE_STATIC / CACHE_PAGES on every deploy.
+ * Why no Firebase compat SDK here:
+ *  - importScripts from CDN can fail silently (CSP, network, CDN change)
+ *  - FCM delivers webpush as standard WebPush — any SW can handle it natively
+ *  - Raw push handler is simpler, faster, and always reliable
  */
-
-// ── Firebase Messaging (background push) ────────────────────────────────────
-// MUST be at the very top so Firebase SDK intercepts the `push` event
-// before any other listener. Without this the raw push event fires but
-// FCM tokens generated with getToken() won't trigger showNotification.
-importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
-
-firebase.initializeApp({
-  apiKey:            'AIzaSyDXEHnQ5reKyOe1yVAJG3fgLQZHecRBjls',
-  authDomain:        'fincaostrojanhorse.firebaseapp.com',
-  projectId:         'fincaostrojanhorse',
-  storageBucket:     'fincaostrojanhorse.firebasestorage.app',
-  messagingSenderId: '870092780057',
-  appId:             '1:870092780057:web:f1d34431391d86d638f088',
-});
-
-const messaging = firebase.messaging();
-
-/**
- * onBackgroundMessage — fires for data-only FCM messages (no `notification`
- * field in the webpush payload). Notification messages without this handler
- * would be displayed automatically by FCM but without custom icon/badge.
- * We always send data-only from the Admin SDK so we always end up here.
- */
-messaging.onBackgroundMessage((payload) => {
-  const notif = payload.notification ?? {};
-  const data  = payload.data        ?? {};
-
-  const title = notif.title || data.title || 'FincaOS';
-  const body  = notif.body  || data.body  || '';
-  const url   = data.url    || notif.click_action || '/inicio';
-
-  self.registration.showNotification(title, {
-    body,
-    icon:    '/logo-app.png',
-    badge:   '/logo-app.png',
-    data:    { url },
-    vibrate: [200, 100, 200],
-  });
-});
 
 // ── Cache constants ──────────────────────────────────────────────────────────
 
-const CACHE_STATIC = 'fincaos-static-v5';
-const CACHE_PAGES  = 'fincaos-pages-v5';
+const CACHE_STATIC = 'fincaos-static-v6';
+const CACHE_PAGES  = 'fincaos-pages-v6';
 const ALL_CACHES   = [CACHE_STATIC, CACHE_PAGES];
 
 /** Recursos precacheados en install — offline fallback garantizado. */
@@ -101,8 +63,7 @@ function isNetworkOnly(url) {
     url.includes('googleapis.com/upload')            ||
     url.includes('storage.googleapis.com')           ||
     url.includes('stripe.com')                       ||
-    url.includes('cloudinary.com')                   ||
-    url.includes('gstatic.com')
+    url.includes('cloudinary.com')
   );
 }
 
@@ -137,6 +98,63 @@ self.addEventListener('activate', (event) => {
         )
       )
       .then(() => self.clients.claim())
+  );
+});
+
+/* ── Push notifications ─────────────────────────────────────────────────────── */
+/**
+ * FCM sends WebPush messages using standard WebPush protocol.
+ * The payload is the JSON we defined in webpush.data in the Admin SDK call.
+ * Structure: { data: { title, body, url, icon } }
+ *
+ * We parse it manually — no Firebase SDK needed.
+ */
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload = {};
+  try {
+    payload = event.data.json();
+  } catch {
+    // text payload fallback
+    payload = { data: { title: 'FincaOS', body: event.data.text() } };
+  }
+
+  // FCM Admin SDK sends: { data: { title, body, url, icon } }
+  // Notification messages send: { notification: { title, body }, data: { url } }
+  const data  = payload.data         ?? {};
+  const notif = payload.notification ?? {};
+
+  const title = data.title || notif.title || 'FincaOS';
+  const body  = data.body  || notif.body  || '';
+  const url   = data.url   || notif.click_action || '/inicio';
+  const icon  = data.icon  || '/logo-app.png';
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon,
+      badge:   '/logo-app.png',
+      data:    { url },
+      vibrate: [200, 100, 200],
+    })
+  );
+});
+
+/* ── Notification click ─────────────────────────────────────────────────────── */
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/inicio';
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clients) => {
+        const existing = clients.find((c) => c.url.includes(url));
+        if (existing) return existing.focus();
+        return self.clients.openWindow(url);
+      })
   );
 });
 
@@ -208,21 +226,4 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-});
-
-/* ── Notification click ─────────────────────────────────────────────────────── */
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  const url = event.notification.data?.url || '/inicio';
-
-  event.waitUntil(
-    self.clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clients) => {
-        const existing = clients.find((c) => c.url.includes(url));
-        if (existing) return existing.focus();
-        return self.clients.openWindow(url);
-      })
-  );
 });

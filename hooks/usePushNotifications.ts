@@ -30,8 +30,9 @@ export function usePushNotifications(userId: string | undefined) {
       const messaging = await getFirebaseMessaging();
       if (!messaging) return true; // permission granted but FCM not supported
 
-      // Use sw.js — it now embeds Firebase Messaging SDK so FCM tokens
-      // generated here will correctly trigger onBackgroundMessage in background.
+      // sw.js handles push events natively (no Firebase SDK in SW).
+      // We still use getToken() from client-side Firebase to create/refresh
+      // the FCM WebPush subscription and obtain the token.
       const swReg = await navigator.serviceWorker.ready;
 
       const token = await getToken(messaging, {
@@ -75,8 +76,8 @@ export function sendLocalNotification(title: string, body: string, url?: string)
 
   const notification = new Notification(title, {
     body,
-    icon: '/navegador.png',
-    badge: '/navegador.png',
+    icon: '/logo-app.png',
+    badge: '/logo-app.png',
   });
 
   if (url) {
