@@ -190,19 +190,102 @@
     },
 
     {
-      "collectionGroup": "presupuestos",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "proveedor_id", "order": "ASCENDING" }
-      ]
-    },
-
-    {
       "collectionGroup": "incidencias",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "proveedor_asignado", "order": "ASCENDING" },
         { "fieldPath": "estado", "order": "ASCENDING" }
+      ]
+    },
+
+    // ── Vigilancia ────────────────────────────────────────────────────────
+
+    {
+      "collectionGroup": "chats_vigilancia",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "vigilante_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chats_vigilancia",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "vecino_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chats_vigilancia",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "accesos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "vecino_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "accesos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "hora_entrada", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "accesos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "paqueteria",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "paqueteria",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "alertas_comunidad",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "activa", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "alertas_comunidad",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bitacora_vigilancia",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
     }
   ],
