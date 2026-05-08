@@ -2,21 +2,31 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, DoorOpen } from 'lucide-react';
+import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, DoorOpen, ShieldCheck, LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 
+interface TabItem {
+  href:   string;
+  icon:   LucideIcon;
+  label:  string;
+  isFab?: boolean;
+  badge?: number;
+}
+
 export function BottomTabBar() {
   const pathname = usePathname();
   const { perfil, user } = useAuth();
   const [porteriaBadge, setPorteriaBadge] = useState(0);
 
+  const esVigilante = perfil?.rol === 'vigilante';
+
   // Badge portería: mensajes no leídos del vigilante
   useEffect(() => {
-    if (!user || !perfil?.comunidad_id) return;
+    if (!user || !perfil?.comunidad_id || esVigilante) return;
 
     const unsubChats = onSnapshot(
       query(
@@ -31,15 +41,27 @@ export function BottomTabBar() {
     );
 
     return () => unsubChats();
-  }, [user, perfil?.comunidad_id]);
+  }, [user, perfil?.comunidad_id, esVigilante]);
 
-  const tabs = [
+  // Tabs para vigilante: acceso directo al panel
+  const tabsVigilante: TabItem[] = [
+    { href: '/vigilante',            icon: ShieldCheck, label: 'Panel'     },
+    { href: '/vigilante/chats',      icon: DoorOpen,    label: 'Chats'     },
+    { href: '/vigilante/alertas',    icon: AlertCircle, label: 'Alertas'   },
+    { href: '/vigilante/bitacora',   icon: Plus,        label: 'Bitácora', isFab: true },
+    { href: '/vigilante/paqueteria', icon: Users,       label: 'Paquetes'  },
+  ];
+
+  // Tabs para vecinos
+  const tabsVecino: TabItem[] = [
     { href: '/inicio',      icon: Home,        label: 'Inicio'      },
     { href: '/incidencias', icon: AlertCircle, label: 'Incidencias' },
     { href: '/nueva',       icon: Plus,        label: 'Nuevo', isFab: true },
     { href: '/porteria',    icon: DoorOpen,    label: 'Portería', badge: porteriaBadge },
     { href: '/comunidad',   icon: Users,       label: 'Comunidad'   },
   ];
+
+  const tabs: TabItem[] = esVigilante ? tabsVigilante : tabsVecino;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border safe-bottom">
