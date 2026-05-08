@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Package, DoorOpen, AlertTriangle, MessageSquare, ClipboardList,
   ShieldAlert, ChevronRight, Phone, Bell, Clock, Users, Activity,
@@ -18,6 +19,7 @@ import { es } from 'date-fns/locale';
 
 export default function VigilanteDashboard() {
   const { perfil, user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     paquetesPendientes: 0,
@@ -148,7 +150,7 @@ export default function VigilanteDashboard() {
       {/* Boton emergencia */}
       <Button
         className="w-full h-14 bg-red-600 hover:bg-red-700 text-white text-base font-bold shadow-lg shadow-red-600/30 animate-pulse hover:animate-none"
-        onClick={() => {/* TODO: implementar alerta de emergencia */}}
+        onClick={() => router.push('/vigilante/alertas?tipo=emergencia')}
       >
         <ShieldAlert className="w-6 h-6 mr-3" />
         ALERTA DE EMERGENCIA

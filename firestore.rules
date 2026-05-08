@@ -512,7 +512,8 @@ service cloud.firestore {
     // ── Chats vigilancia (mensajes vigilante ↔ vecino) ───────────────────
 
     match /chats_vigilancia/{chatId} {
-      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      // resource == null when doc doesn't exist yet (ensureChatDoc getDoc check)
+      allow read:   if isAuth() && (resource == null || belongsToCommunity(resource.data.comunidad_id));
       allow create: if isAuth() && belongsToCommunity(request.resource.data.comunidad_id);
       allow update: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
 

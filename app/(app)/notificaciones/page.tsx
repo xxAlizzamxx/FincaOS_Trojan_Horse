@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, BellOff, CheckCheck,
-  AlertCircle, Vote, Megaphone, FileText, MessageSquare, Zap,
+  AlertCircle, Vote, Megaphone, FileText, MessageSquare, Zap, ShieldAlert,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -30,7 +30,7 @@ const TIPO_CONFIG: Record<TipoNotificacion, {
   documento:  { icon: FileText,    bg: 'bg-green-100',  text: 'text-green-600',  badge: 'bg-green-100 text-green-700',  label: 'Documento'   },
   comentario: { icon: MessageSquare, bg: 'bg-cyan-100',  text: 'text-cyan-600',   badge: 'bg-cyan-100 text-cyan-700',   label: 'Comentario'  },
   estado:     { icon: Zap,         bg: 'bg-amber-100', text: 'text-amber-600',  badge: 'bg-amber-100 text-amber-700',  label: 'Estado'      },
-  alerta:     { icon: AlertCircle, bg: 'bg-red-100',   text: 'text-red-600',    badge: 'bg-red-100 text-red-700',      label: 'Alerta'      },
+  alerta:     { icon: ShieldAlert,  bg: 'bg-red-100',   text: 'text-red-600',    badge: 'bg-red-100 text-red-700',      label: 'Vigilancia'  },
 };
 
 function tipoConfig(tipo: string) {

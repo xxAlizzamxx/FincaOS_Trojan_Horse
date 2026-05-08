@@ -10,7 +10,7 @@ import { useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bell, BellOff, CheckCheck, ChevronRight,
-  AlertCircle, Vote, Megaphone, FileText, X, MessageSquare, Zap,
+  AlertCircle, Vote, Megaphone, FileText, X, MessageSquare, Zap, ShieldAlert,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -31,7 +31,7 @@ const TIPO_CONFIG: Record<TipoNotificacion, {
   documento:  { icon: FileText,    bg: 'bg-green-100',  text: 'text-green-600',  label: 'Documento'   },
   comentario: { icon: MessageSquare, bg: 'bg-cyan-100',  text: 'text-cyan-600',   label: 'Comentario'  },
   estado:     { icon: Zap,         bg: 'bg-amber-100', text: 'text-amber-600',  label: 'Estado'      },
-  alerta:     { icon: Bell,        bg: 'bg-red-100',   text: 'text-red-600',    label: 'Alerta'      },
+  alerta:     { icon: ShieldAlert,  bg: 'bg-red-100',   text: 'text-red-600',    label: 'Vigilancia'  },
 };
 
 interface NotificationsPanelProps {
