@@ -148,6 +148,7 @@ export default function AdminVecinosPage() {
                       <SelectContent>
                         <SelectItem value="vecino">Vecino</SelectItem>
                         <SelectItem value="mediador">Mediador</SelectItem>
+                        <SelectItem value="vigilante">Vigilante</SelectItem>
                         <SelectItem value="admin">Administrador</SelectItem>
                       </SelectContent>
                     </Select>
