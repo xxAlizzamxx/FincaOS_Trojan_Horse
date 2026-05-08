@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase/client';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { BottomTabBar } from '@/components/layout/BottomTabBar';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
+import { InstallBanner } from '@/components/pwa/InstallBanner';
 import { PageTransition } from '@/components/animation/PageTransition';
 import { AlertaGlobalBanner }  from '@/components/ai/AlertaGlobalBanner';
 import { AIAssistantWidget }   from '@/components/ai/AIAssistantWidget';
@@ -137,6 +138,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
       {/* AI assistant only for residents — not for providers */}
       {!isProveedor && <AIAssistantWidget />}
+      <InstallBanner />
       <BottomTabBar />
     </div>
   );

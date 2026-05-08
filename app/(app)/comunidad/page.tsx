@@ -329,19 +329,21 @@ export default function ComunidadPage() {
       )}
 
       <Tabs defaultValue="tablón">
-        <TabsList className="w-full grid grid-cols-6 text-[10px]">
-          <TabsTrigger value="tablón">Tablón</TabsTrigger>
-          <TabsTrigger value="votaciones">Votos</TabsTrigger>
-          <TabsTrigger value="finanzas">Cuotas</TabsTrigger>
-          <TabsTrigger value="vecinos">Vecinos</TabsTrigger>
-          <TabsTrigger value="docs">Docs</TabsTrigger>
-          <TabsTrigger value="vigilancia" className="relative">
-            Seguridad
-            {(paquetes.length > 0 || alertas.length > 0) && (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-finca-coral" />
-            )}
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto scrollbar-none -mx-4 px-4">
+          <TabsList className="inline-flex w-max min-w-full gap-0.5 h-9">
+            <TabsTrigger value="tablón"    className="px-3 text-xs shrink-0">Tablón</TabsTrigger>
+            <TabsTrigger value="votaciones" className="px-3 text-xs shrink-0">Votos</TabsTrigger>
+            <TabsTrigger value="finanzas"  className="px-3 text-xs shrink-0">Cuotas</TabsTrigger>
+            <TabsTrigger value="vecinos"   className="px-3 text-xs shrink-0">Vecinos</TabsTrigger>
+            <TabsTrigger value="docs"      className="px-3 text-xs shrink-0">Docs</TabsTrigger>
+            <TabsTrigger value="vigilancia" className="px-3 text-xs shrink-0 relative">
+              Seguridad
+              {(paquetes.length > 0 || alertas.length > 0) && (
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-finca-coral" />
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="tablón" className="mt-4 space-y-3">
           {anuncios.length === 0 ? (
