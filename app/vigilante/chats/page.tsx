@@ -83,7 +83,7 @@ export default function ChatsVigilantePage() {
         </button>
 
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm">
+          <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center text-finca-coral font-bold text-sm">
             {selectedVecino.nombre_completo[0]?.toUpperCase()}
           </div>
           <div>
@@ -99,6 +99,7 @@ export default function ChatsVigilantePage() {
           vigilanteId={user!.uid}
           vecinoId={selectedVecino.id}
           vecinoNombre={selectedVecino.nombre_completo}
+          vecinoAvatar={selectedVecino.avatar_url}
         />
       </div>
     );
@@ -170,7 +171,7 @@ export default function ChatsVigilantePage() {
             >
               <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-[0.99]">
                 <CardContent className="p-3 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm shrink-0 overflow-hidden">
+                  <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center text-finca-coral font-bold text-sm shrink-0 overflow-hidden">
                     {v.avatar_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={v.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />

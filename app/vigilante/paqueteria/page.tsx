@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Package, Plus, X, Clock, CheckCircle2, Loader2, UserCheck,
-  Flame, Zap, Droplets, FileText, Building2, Truck, Bell,
+  Flame, Zap, Droplets, FileText, Building2, Truck, Bell, Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -32,7 +32,7 @@ interface Paquete {
 
 const tiposPaquete = [
   { value: 'paquete',         label: 'Paquete',         icon: Package  },
-  { value: 'sobre',           label: 'Sobre / Carta',   icon: FileText },
+  { value: 'sobre',           label: 'Sobre / Carta',   icon: Mail     },
   { value: 'domicilio',       label: 'Domicilio',       icon: Truck    },
   { value: 'recibo',          label: 'Recibo',          icon: FileText },
 ];
