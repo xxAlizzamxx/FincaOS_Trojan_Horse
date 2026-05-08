@@ -8,7 +8,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {
   LayoutDashboard, MessageSquare, DoorOpen, Package, AlertTriangle,
-  ClipboardList, LogOut, Menu, Users, ShieldCheck, MonitorDot,
+  ClipboardList, LogOut, Menu, Users, ShieldCheck, MonitorDot, BarChart2,
 } from 'lucide-react';
 import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { useAuth } from '@/hooks/useAuth';
@@ -23,7 +23,8 @@ const navItems = [
   { href: '/vigilante/accesos',    icon: DoorOpen,        label: 'Accesos'    },
   { href: '/vigilante/paqueteria', icon: Package,         label: 'Paqueteria' },
   { href: '/vigilante/alertas',    icon: AlertTriangle,   label: 'Alertas'    },
-  { href: '/vigilante/bitacora',   icon: ClipboardList,   label: 'Bitacora'   },
+  { href: '/vigilante/bitacora',      icon: ClipboardList, label: 'Bitacora'     },
+  { href: '/vigilante/estadisticas', icon: BarChart2,      label: 'Estadisticas' },
 ];
 
 export default function VigilanteLayout({ children }: { children: React.ReactNode }) {
