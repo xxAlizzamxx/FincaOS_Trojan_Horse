@@ -186,7 +186,7 @@ export default function PorteriaPage() {
   // Vista de chat abierto
   if (chatAbierto) {
     return (
-      <div className="max-w-2xl flex flex-col h-[calc(100vh-8rem)]">
+      <div className="px-4 py-5 max-w-2xl flex flex-col h-[calc(100vh-8rem)]">
         <button
           onClick={() => setChatAbierto(null)}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-finca-dark mb-3 transition-colors"
@@ -194,8 +194,8 @@ export default function PorteriaPage() {
           ← Volver a portería
         </button>
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-            <ShieldCheck className="w-5 h-5 text-emerald-600" />
+          <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-finca-coral" />
           </div>
           <div>
             <p className="font-semibold text-finca-dark">Portería</p>
@@ -217,7 +217,7 @@ export default function PorteriaPage() {
                 <div key={msg.id} className={cn('flex gap-2', mio ? 'flex-row-reverse' : 'flex-row')}>
                   <div className={cn(
                     'w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0',
-                    mio ? 'bg-finca-peach text-finca-coral' : 'bg-emerald-100 text-emerald-700',
+                    mio ? 'bg-finca-peach text-finca-coral' : 'bg-finca-peach/60 text-finca-coral',
                   )}>
                     {mio ? perfil?.nombre_completo?.[0]?.toUpperCase() : '🛡️'}
                   </div>
@@ -246,7 +246,7 @@ export default function PorteriaPage() {
             />
             <Button
               size="icon"
-              className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
+              className="bg-finca-coral hover:bg-finca-salmon shrink-0"
               onClick={enviarMensaje}
               disabled={!texto.trim() || sending}
             >
@@ -259,7 +259,7 @@ export default function PorteriaPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="px-4 py-5 max-w-2xl space-y-4">
       <div>
         <h1 className="text-xl font-bold text-finca-dark">Portería</h1>
         <p className="text-sm text-muted-foreground">Visitas y mensajes de vigilancia</p>
@@ -393,8 +393,8 @@ export default function PorteriaPage() {
               <button key={c.id} onClick={() => setChatAbierto(c)} className="w-full text-left">
                 <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-[0.99]">
                   <CardContent className="p-3 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                      <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                    <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-5 h-5 text-finca-coral" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-finca-dark">Portería</p>

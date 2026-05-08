@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { collection, query, where, addDoc, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -98,6 +99,16 @@ export default function AlertasPage() {
         activa: true,
         created_at: new Date().toISOString(),
       });
+
+      // Notificar a todos los miembros de la comunidad
+      crearNotificacionComunidad(comunidadId, {
+        tipo:       'alerta',
+        titulo:     `🚨 ${titulo}`,
+        mensaje:    descripcion,
+        created_by: user.uid,
+        related_id: comunidadId,
+        link:       '/porteria',
+      }).catch(() => { /* fire-and-forget */ });
 
       toast.success('Alerta creada y enviada a la comunidad');
       setShowForm(false);
