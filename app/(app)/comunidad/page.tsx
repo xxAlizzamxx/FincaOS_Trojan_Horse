@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Users, Megaphone, Building2, Share2, Vote, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check, Trash2, ShieldCheck, Package, DoorOpen, ShieldAlert, Wrench, Droplets, Flame, Volume2, Car, Info } from 'lucide-react';
+import { FileText, Users, Megaphone, Building2, Share2, Vote, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check, Trash2, ShieldCheck, Package, DoorOpen, ShieldAlert, Wrench, Droplets, Flame, Volume2, Car, Info, CalendarDays } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import {
@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AvatarVecino } from '@/components/ui/avatar-vecino';
+import { AnuncioReacciones } from '@/components/ui/AnuncioReacciones';
 import { format, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -328,6 +329,17 @@ export default function ComunidadPage() {
         </Card>
       )}
 
+      {/* Calendar quick access */}
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full border-finca-coral/30 text-finca-coral hover:bg-finca-peach/20 justify-start gap-2"
+        onClick={() => router.push('/comunidad/calendario')}
+      >
+        <CalendarDays className="w-4 h-4" />
+        Ver calendario de eventos
+      </Button>
+
       <Tabs defaultValue="tablón">
         <div className="overflow-x-auto scrollbar-none -mx-4 px-4">
           <TabsList className="inline-flex w-max min-w-full gap-0.5 h-9">
@@ -377,6 +389,7 @@ export default function ComunidadPage() {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground leading-relaxed">{anuncio.contenido}</p>
+                  <AnuncioReacciones anuncioId={anuncio.id} />
                   <div className="flex items-center justify-between pt-1">
                     <p className="text-[11px] text-muted-foreground">{(anuncio.autor as any)?.nombre_completo?.split(' ')[0]}</p>
                     <p className="text-[11px] text-muted-foreground">{format(new Date(anuncio.publicado_at), "d MMM", { locale: es })}</p>

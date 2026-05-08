@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Timestamp }                 from 'firebase-admin/firestore';
 import { cleanupCollection }         from '@/lib/cleanup';
 import { createLogger }              from '@/lib/logger';
+import { getAdminDb }                from '@/lib/firebase/admin';
 
 export const runtime    = 'nodejs';
 export const maxDuration = 60; // segundos — ajusta a 300 en Vercel Pro si es necesario
@@ -112,8 +113,30 @@ export async function GET(req: NextRequest) {
     log.error('cron_cleanup_notificaciones_failed', err);
   }
 
-  /* ── 4. Respuesta final ───────────────────────────────────────────────── */
-  const totalDeleted = rateLimitsDeleted + notifDeleted;
+  /* ── 4. Cleanup FCM tokens — delete tokens not refreshed in 60+ days ──────
+     Tokens en usuarios/{uid}/tokens con updated_at < hace 60 días.
+  ──────────────────────────────────────────────────────────────────────── */
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1_000).toISOString();
+  let tokensDeleted = 0;
+  try {
+    const db = getAdminDb();
+    const tokenSnap = await db
+      .collectionGroup('tokens')
+      .where('updated_at', '<', sixtyDaysAgo)
+      .limit(200)
+      .get();
+
+    const batch = db.batch();
+    tokenSnap.docs.forEach((d) => batch.delete(d.ref));
+    if (!tokenSnap.empty) await batch.commit();
+    tokensDeleted = tokenSnap.size;
+    log.info('cron_cleanup_tokens_done', { deleted: tokensDeleted });
+  } catch (err) {
+    log.error('cron_cleanup_tokens_failed', err);
+  }
+
+  /* ── 5. Respuesta final ───────────────────────────────────────────────── */
+  const totalDeleted = rateLimitsDeleted + notifDeleted + tokensDeleted;
   const totalMs      = Date.now() - runStart;
 
   log.finish(true, 200);
@@ -123,6 +146,7 @@ export async function GET(req: NextRequest) {
     deleted: {
       rate_limits:    rateLimitsDeleted,
       notificaciones: notifDeleted,
+      tokens:         tokensDeleted,
       total:          totalDeleted,
     },
     duration_ms: totalMs,

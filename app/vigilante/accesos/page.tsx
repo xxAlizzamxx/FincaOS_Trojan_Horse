@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   DoorOpen, Plus, X, Clock, CheckCircle2, XCircle, Loader2,
-  UserCheck, Search, User,
+  UserCheck, Search, User, QrCode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -63,6 +63,9 @@ export default function AccesosPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // QR modal state
+  const [qrAcceso, setQrAcceso] = useState<Acceso | null>(null);
 
   // Form state
   const [nombre, setNombre] = useState('');
@@ -367,6 +370,15 @@ export default function AccesosPage() {
                       Apto {a.apartamento_destino} · {a.tipo} · {format(new Date(a.hora_entrada), 'HH:mm', { locale: es })}
                       {a.vecino_nombre && <span className="text-emerald-600"> · {a.vecino_nombre}</span>}
                     </p>
+                    {a.estado === 'autorizado' && (
+                      <button
+                        onClick={() => setQrAcceso(a)}
+                        className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 mt-1"
+                      >
+                        <QrCode className="w-3 h-3" />
+                        Ver QR
+                      </button>
+                    )}
                   </div>
                   <Badge className={cn('text-[10px] border shrink-0 flex items-center gap-1', est.color)}>
                     <EstIcon className="w-3 h-3" />
@@ -376,6 +388,31 @@ export default function AccesosPage() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* QR Modal */}
+      {qrAcceso && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={() => setQrAcceso(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-xs w-full shadow-2xl space-y-4 text-center"
+            onClick={e => e.stopPropagation()}
+          >
+            <p className="font-semibold text-finca-dark">Código QR de acceso</p>
+            <p className="text-xs text-muted-foreground">{qrAcceso.visitante_nombre} → Apto {qrAcceso.apartamento_destino}</p>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                JSON.stringify({ id: qrAcceso.id, nombre: qrAcceso.visitante_nombre, apto: qrAcceso.apartamento_destino, tipo: qrAcceso.tipo, hora: qrAcceso.hora_entrada })
+              )}`}
+              alt="QR de acceso"
+              className="w-48 h-48 mx-auto rounded-xl"
+            />
+            <p className="text-[10px] text-muted-foreground">Muestra este código en portería</p>
+            <Button className="w-full bg-finca-coral text-white" onClick={() => setQrAcceso(null)}>Cerrar</Button>
+          </div>
         </div>
       )}
     </div>

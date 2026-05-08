@@ -18,6 +18,9 @@ export const SOUND_MAP = {
   publicacion_tablon:  { src: '/sounds/tablon.mp3',      volume: 0.6 },
   pago_realizado:      { src: '/sounds/pago.mp3',        volume: 0.7 },
   documento_publicado: { src: '/sounds/documento.mp3',   volume: 0.5 },
+  mensaje_recibido:    { src: '/sounds/mensaje.mp3',     volume: 0.5 },
+  notificacion_nueva:  { src: '/sounds/notif.mp3',       volume: 0.4 },
+  alerta_comunidad:    { src: '/sounds/alerta.mp3',      volume: 0.8 },
 } as const;
 
 export type SoundEvent = keyof typeof SOUND_MAP;

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Camera, Save } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
@@ -35,6 +36,9 @@ export default function EditarPerfilPage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [customPhoto, setCustomPhoto] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -63,11 +67,44 @@ export default function EditarPerfilPage() {
       piso:     publicData.piso   || '',
       puerta:   publicData.puerta || '',
     });
+
+    // Load custom avatar if present
+    if (publicData.avatar_url) {
+      setCustomPhoto(publicData.avatar_url);
+    }
+
     setLoading(false);
   }
 
   function handleChange(field: keyof FormData, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setUploadingPhoto(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const token = await user.getIdToken();
+      const res = await fetch('/api/upload-photo', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      if (!res.ok) throw new Error('Error al subir la foto');
+      const { url } = await res.json();
+
+      await updateDoc(doc(db, 'perfiles', user.uid), { avatar_url: url });
+      setCustomPhoto(url);
+      toast.success('Foto de perfil actualizada');
+    } catch (err: any) {
+      toast.error(err.message || 'Error al subir la foto');
+    } finally {
+      setUploadingPhoto(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -148,26 +185,45 @@ export default function EditarPerfilPage() {
         <h1 className="text-2xl font-semibold text-finca-dark">Editar perfil</h1>
       </div>
 
-      {/* Avatar — foto de Google o iniciales */}
+      {/* Avatar — foto personalizada, Google o iniciales */}
       <Card className="border-0 shadow-sm">
         <CardContent className="p-4 flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-finca-peach/40 flex items-center justify-center shrink-0 overflow-hidden">
-            {fotoGoogle ? (
-              <img
-                src={fotoGoogle}
-                alt="Foto de perfil"
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <span className="text-xl font-bold text-finca-coral">{iniciales}</span>
-            )}
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-finca-peach/40 flex items-center justify-center shrink-0 overflow-hidden">
+              {customPhoto ? (
+                <img
+                  src={customPhoto}
+                  alt="Foto de perfil"
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : fotoGoogle ? (
+                <img
+                  src={fotoGoogle}
+                  alt="Foto de perfil"
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="text-xl font-bold text-finca-coral">{iniciales}</span>
+              )}
+            </div>
+            {/* Upload button overlay */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-finca-coral text-white flex items-center justify-center shadow-sm hover:bg-finca-coral/90 transition-colors"
+            >
+              {uploadingPhoto ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />}
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-medium text-finca-dark truncate">{form.nombre_completo || 'Sin nombre'}</p>
             <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {fotoGoogle ? 'Foto sincronizada desde Google' : 'Sin foto de Google vinculada'}
+              {customPhoto ? 'Foto personalizada' : fotoGoogle ? 'Foto de Google' : 'Sin foto vinculada'}
             </p>
           </div>
         </CardContent>

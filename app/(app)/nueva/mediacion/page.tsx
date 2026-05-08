@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { useSound } from '@/hooks/useSound';
 
 /** Elimina formato markdown que la IA incluye en sus respuestas */
 function limpiarMarkdown(texto: string): string {
@@ -41,6 +42,7 @@ type Fase = 'formulario' | 'procesando' | 'propuesta' | 'mediador' | 'resuelto' 
 export default function MediacionPage() {
   const router = useRouter();
   const { perfil } = useAuth();
+  const { play } = useSound();
   const [fase, setFase] = useState<Fase>('formulario');
   const [tipo, setTipo] = useState('ruido');
   const [descripcion, setDescripcion] = useState('');
@@ -86,6 +88,7 @@ export default function MediacionPage() {
       });
 
       setFase('propuesta');
+      play('mediacion_iniciada');
     } catch (err: any) {
       console.error('Mediacion error:', err);
       toast.error(err?.message || 'Error al iniciar la mediación');

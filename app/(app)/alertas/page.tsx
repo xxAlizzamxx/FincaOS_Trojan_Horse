@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useSound } from '@/hooks/useSound';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -44,6 +45,7 @@ const PRIORIDAD_CONFIG: Record<string, string> = {
 
 export default function AlertasVecinoPage() {
   const { perfil } = useAuth();
+  const { play } = useSound();
   const [alertas, setAlertas] = useState<AlertaComunidad[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,10 +59,19 @@ export default function AlertasVecinoPage() {
       where('comunidad_id', '==', comunidadId),
     );
 
+    let isFirst = true;
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as AlertaComunidad))
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (!isFirst) {
+        snap.docChanges().forEach((change) => {
+          if (change.type === 'added' && change.doc.data().activa) {
+            play('alerta_comunidad');
+          }
+        });
+      }
+      isFirst = false;
       setAlertas(items);
       setLoading(false);
     }, () => setLoading(false));

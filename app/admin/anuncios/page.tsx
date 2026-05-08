@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AnuncioReacciones } from '@/components/ui/AnuncioReacciones';
 
 export default function AdminAnunciosPage() {
   const { perfil } = useAuth();
@@ -193,6 +194,7 @@ export default function AdminAnunciosPage() {
                     <p className="text-[11px] text-muted-foreground mt-2">
                       {format(new Date(anuncio.publicado_at), "d 'de' MMMM, HH:mm", { locale: es })}
                     </p>
+                    <AnuncioReacciones anuncioId={anuncio.id} />
                   </div>
                   <Button
                     variant="ghost"

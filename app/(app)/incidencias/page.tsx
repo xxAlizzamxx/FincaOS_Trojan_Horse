@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, CircleAlert as AlertCircle, LayoutGrid, Map, Bot, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, CircleAlert as AlertCircle, LayoutGrid, Map, Bot, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
-import { collection, query, where, orderBy, getDocs, getDoc, doc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, getDoc, doc, limit, startAfter, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia } from '@/types/database';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { IncidenciaCard } from '@/components/incidencias/IncidenciaCard';
 import { sortByPrioridad } from '@/lib/incidencias/workflow';
 import { StaggerList } from '@/components/animation/StaggerList';
+
+const PAGE_SIZE = 20;
 
 const filtros = ['Todas', 'Pendiente', 'En revisión', 'Resuelta'];
 const filtroMap: Record<string, string[]> = {
@@ -34,10 +36,58 @@ export default function IncidenciasPage() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroActivo, setFiltroActivo] = useState('Todas');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     if (perfil?.comunidad_id) fetchIncidencias();
   }, [perfil?.comunidad_id]);
+
+  async function enrichIncidencias(docs: QueryDocumentSnapshot<DocumentData>[]): Promise<Incidencia[]> {
+    const items = docs.map(d => {
+      const data = d.data();
+      // Normalize Firestore Timestamps to ISO strings
+      if (data.created_at?.toDate) data.created_at = data.created_at.toDate().toISOString();
+      if (data.updated_at?.toDate) data.updated_at = data.updated_at.toDate().toISOString();
+      return { id: d.id, ...data };
+    });
+
+    return Promise.all(
+      items.map(async (inc: any) => {
+        let autor = null;
+        if (inc.autor_id) {
+          try {
+            const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
+            if (autorSnap.exists()) {
+              const data = autorSnap.data();
+              autor = {
+                nombre_completo: data.nombre_completo,
+                avatar_url:      data.avatar_url ?? null,
+                rol:             data.rol        ?? 'vecino',
+                numero_piso:     data.numero_piso ?? null,
+              };
+            }
+          } catch (e) {
+            console.warn('[Incidencias] autor ilegible', inc.autor_id, e);
+          }
+        }
+        let categoria = null;
+        if (inc.categoria_id) {
+          try {
+            const catSnap = await getDoc(doc(db, 'categorias_incidencia', inc.categoria_id));
+            if (catSnap.exists()) {
+              const data = catSnap.data();
+              categoria = { nombre: data.nombre, icono: data.icono };
+            }
+          } catch (e) {
+            console.warn('[Incidencias] categoria ilegible', inc.categoria_id, e);
+          }
+        }
+        return { ...inc, autor, categoria } as Incidencia;
+      })
+    );
+  }
 
   async function fetchIncidencias() {
     const cid = perfil!.comunidad_id!;
@@ -49,60 +99,46 @@ export default function IncidenciasPage() {
           collection(db, 'incidencias'),
           where('comunidad_id', '==', cid),
           orderBy('created_at', 'desc'),
+          limit(PAGE_SIZE),
         )),
         getDocs(query(collection(db, 'perfiles'), where('comunidad_id', '==', cid))),
       ]);
       console.log('[Incidencias] encontradas:', snap.size, '| vecinos:', vecinosSnap.size);
       setTotalVecinos(vecinosSnap.size);
+      setLastDoc(snap.docs[snap.docs.length - 1] ?? null);
+      setHasMore(snap.size === PAGE_SIZE);
 
-      const items = snap.docs.map(d => {
-        const data = d.data();
-        // Normalize Firestore Timestamps to ISO strings
-        if (data.created_at?.toDate) data.created_at = data.created_at.toDate().toISOString();
-        if (data.updated_at?.toDate) data.updated_at = data.updated_at.toDate().toISOString();
-        return { id: d.id, ...data };
-      });
-
-      const enriched = await Promise.all(
-        items.map(async (inc: any) => {
-          let autor = null;
-          if (inc.autor_id) {
-            try {
-              const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
-              if (autorSnap.exists()) {
-                const data = autorSnap.data();
-                autor = {
-                  nombre_completo: data.nombre_completo,
-                  avatar_url:      data.avatar_url ?? null,
-                  rol:             data.rol        ?? 'vecino',
-                  numero_piso:     data.numero_piso ?? null,
-                };
-              }
-            } catch (e) {
-              console.warn('[Incidencias] autor ilegible', inc.autor_id, e);
-            }
-          }
-          let categoria = null;
-          if (inc.categoria_id) {
-            try {
-              const catSnap = await getDoc(doc(db, 'categorias_incidencia', inc.categoria_id));
-              if (catSnap.exists()) {
-                const data = catSnap.data();
-                categoria = { nombre: data.nombre, icono: data.icono };
-              }
-            } catch (e) {
-              console.warn('[Incidencias] categoria ilegible', inc.categoria_id, e);
-            }
-          }
-          return { ...inc, autor, categoria } as Incidencia;
-        })
-      );
+      const enriched = await enrichIncidencias(snap.docs);
       setIncidencias(enriched);
     } catch (err) {
       console.error('[Incidencias] Error:', err);
       toast.error('Error al cargar las incidencias');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchMore() {
+    if (!lastDoc || !perfil?.comunidad_id) return;
+    setLoadingMore(true);
+    try {
+      const q = query(
+        collection(db, 'incidencias'),
+        where('comunidad_id', '==', perfil.comunidad_id),
+        orderBy('created_at', 'desc'),
+        startAfter(lastDoc),
+        limit(PAGE_SIZE),
+      );
+      const snap = await getDocs(q);
+      setLastDoc(snap.docs[snap.docs.length - 1] ?? null);
+      setHasMore(snap.size === PAGE_SIZE);
+      const newItems = await enrichIncidencias(snap.docs);
+      setIncidencias(prev => [...prev, ...newItems]);
+    } catch (err) {
+      console.error('[Incidencias] fetchMore error:', err);
+      toast.error('Error al cargar más incidencias');
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -256,7 +292,7 @@ export default function IncidenciasPage() {
           </p>
         </div>
       ) : (
-        <StaggerList className="flex flex-col gap-3" stagger={0.06}>
+        <StaggerList className="flex flex-col gap-3" stagger={0.06} key={incidencias.length}>
           {sortByPrioridad(topLevel).map((inc) => {
             const isAIParent = (inc as any).tipo_problema === 'inspeccion_preventiva'
               || (inc as any).autor_id === 'sistema_ia'
@@ -346,6 +382,18 @@ export default function IncidenciasPage() {
             );
           })}
         </StaggerList>
+      )}
+
+      {hasMore && !loading && (
+        <Button
+          variant="outline"
+          className="w-full border-dashed text-muted-foreground"
+          onClick={fetchMore}
+          disabled={loadingMore}
+        >
+          {loadingMore ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+          Cargar más incidencias
+        </Button>
       )}
     </div>
   );

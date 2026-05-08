@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SoundToggle } from '@/components/ui/sound-toggle';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { NotificationsPanel } from '@/components/layout/NotificationsPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -58,6 +59,9 @@ export function AppHeader() {
 
           {/* Sonido */}
           <SoundToggle size="sm" />
+
+          {/* Tema claro/oscuro */}
+          <ThemeToggle />
 
           {/* Campana — posición relativa para el panel flotante */}
           <div className="relative">

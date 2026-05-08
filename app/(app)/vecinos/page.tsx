@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Search, Users, X, ArrowUpDown,
-  ChevronRight, Check, Loader2,
+  ChevronRight, Check, Loader2, MessageCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, getDocs,
-  doc, updateDoc,
+  doc, updateDoc, addDoc,
   QueryDocumentSnapshot, DocumentData,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
@@ -119,7 +119,7 @@ function lineaVivienda(p: Perfil): string | null {
 /* ─── Componente principal ──────────────────────────────────────────────────── */
 export default function VecinosPage() {
   const router = useRouter();
-  const { perfil: yo, loading: authLoading } = useAuth();
+  const { perfil: yo, user, loading: authLoading } = useAuth();
 
   const [vecinos,   setVecinos]   = useState<Perfil[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -185,6 +185,41 @@ export default function VecinosPage() {
     } finally {
       setGuardando(false);
     }
+  }
+
+  /* ── Abrir / crear chat con vecino ── */
+  async function abrirChat(otroVecino: Perfil) {
+    if (!user?.uid) return;
+    // Check if chat already exists
+    const snap = await getDocs(
+      query(
+        collection(db, 'chats_vecinos'),
+        where('participantes', 'array-contains', user.uid),
+      ),
+    );
+    const existing = snap.docs.find(d => {
+      const p = d.data().participantes as string[];
+      return p.includes(otroVecino.id);
+    });
+
+    if (existing) {
+      router.push(`/chats/${existing.id}`);
+      return;
+    }
+
+    // Create new chat
+    const newChat = await addDoc(collection(db, 'chats_vecinos'), {
+      comunidad_id: yo?.comunidad_id,
+      participantes: [user.uid, otroVecino.id],
+      participantes_info: {
+        [user.uid]: { nombre: yo?.nombre_completo ?? 'Yo', avatar: yo?.avatar_url ?? null },
+        [otroVecino.id]: { nombre: otroVecino.nombre_completo, avatar: (otroVecino as any).avatar_url ?? null },
+      },
+      created_at: new Date().toISOString(),
+      ultimo_mensaje: null,
+      ultimo_mensaje_at: new Date().toISOString(),
+    });
+    router.push(`/chats/${newChat.id}`);
   }
 
   /* ── Lista derivada ── */
@@ -363,15 +398,16 @@ export default function VecinosPage() {
             // ROLES_ASIGNABLES no incluye 'presidente', así que nadie puede
             // crear otro presidente desde esta UI.
             const puedeEditar = esPresidente && !soyYo;
+            const puedeAbrir  = !soyYo; // cualquier vecino puede abrir el panel para mensajear
 
             return (
               <Card
                 key={vecino.id}
-                onClick={() => puedeEditar && abrirCambioRol(vecino)}
+                onClick={() => puedeAbrir && abrirCambioRol(vecino)}
                 className={cn(
                   'border-0 shadow-sm transition-all',
-                  soyYo      && 'border-l-4 border-l-finca-coral bg-finca-peach/5',
-                  puedeEditar && 'cursor-pointer hover:shadow-md active:scale-[0.99]',
+                  soyYo       && 'border-l-4 border-l-finca-coral bg-finca-peach/5',
+                  puedeAbrir  && 'cursor-pointer hover:shadow-md active:scale-[0.99]',
                 )}
               >
                 <CardContent className="p-4 flex items-center gap-3">
@@ -412,7 +448,7 @@ export default function VecinosPage() {
                     >
                       {cfg.label}
                     </Badge>
-                    {puedeEditar && (
+                    {puedeAbrir && (
                       <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
                     )}
                   </div>
@@ -437,7 +473,9 @@ export default function VecinosPage() {
       >
         <SheetContent side="bottom" className="rounded-t-3xl px-0 pb-0">
           <SheetHeader className="px-5 pt-5 pb-4">
-            <SheetTitle className="text-left text-base">Cambiar rol</SheetTitle>
+            <SheetTitle className="text-left text-base">
+              {esPresidente ? 'Gestionar vecino' : 'Vecino'}
+            </SheetTitle>
 
             {/* ── Cabecera del vecino seleccionado con foto ── */}
             {vecinoSeleccionado && (
@@ -448,7 +486,7 @@ export default function VecinosPage() {
                     {vecinoSeleccionado.nombre_completo}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Rol actual:{' '}
+                    Rol:{' '}
                     <span className="font-medium">
                       {ROL_CONFIG[vecinoSeleccionado.rol]?.label}
                     </span>
@@ -465,62 +503,84 @@ export default function VecinosPage() {
 
           <Separator />
 
-          {/* ── Opciones de rol ── */}
-          <div className="px-4 py-3 space-y-2">
-            {ROLES_ASIGNABLES.map((rol) => {
-              const cfg    = ROL_CONFIG[rol];
-              const activo = rolNuevo === rol;
-              return (
-                <button
-                  key={rol}
-                  onClick={() => setRolNuevo(rol)}
-                  className={cn(
-                    'w-full flex items-center gap-4 p-3.5 rounded-2xl border-2 transition-all text-left',
-                    activo
-                      ? 'border-finca-coral bg-finca-peach/20'
-                      : 'border-transparent bg-muted/40 hover:bg-muted/60',
-                  )}
-                >
-                  <span className="text-2xl">{cfg.emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={cn(
-                        'font-semibold text-sm',
-                        activo ? 'text-finca-coral' : 'text-finca-dark',
-                      )}
-                    >
-                      {cfg.label}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {cfg.descripcion}
-                    </p>
-                  </div>
-                  {activo && (
-                    <div className="w-5 h-5 rounded-full bg-finca-coral flex items-center justify-center shrink-0">
-                      <Check className="w-3 h-3 text-white" />
+          {/* ── Opciones de rol (solo para admin/presidente) ── */}
+          {esPresidente && (
+            <div className="px-4 py-3 space-y-2">
+              {ROLES_ASIGNABLES.map((rol) => {
+                const cfg    = ROL_CONFIG[rol];
+                const activo = rolNuevo === rol;
+                return (
+                  <button
+                    key={rol}
+                    onClick={() => setRolNuevo(rol)}
+                    className={cn(
+                      'w-full flex items-center gap-4 p-3.5 rounded-2xl border-2 transition-all text-left',
+                      activo
+                        ? 'border-finca-coral bg-finca-peach/20'
+                        : 'border-transparent bg-muted/40 hover:bg-muted/60',
+                    )}
+                  >
+                    <span className="text-2xl">{cfg.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={cn(
+                          'font-semibold text-sm',
+                          activo ? 'text-finca-coral' : 'text-finca-dark',
+                        )}
+                      >
+                        {cfg.label}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {cfg.descripcion}
+                      </p>
                     </div>
-                  )}
-                </button>
-              );
-            })}
+                    {activo && (
+                      <div className="w-5 h-5 rounded-full bg-finca-coral flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── Botones de acción ── */}
+          <div className="px-5 pt-2 pb-4 space-y-3">
+            {/* Guardar rol (solo admins) */}
+            {esPresidente && (
+              <Button
+                className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 rounded-2xl font-semibold"
+                disabled={guardando || rolNuevo === vecinoSeleccionado?.rol}
+                onClick={guardarRol}
+              >
+                {guardando ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Guardando…</>
+                ) : rolNuevo === vecinoSeleccionado?.rol ? (
+                  'Selecciona un rol diferente'
+                ) : (
+                  `Asignar como ${ROL_CONFIG[rolNuevo ?? 'vecino']?.label}`
+                )}
+              </Button>
+            )}
+
+            {/* ── Enviar mensaje (cualquier vecino) ── */}
+            {vecinoSeleccionado && vecinoSeleccionado.id !== yo?.id && (
+              <Button
+                variant="outline"
+                className="w-full h-11 rounded-2xl border-finca-coral/40 text-finca-coral"
+                onClick={() => {
+                  abrirChat(vecinoSeleccionado!);
+                  setVecinoSeleccionado(null);
+                }}
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Enviar mensaje
+              </Button>
+            )}
           </div>
 
-          {/* ── Botón guardar ── */}
-          <div className="px-5 pt-2 pb-8">
-            <Button
-              className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 rounded-2xl font-semibold"
-              disabled={guardando || rolNuevo === vecinoSeleccionado?.rol}
-              onClick={guardarRol}
-            >
-              {guardando ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Guardando…</>
-              ) : rolNuevo === vecinoSeleccionado?.rol ? (
-                'Selecciona un rol diferente'
-              ) : (
-                `Asignar como ${ROL_CONFIG[rolNuevo ?? 'vecino']?.label}`
-              )}
-            </Button>
-          </div>
+          <div className="pb-4" />
         </SheetContent>
       </Sheet>
     </>

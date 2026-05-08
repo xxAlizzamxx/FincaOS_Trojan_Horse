@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LogOut, User, Building2, Bell, Shield, ShieldCheck, ChevronRight,
-  Share2, Pencil, Check, X, DoorOpen, Loader2,
+  Share2, Pencil, Check, X, DoorOpen, Loader2, BarChart2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -112,6 +112,7 @@ export default function PerfilPage() {
   const iniciales = perfil?.nombre_completo
     ?.split(' ').slice(0, 2).map((n) => n[0]).join('') || '?';
   const fotoGoogle  = user?.photoURL;
+  const fotoAvatar  = (perfil as any)?.avatar_url || fotoGoogle;
   const torre       = (perfil as any)?.torre  || null;
   const piso        = (perfil as any)?.piso   || null;
   const apartamento = (perfil as any)?.puerta || null;
@@ -125,8 +126,8 @@ export default function PerfilPage() {
       <Card className="border-0 shadow-sm overflow-hidden">
         <div className="bg-gradient-to-r from-finca-coral to-finca-salmon px-4 py-5 flex items-center gap-4">
           <div className="w-16 h-16 rounded-2xl bg-white/20 border-2 border-white/50 flex items-center justify-center overflow-hidden shrink-0 shadow-md">
-            {fotoGoogle ? (
-              <img src={fotoGoogle} alt="Foto de perfil" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            {fotoAvatar ? (
+              <img src={fotoAvatar} alt="Foto de perfil" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             ) : (
               <span className="text-2xl font-bold text-white">{iniciales}</span>
             )}
@@ -245,9 +246,10 @@ export default function PerfilPage() {
       <Card className="border-0 shadow-sm">
         <CardContent className="p-0">
           {[
-            { icon: User,   label: 'Editar perfil',   sub: 'Nombre, teléfono, piso',  href: '/perfil/editar'         },
-            { icon: Bell,   label: 'Notificaciones',  sub: 'Gestionar alertas',        href: '/perfil/notificaciones' },
-            { icon: Shield, label: 'Privacidad',      sub: 'Datos y permisos',         href: '/perfil/privacidad'     },
+            { icon: User,      label: 'Editar perfil',      sub: 'Nombre, teléfono, piso',  href: '/perfil/editar'         },
+            { icon: BarChart2, label: 'Ver estadísticas',   sub: 'Tu actividad en la comunidad', href: '/perfil/estadisticas' },
+            { icon: Bell,      label: 'Notificaciones',     sub: 'Gestionar alertas',        href: '/perfil/notificaciones' },
+            { icon: Shield,    label: 'Privacidad',         sub: 'Datos y permisos',         href: '/perfil/privacidad'     },
           ].map((item, idx) => (
             <div key={item.label}>
               {idx > 0 && <Separator />}

@@ -37,6 +37,9 @@ const TONES: Record<SoundEvent, ToneConfig> = {
   publicacion_tablon:  { freq: [523, 659],        dur: 0.18, type: 'sine',     gain: 0.28 },
   pago_realizado:      { freq: [523, 659, 784],   dur: 0.14, type: 'sine',     gain: 0.40 },
   documento_publicado: { freq: [440, 550],        dur: 0.12, type: 'triangle', gain: 0.25 },
+  mensaje_recibido:    { freq: [660, 880],        dur: 0.1,  type: 'sine',     gain: 0.30 },
+  notificacion_nueva:  { freq: [523],             dur: 0.08, type: 'sine',     gain: 0.25 },
+  alerta_comunidad:    { freq: [880, 660, 440],   dur: 0.2,  type: 'square',   gain: 0.45 },
 };
 
 /* ─── Tipos públicos ─── */

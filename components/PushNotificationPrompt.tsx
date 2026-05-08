@@ -6,11 +6,13 @@ import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/f
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePushNotifications, sendLocalNotification } from '@/hooks/usePushNotifications';
+import { useSound } from '@/hooks/useSound';
 import { Button } from '@/components/ui/button';
 
 export function PushNotificationPrompt() {
   const { user } = useAuth();
   const { permission, supported, requestPermission } = usePushNotifications(user?.uid);
+  const { play } = useSound();
   const [dismissed, setDismissed] = useState(false);
   const [requesting, setRequesting] = useState(false);
 
@@ -45,6 +47,7 @@ export function PushNotificationPrompt() {
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const data = change.doc.data();
+          play('notificacion_nueva');
           sendLocalNotification(data.titulo, data.mensaje || '', data.link);
         }
       });

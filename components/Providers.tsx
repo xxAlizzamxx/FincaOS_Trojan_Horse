@@ -1,15 +1,18 @@
 'use client';
 
 import { ReactNode } from 'react';
+import { ThemeProvider } from 'next-themes';
 import { AuthProvider } from '@/hooks/useAuth';
 import { SoundProvider } from '@/components/SoundProvider';
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <AuthProvider>
-      <SoundProvider>
-        {children}
-      </SoundProvider>
-    </AuthProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <AuthProvider>
+        <SoundProvider>
+          {children}
+        </SoundProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

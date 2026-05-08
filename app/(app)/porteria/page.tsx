@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { useSound } from '@/hooks/useSound';
 
 interface Acceso {
   id: string;
@@ -57,6 +58,7 @@ type Tab = 'visitas' | 'mensajes';
 export default function PorteriaPage() {
   const { perfil, user } = useAuth();
   const router = useRouter();
+  const { play } = useSound();
   const [tab, setTab] = useState<Tab>('visitas');
 
   // Visitas pendientes
@@ -130,7 +132,16 @@ export default function PorteriaPage() {
       orderBy('created_at', 'asc'),
     );
 
+    let isFirstMessages = true;
     const unsub = onSnapshot(q, (snap) => {
+      if (!isFirstMessages) {
+        snap.docChanges().forEach((change) => {
+          if (change.type === 'added' && change.doc.data().sender_id !== user?.uid) {
+            play('mensaje_recibido');
+          }
+        });
+      }
+      isFirstMessages = false;
       setMensajes(snap.docs.map(d => ({ id: d.id, ...d.data() } as Mensaje)));
       // Marcar como leídos
       updateDoc(doc(db, 'chats_vigilancia', chatAbierto.id), {
