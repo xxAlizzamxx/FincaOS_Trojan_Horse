@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   collection, query, where, orderBy, onSnapshot,
   doc, updateDoc, addDoc,
@@ -68,7 +68,9 @@ export default function PorteriaPage() {
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [texto, setTexto] = useState('');
   const [sending, setSending] = useState(false);
+  const [vigilanteTyping, setVigilanteTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const comunidadId = perfil?.comunidad_id;
 
@@ -137,12 +139,39 @@ export default function PorteriaPage() {
     return () => unsub();
   }, [chatAbierto]);
 
+  // Listener del chat doc → detecta typing_vigilante
+  useEffect(() => {
+    if (!chatAbierto) return;
+    const unsub = onSnapshot(doc(db, 'chats_vigilancia', chatAbierto.id), (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.typing_vigilante && data.typing_vigilante_at) {
+        const age = Date.now() - new Date(data.typing_vigilante_at).getTime();
+        setVigilanteTyping(age < 5000);
+      } else {
+        setVigilanteTyping(false);
+      }
+    }, () => {});
+    return () => unsub();
+  }, [chatAbierto]);
+
+  // Notifica que el vecino está escribiendo
+  const notifyVecinoTyping = useCallback(() => {
+    if (!chatAbierto || !user) return;
+    const chatRef = doc(db, 'chats_vigilancia', chatAbierto.id);
+    updateDoc(chatRef, { typing_vecino: true, typing_vecino_at: new Date().toISOString() }).catch(() => {});
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      updateDoc(chatRef, { typing_vecino: false }).catch(() => {});
+    }, 3000);
+  }, [chatAbierto, user]);
+
   // Auto-scroll mensajes
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [mensajes]);
+  }, [mensajes, vigilanteTyping]);
 
   async function responderAcceso(accesoId: string, decision: 'autorizado' | 'rechazado') {
     try {
@@ -236,13 +265,28 @@ export default function PorteriaPage() {
                 </div>
               );
             })}
+
+            {/* Typing indicator — vigilante escribiendo */}
+            {vigilanteTyping && (
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-finca-coral flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                </div>
+                <div className="bg-white border border-border rounded-2xl rounded-bl-md px-3 py-2.5 flex items-center gap-1">
+                  {[0, 150, 300].map(delay => (
+                    <span key={delay} className="w-1.5 h-1.5 bg-finca-coral/60 rounded-full animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+                  ))}
+                </div>
+                <span className="text-[10px] text-muted-foreground">Portería escribiendo...</span>
+              </div>
+            )}
           </div>
 
           <div className="p-3 border-t border-border flex gap-2">
             <Input
               placeholder="Escribe un mensaje..."
               value={texto}
-              onChange={e => setTexto(e.target.value)}
+              onChange={e => { setTexto(e.target.value); notifyVecinoTyping(); }}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && enviarMensaje()}
               className="flex-1 text-sm"
               disabled={sending}

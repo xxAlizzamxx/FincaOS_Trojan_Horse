@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Package, DoorOpen, AlertTriangle, MessageSquare, ClipboardList,
-  ShieldAlert, ChevronRight, Phone, Bell, Clock, Users, Activity,
+  ShieldAlert, Phone, Bell, Clock, Users, Activity,
 } from 'lucide-react';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,80 +30,114 @@ export default function VigilanteDashboard() {
     vecinos: 0,
   });
   const [actividadReciente, setActividadReciente] = useState<Array<{
-    tipo: string;
+    tipo: 'acceso' | 'paquete' | 'alerta' | 'info';
     texto: string;
     hora: string;
-    icono: string;
-  }>>([]);
+    ts: number;
+  }>>();
 
   const comunidadId = perfil?.comunidad_id;
 
   useEffect(() => {
-    if (!comunidadId) return;
-    fetchDashboardData();
-  }, [comunidadId]);
+    if (!comunidadId || !user?.uid) return;
 
-  async function fetchDashboardData() {
-    try {
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
 
-      const [paqSnap, accSnap, alertSnap, chatSnap, incSnap, vecSnap] = await Promise.all([
-        getDocs(query(
-          collection(db, 'paqueteria'),
-          where('comunidad_id', '==', comunidadId),
-          where('estado', 'in', ['recibido', 'notificado']),
-        )).catch(() => ({ size: 0 })),
-        getDocs(query(
-          collection(db, 'accesos'),
-          where('comunidad_id', '==', comunidadId),
-          where('hora_entrada', '>=', hoy.toISOString()),
-        )).catch(() => ({ size: 0 })),
-        getDocs(query(
-          collection(db, 'alertas_comunidad'),
-          where('comunidad_id', '==', comunidadId),
-          where('activa', '==', true),
-        )).catch(() => ({ size: 0 })),
-        getDocs(query(
-          collection(db, 'chats_vigilancia'),
-          where('comunidad_id', '==', comunidadId),
-          where('vigilante_id', '==', user?.uid || ''),
-        )).catch(() => ({ size: 0, docs: [] })),
-        getDocs(query(
-          collection(db, 'incidencias'),
-          where('comunidad_id', '==', comunidadId),
-        )).catch(() => ({ size: 0, docs: [] })),
-        getDocs(query(
-          collection(db, 'perfiles'),
-          where('comunidad_id', '==', comunidadId),
-        )).catch(() => ({ size: 0 })),
-      ]);
+    // ── Stats en tiempo real con onSnapshot ──────────────────────────────────
+    const unsubs: (() => void)[] = [];
 
-      const incDocs = 'docs' in incSnap ? incSnap.docs : [];
-      const abiertas = incDocs.filter(
-        (d) => !['resuelta', 'cerrada'].includes(d.data().estado),
-      ).length;
+    // 1. Paquetes pendientes
+    unsubs.push(onSnapshot(
+      query(collection(db, 'paqueteria'), where('comunidad_id', '==', comunidadId), where('estado', 'in', ['recibido', 'notificado'])),
+      (s) => setStats(prev => ({ ...prev, paquetesPendientes: s.size })),
+      () => {},
+    ));
 
-      setStats({
-        paquetesPendientes: paqSnap.size,
-        visitasHoy: accSnap.size,
-        alertasActivas: alertSnap.size,
-        chatsNoLeidos: 0,
-        incidenciasAbiertas: abiertas,
-        vecinos: vecSnap.size,
-      });
+    // 2. Visitas de hoy
+    unsubs.push(onSnapshot(
+      query(collection(db, 'accesos'), where('comunidad_id', '==', comunidadId), where('hora_entrada', '>=', hoy.toISOString())),
+      (s) => setStats(prev => ({ ...prev, visitasHoy: s.size })),
+      () => {},
+    ));
 
-      // Actividad reciente simulada para mostrar la UI
-      const ahora = new Date();
-      setActividadReciente([
-        { tipo: 'info', texto: 'Panel de vigilancia activo', hora: format(ahora, 'HH:mm', { locale: es }), icono: 'shield' },
-      ]);
-    } catch (err) {
-      console.error('[Vigilante] Error cargando dashboard:', err);
-    } finally {
+    // 3. Alertas activas
+    unsubs.push(onSnapshot(
+      query(collection(db, 'alertas_comunidad'), where('comunidad_id', '==', comunidadId), where('activa', '==', true)),
+      (s) => setStats(prev => ({ ...prev, alertasActivas: s.size })),
+      () => {},
+    ));
+
+    // 4. Incidencias abiertas (one-time OK — not super-dynamic)
+    getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId)))
+      .then(s => {
+        const abiertas = s.docs.filter(d => !['resuelta', 'cerrada'].includes(d.data().estado)).length;
+        setStats(prev => ({ ...prev, incidenciasAbiertas: abiertas }));
+      }).catch(() => {});
+
+    // 5. Vecinos (one-time)
+    getDocs(query(collection(db, 'perfiles'), where('comunidad_id', '==', comunidadId)))
+      .then(s => setStats(prev => ({ ...prev, vecinos: s.size })))
+      .catch(() => {});
+
+    // ── Actividad reciente: combina accesos + paquetes + alertas ─────────────
+    type Entry = { tipo: 'acceso' | 'paquete' | 'alerta' | 'info'; texto: string; hora: string; ts: number };
+    let accEntries: Entry[] = [];
+    let paqEntries: Entry[] = [];
+    let alertEntries: Entry[] = [];
+
+    function merge() {
+      const all = [...accEntries, ...paqEntries, ...alertEntries]
+        .sort((a, b) => b.ts - a.ts)
+        .slice(0, 8);
+      setActividadReciente(all.length > 0 ? all : undefined);
       setLoading(false);
     }
-  }
+
+    unsubs.push(onSnapshot(
+      query(collection(db, 'accesos'), where('comunidad_id', '==', comunidadId), orderBy('hora_entrada', 'desc'), limit(5)),
+      (s) => {
+        accEntries = s.docs.map(d => {
+          const data = d.data();
+          const ts = new Date(data.hora_entrada).getTime();
+          const estado = data.estado === 'autorizado' ? '✅' : data.estado === 'rechazado' ? '❌' : '⏳';
+          return { tipo: 'acceso' as const, texto: `${estado} Visita: ${data.visitante_nombre} → ${data.apartamento_destino}`, hora: format(new Date(data.hora_entrada), 'HH:mm', { locale: es }), ts };
+        });
+        merge();
+      },
+      () => { setLoading(false); },
+    ));
+
+    unsubs.push(onSnapshot(
+      query(collection(db, 'paqueteria'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(4)),
+      (s) => {
+        paqEntries = s.docs.map(d => {
+          const data = d.data();
+          const ts = new Date(data.created_at).getTime();
+          const emoji = data.tipo === 'recibo' ? '📄' : data.tipo === 'domicilio' ? '🛵' : '📦';
+          return { tipo: 'paquete' as const, texto: `${emoji} ${data.tipo === 'recibo' ? 'Recibo' : 'Paquete'} para ${data.destinatario_nombre}${data.remitente ? ` (${data.remitente})` : ''}`, hora: format(new Date(data.created_at), 'HH:mm', { locale: es }), ts };
+        });
+        merge();
+      },
+      () => {},
+    ));
+
+    unsubs.push(onSnapshot(
+      query(collection(db, 'alertas_comunidad'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(3)),
+      (s) => {
+        alertEntries = s.docs.map(d => {
+          const data = d.data();
+          const ts = new Date(data.created_at).getTime();
+          const emoji = data.prioridad === 'urgente' ? '🚨' : data.prioridad === 'alta' ? '⚠️' : 'ℹ️';
+          return { tipo: 'alerta' as const, texto: `${emoji} Alerta: ${data.titulo}`, hora: format(new Date(data.created_at), 'HH:mm', { locale: es }), ts };
+        });
+        merge();
+      },
+      () => {},
+    ));
+
+    return () => unsubs.forEach(u => u());
+  }, [comunidadId, user?.uid]);
 
   const widgets = [
     { icon: Package,       label: 'Paquetes',      value: stats.paquetesPendientes, color: 'text-amber-600',   bg: 'bg-amber-50',   href: '/vigilante/paqueteria' },
@@ -232,30 +266,35 @@ export default function VigilanteDashboard() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-finca-dark">Actividad reciente</h2>
           <span className="text-xs text-muted-foreground flex items-center gap-1">
-            <Clock className="w-3 h-3" /> Hoy
+            <Clock className="w-3 h-3" /> En vivo
           </span>
         </div>
         <Card className="border-0 shadow-sm">
           <CardContent className="p-0">
-            {actividadReciente.length === 0 ? (
+            {!actividadReciente || actividadReciente.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground text-sm">
-                No hay actividad registrada hoy
+                No hay actividad registrada aún
               </div>
             ) : (
-              actividadReciente.map((act, idx) => (
-                <div key={idx} className={cn(
-                  'px-4 py-3 flex items-center gap-3',
-                  idx < actividadReciente.length - 1 && 'border-b border-border/50',
-                )}>
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                    <Bell className="w-4 h-4 text-emerald-600" />
+              actividadReciente.map((act, idx) => {
+                const iconBg   = act.tipo === 'alerta' ? 'bg-red-50'    : act.tipo === 'acceso' ? 'bg-blue-50'  : act.tipo === 'paquete' ? 'bg-amber-50' : 'bg-emerald-50';
+                const iconColor= act.tipo === 'alerta' ? 'text-red-500' : act.tipo === 'acceso' ? 'text-blue-500': act.tipo === 'paquete' ? 'text-amber-600' : 'text-emerald-600';
+                const IconComp = act.tipo === 'alerta' ? AlertTriangle  : act.tipo === 'acceso' ? DoorOpen       : act.tipo === 'paquete' ? Package         : Bell;
+                return (
+                  <div key={idx} className={cn(
+                    'px-4 py-3 flex items-center gap-3',
+                    idx < actividadReciente.length - 1 && 'border-b border-border/50',
+                  )}>
+                    <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0', iconBg)}>
+                      <IconComp className={cn('w-4 h-4', iconColor)} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-finca-dark truncate">{act.texto}</p>
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">{act.hora}</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-finca-dark">{act.texto}</p>
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0">{act.hora}</span>
-                </div>
-              ))
+                );
+              })
             )}
           </CardContent>
         </Card>
