@@ -73,7 +73,7 @@ export default function ChatsVigilantePage() {
   // Chat individual
   if (selectedVecino) {
     return (
-      <div className="max-w-3xl space-y-4">
+      <div className="max-w-5xl space-y-4">
         <button
           onClick={() => setSelectedVecino(null)}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-finca-dark transition-colors"
@@ -112,7 +112,7 @@ export default function ChatsVigilantePage() {
 
   // Lista de vecinos
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="max-w-5xl space-y-4">
       <div>
         <h1 className="text-xl font-bold text-finca-dark">Chats con residentes</h1>
         <p className="text-sm text-muted-foreground mt-0.5">

@@ -306,7 +306,7 @@ export default function BitacoraPage() {
   const tipoActual = tiposEntrada.find(t => t.value === tipo)!;
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="max-w-5xl space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-finca-dark">Bitacora de vigilancia</h1>

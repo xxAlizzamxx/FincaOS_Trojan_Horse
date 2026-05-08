@@ -81,7 +81,7 @@ export default function RondasPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4 max-w-2xl">
+      <div className="space-y-4 max-w-5xl">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-20 rounded-2xl" />
         <div className="space-y-3">
@@ -96,7 +96,7 @@ export default function RondasPage() {
   }
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5 max-w-5xl">
 
       {/* Header */}
       <div>

@@ -11,8 +11,8 @@
  * Versionado: incrementar CACHE_STATIC y CACHE_PAGES cuando cambie el deploy.
  */
 
-const CACHE_STATIC  = 'fincaos-static-v3';   // JS, CSS, fuentes, imágenes
-const CACHE_PAGES   = 'fincaos-pages-v3';     // páginas HTML navegadas
+const CACHE_STATIC  = 'fincaos-static-v4';   // JS, CSS, fuentes, imágenes
+const CACHE_PAGES   = 'fincaos-pages-v4';     // páginas HTML navegadas
 const ALL_CACHES    = [CACHE_STATIC, CACHE_PAGES];
 
 /** Recursos precacheados en install — offline fallback garantizado. */
@@ -192,17 +192,24 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
-  const data    = event.data.json();
-  const options = {
-    body:    data.body   || '',
-    icon:    '/navegador.png',
-    badge:   '/navegador.png',
-    data:    { url: data.url || '/inicio' },
-    vibrate: [200, 100, 200],
-  };
+  // Supports both FCM webpush format { notification:{title,body}, fcmOptions:{link} }
+  // and direct format { title, body, url }
+  let payload = {};
+  try { payload = event.data.json(); } catch { return; }
+
+  const title = payload.notification?.title || payload.title || 'FincaOS';
+  const body  = payload.notification?.body  || payload.body  || '';
+  const url   = payload.fcmOptions?.link    || payload.data?.url || payload.url || '/inicio';
+  const icon  = payload.notification?.icon  || '/logo-app.png';
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'FincaOS', options)
+    self.registration.showNotification(title, {
+      body,
+      icon,
+      badge:   '/logo-app.png',
+      data:    { url },
+      vibrate: [200, 100, 200],
+    })
   );
 });
 
