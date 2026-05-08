@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Send, Loader2, Package, DoorOpen, FileText, AlertTriangle,
-  Car, Mail, Wrench, Mic, Phone, Video, ChevronDown, ChevronUp,
+  Car, Mail, Wrench, Mic, Phone, Video, ChevronDown, ChevronUp, ShoppingBag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -42,6 +42,7 @@ const PLANTILLAS = [
   { icon: FileText,      label: 'Recibo',          tipo: 'recibo',          texto: 'Llego un recibo para su apartamento. Esta disponible en la porteria.' },
   { icon: AlertTriangle, label: 'Emergencia',      tipo: 'emergencia',      texto: 'AVISO URGENTE: Se presenta una situacion de emergencia en el edificio. Por favor siga las indicaciones de seguridad.' },
   { icon: Car,           label: 'Vehiculo',        tipo: 'vehiculo',        texto: 'Su vehiculo esta bloqueando el paso en el parqueadero. Por favor muevalo lo antes posible.' },
+  { icon: ShoppingBag,  label: 'Domicilio',       tipo: 'domicilio',       texto: 'Tiene un domicilio esperando en la porteria. Por favor bajar a recogerlo.' },
   { icon: Mail,          label: 'Correspondencia', tipo: 'correspondencia', texto: 'Llego correspondencia para su apartamento. Puede recogerla en la porteria.' },
   { icon: Wrench,        label: 'Tecnico',         tipo: 'tecnico',         texto: 'Un tecnico autorizado esta en la porteria para realizar un servicio en su apartamento. Autoriza el ingreso?' },
 ];
@@ -149,7 +150,7 @@ export default function ChatVigilante({
 
   const plantillaIconMap: Record<string, typeof Package> = {
     paquete: Package, visita: DoorOpen, recibo: FileText,
-    emergencia: AlertTriangle, vehiculo: Car, correspondencia: Mail, tecnico: Wrench,
+    emergencia: AlertTriangle, vehiculo: Car, correspondencia: Mail, tecnico: Wrench, domicilio: ShoppingBag,
   };
 
   const hasVecinoPhoto = !!vecinoAvatar && !imgError;
