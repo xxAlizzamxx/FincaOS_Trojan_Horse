@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Users, Megaphone, Building2, Share2, Vote, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check, Trash2 } from 'lucide-react';
+import { FileText, Users, Megaphone, Building2, Share2, Vote, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check, Trash2, ShieldCheck, Package, DoorOpen, ShieldAlert, Wrench, Droplets, Flame, Volume2, Car, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import {
@@ -16,6 +16,7 @@ import {
   doc as firestoreDoc,
   QueryDocumentSnapshot,
   DocumentData,
+  onSnapshot,
 } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { useEliminar } from '@/hooks/useEliminar';
@@ -49,8 +50,53 @@ interface CuotaItem {
   fecha_pago: string | null;
 }
 
+interface PaqueteItem {
+  id: string;
+  remitente: string;
+  tipo: string;
+  estado: string;
+  created_at: string;
+}
+
+interface AccesoItem {
+  id: string;
+  visitante_nombre: string;
+  estado: string;
+  hora_entrada: string;
+}
+
+interface AlertaComunidad {
+  id: string;
+  titulo: string;
+  descripcion: string;
+  tipo: string;
+  prioridad: string;
+  activa: boolean;
+  created_at: string;
+}
+
+const ALERTA_ICONS: Record<string, React.ElementType> = {
+  emergencia:    ShieldAlert,
+  mantenimiento: Wrench,
+  agua:          Droplets,
+  gas:           Flame,
+  ruido:         Volume2,
+  vehiculo:      Car,
+  informativa:   Info,
+};
+
+const ALERTA_COLORS: Record<string, string> = {
+  emergencia:    'bg-red-50 text-red-600',
+  mantenimiento: 'bg-orange-50 text-orange-600',
+  agua:          'bg-blue-50 text-blue-600',
+  gas:           'bg-amber-50 text-amber-600',
+  ruido:         'bg-purple-50 text-purple-600',
+  vehiculo:      'bg-cyan-50 text-cyan-600',
+  informativa:   'bg-green-50 text-green-600',
+};
+
 export default function ComunidadPage() {
-  const { perfil } = useAuth();
+  const { perfil, user } = useAuth();
   const router = useRouter();
   const [comunidad, setComunidad] = useState<Comunidad | null>(null);
   const [vecinos, setVecinos] = useState<Perfil[]>([]);
@@ -60,8 +106,59 @@ export default function ComunidadPage() {
   const [cuotas, setCuotas] = useState<CuotaItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Vigilancia state
+  const [paquetes, setPaquetes] = useState<PaqueteItem[]>([]);
+  const [accesos, setAccesos] = useState<AccesoItem[]>([]);
+  const [alertas, setAlertas] = useState<AlertaComunidad[]>([]);
+
   useEffect(() => {
     if (perfil?.comunidad_id) fetchData();
+  }, [perfil?.comunidad_id]);
+
+  // Vigilancia: paquetes pending para este vecino (realtime)
+  useEffect(() => {
+    if (!user?.uid || !perfil?.comunidad_id) return;
+    const q = query(
+      collection(db, 'paqueteria'),
+      where('comunidad_id', '==', perfil.comunidad_id),
+      where('vecino_id', '==', user.uid),
+      where('estado', 'in', ['recibido', 'notificado']),
+    );
+    return onSnapshot(q, (snap) => {
+      setPaquetes(snap.docs.map(d => ({ id: d.id, ...d.data() } as PaqueteItem)));
+    }, () => {});
+  }, [user?.uid, perfil?.comunidad_id]);
+
+  // Vigilancia: últimos accesos del vecino
+  useEffect(() => {
+    if (!user?.uid || !perfil?.comunidad_id) return;
+    const q = query(
+      collection(db, 'accesos'),
+      where('comunidad_id', '==', perfil.comunidad_id),
+      where('vecino_id', '==', user.uid),
+      orderBy('hora_entrada', 'desc'),
+      limit(5),
+    );
+    return onSnapshot(q, (snap) => {
+      setAccesos(snap.docs.map(d => ({ id: d.id, ...d.data() } as AccesoItem)));
+    }, () => {});
+  }, [user?.uid, perfil?.comunidad_id]);
+
+  // Vigilancia: alertas activas de la comunidad
+  useEffect(() => {
+    if (!perfil?.comunidad_id) return;
+    const q = query(
+      collection(db, 'alertas_comunidad'),
+      where('comunidad_id', '==', perfil.comunidad_id),
+      where('activa', '==', true),
+    );
+    return onSnapshot(q, (snap) => {
+      setAlertas(
+        snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as AlertaComunidad))
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+      );
+    }, () => {});
   }, [perfil?.comunidad_id]);
 
   async function fetchData() {
@@ -232,12 +329,18 @@ export default function ComunidadPage() {
       )}
 
       <Tabs defaultValue="tablón">
-        <TabsList className="w-full grid grid-cols-5 text-[11px]">
+        <TabsList className="w-full grid grid-cols-6 text-[10px]">
           <TabsTrigger value="tablón">Tablón</TabsTrigger>
           <TabsTrigger value="votaciones">Votos</TabsTrigger>
           <TabsTrigger value="finanzas">Cuotas</TabsTrigger>
           <TabsTrigger value="vecinos">Vecinos</TabsTrigger>
           <TabsTrigger value="docs">Docs</TabsTrigger>
+          <TabsTrigger value="vigilancia" className="relative">
+            Seguridad
+            {(paquetes.length > 0 || alertas.length > 0) && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-finca-coral" />
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="tablón" className="mt-4 space-y-3">
@@ -495,6 +598,135 @@ export default function ComunidadPage() {
             {documentos.length > 0 ? 'Ver todos los documentos' : 'Ir a documentos'}
           </Button>
         </TabsContent>
+        {/* ── Tab Vigilancia ── */}
+        <TabsContent value="vigilancia" className="mt-4 space-y-4">
+
+          {/* Alertas activas */}
+          {alertas.length > 0 && (
+            <section className="space-y-2">
+              <p className="text-xs font-semibold text-red-600 uppercase tracking-wide flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                Alertas activas ({alertas.length})
+              </p>
+              {alertas.map(a => {
+                const colorClass = ALERTA_COLORS[a.tipo] ?? ALERTA_COLORS.informativa;
+                const [bg, text] = colorClass.split(' ');
+                const IconComp = ALERTA_ICONS[a.tipo] ?? Info;
+                return (
+                  <Card key={a.id} className={cn(
+                    'border-0 shadow-sm',
+                    a.prioridad === 'urgente' && 'border-l-4 border-l-red-500',
+                    a.prioridad === 'alta'    && 'border-l-4 border-l-orange-500',
+                  )}>
+                    <CardContent className="p-3 flex items-start gap-3">
+                      <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', bg)}>
+                        <IconComp className={cn('w-4 h-4', text)} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-finca-dark">{a.titulo}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{a.descripcion}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          {format(new Date(a.created_at), "dd MMM · HH:mm", { locale: es })}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              <Button variant="outline" size="sm" className="w-full text-finca-coral border-finca-coral/30" onClick={() => router.push('/alertas')}>
+                Ver todas las alertas
+              </Button>
+            </section>
+          )}
+
+          {/* Paquetes pendientes */}
+          <section className="space-y-2">
+            <p className="text-xs font-semibold text-finca-dark uppercase tracking-wide flex items-center gap-1.5">
+              <Package className="w-3.5 h-3.5 text-amber-500" />
+              Tus paquetes pendientes
+            </p>
+            {paquetes.length === 0 ? (
+              <Card className="border-dashed border-2">
+                <CardContent className="py-6 text-center space-y-1">
+                  <Package className="w-8 h-8 text-muted-foreground/30 mx-auto" />
+                  <p className="text-sm text-muted-foreground">Sin paquetes pendientes</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {paquetes.map(p => (
+                  <Card key={p.id} className="border-0 shadow-sm">
+                    <CardContent className="p-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                        <Package className="w-4 h-4 text-amber-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-finca-dark truncate">{p.remitente || 'Remitente desconocido'}</p>
+                        <p className="text-xs text-muted-foreground">{p.tipo} · {format(new Date(p.created_at), "dd MMM", { locale: es })}</p>
+                      </div>
+                      <Badge className="text-[10px] border bg-amber-100 text-amber-700 border-amber-200 shrink-0">
+                        En portería
+                      </Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+                <Button variant="outline" size="sm" className="w-full" onClick={() => router.push('/porteria')}>
+                  <Package className="w-3.5 h-3.5 mr-2" />
+                  Ir a portería
+                </Button>
+              </>
+            )}
+          </section>
+
+          {/* Accesos recientes */}
+          <section className="space-y-2">
+            <p className="text-xs font-semibold text-finca-dark uppercase tracking-wide flex items-center gap-1.5">
+              <DoorOpen className="w-3.5 h-3.5 text-blue-500" />
+              Tus últimas visitas registradas
+            </p>
+            {accesos.length === 0 ? (
+              <Card className="border-dashed border-2">
+                <CardContent className="py-6 text-center space-y-1">
+                  <DoorOpen className="w-8 h-8 text-muted-foreground/30 mx-auto" />
+                  <p className="text-sm text-muted-foreground">Sin visitas registradas</p>
+                </CardContent>
+              </Card>
+            ) : (
+              accesos.map(a => (
+                <Card key={a.id} className="border-0 shadow-sm">
+                  <CardContent className="p-3 flex items-center gap-3">
+                    <div className={cn(
+                      'w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
+                      a.estado === 'autorizado' ? 'bg-green-50' : a.estado === 'rechazado' ? 'bg-red-50' : 'bg-blue-50',
+                    )}>
+                      <DoorOpen className={cn('w-4 h-4', a.estado === 'autorizado' ? 'text-green-600' : a.estado === 'rechazado' ? 'text-red-500' : 'text-blue-600')} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-finca-dark truncate">{a.visitante_nombre}</p>
+                      <p className="text-xs text-muted-foreground">{format(new Date(a.hora_entrada), "dd MMM · HH:mm", { locale: es })}</p>
+                    </div>
+                    <Badge className={cn('text-[10px] border shrink-0',
+                      a.estado === 'autorizado' ? 'bg-green-100 text-green-700 border-green-200' :
+                      a.estado === 'rechazado'  ? 'bg-red-100 text-red-700 border-red-200' :
+                      'bg-blue-100 text-blue-700 border-blue-200',
+                    )}>
+                      {a.estado === 'autorizado' ? 'Autorizado' : a.estado === 'rechazado' ? 'Rechazado' : 'Pendiente'}
+                    </Badge>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </section>
+
+          {alertas.length === 0 && paquetes.length === 0 && accesos.length === 0 && (
+            <div className="py-10 text-center space-y-2">
+              <ShieldCheck className="w-12 h-12 text-green-400 mx-auto" />
+              <p className="text-sm font-semibold text-finca-dark">Todo tranquilo</p>
+              <p className="text-xs text-muted-foreground">Sin alertas, paquetes pendientes ni visitas recientes</p>
+            </div>
+          )}
+        </TabsContent>
+
       </Tabs>
 
       <ConfirmDeleteDialog {...dialogProps} />

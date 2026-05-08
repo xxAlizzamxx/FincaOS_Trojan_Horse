@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { collection, query, where, addDoc, onSnapshot, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { crearNotificacionComunidad } from '@/lib/firebase/notifications';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -100,34 +99,27 @@ export default function AlertasPage() {
     setSaving(true);
 
     try {
-      await addDoc(collection(db, 'alertas_comunidad'), {
-        comunidad_id: comunidadId,
-        creado_por: user.uid,
-        creado_por_nombre: perfil?.nombre_completo || 'Vigilante',
-        titulo,
-        descripcion,
-        tipo,
-        prioridad,
-        activa: true,
-        created_at: new Date().toISOString(),
+      const token = await user.getIdToken();
+      const res = await fetch('/api/vigilante/alerta', {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ comunidad_id: comunidadId, titulo, descripcion, tipo, prioridad }),
       });
 
-      // Notificar a todos los miembros de la comunidad
-      crearNotificacionComunidad(comunidadId, {
-        tipo:       'alerta',
-        titulo:     `🚨 ${titulo}`,
-        mensaje:    descripcion,
-        created_by: user.uid,
-        related_id: comunidadId,
-        link:       '/alertas',
-      }).catch(() => { /* fire-and-forget */ });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Error al crear alerta');
+      }
 
-      toast.success('Alerta creada y enviada a la comunidad');
+      toast.success('Alerta creada, anuncio publicado y push enviado a la comunidad');
       setShowForm(false);
       setTitulo(''); setDescripcion(''); setTipo('informativa'); setPrioridad('media');
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Alertas] Error:', err);
-      toast.error('Error al crear la alerta');
+      toast.error(err?.message || 'Error al crear la alerta');
     } finally {
       setSaving(false);
     }
