@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  collection, addDoc, onSnapshot, query, orderBy, doc, getDoc, setDoc, updateDoc,
+  collection, addDoc, onSnapshot, query, orderBy, doc, getDoc, setDoc, updateDoc, increment,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Send, Loader2, Package, DoorOpen, FileText, AlertTriangle,
-  Car, Mail, Wrench, Mic, Phone, Video, ChevronDown, ChevronUp, ShoppingBag,
+  Car, Mail, Wrench, Mic, Phone, Video, ChevronDown, ChevronUp, ShoppingBag, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -128,7 +128,7 @@ export default function ChatVigilante({
 
       await updateDoc(chatRef, {
         ultimo_mensaje:   text.trim().slice(0, 100),
-        no_leidos_vecino: (mensajes.filter(m => m.sender_id === vigilanteId && !m.leido).length + 1),
+        no_leidos_vecino: increment(1),   // atomic +1 so prior reads don't reset the count
         updated_at:       new Date().toISOString(),
       });
 
@@ -204,7 +204,12 @@ export default function ChatVigilante({
               <div key={msg.id} className={cn('flex gap-2', mine ? 'flex-row-reverse' : 'flex-row')}>
                 {/* Avatar */}
                 <div className="shrink-0">
-                  {!mine && hasVecinoPhoto ? (
+                  {mine ? (
+                    // Avatar del vigilante: siempre escudo
+                    <div className="w-7 h-7 rounded-full bg-finca-coral flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-4 h-4 text-white" />
+                    </div>
+                  ) : hasVecinoPhoto ? (
                     // Foto real del vecino
                     <div className="w-7 h-7 rounded-full overflow-hidden ring-1 ring-finca-peach">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -217,11 +222,9 @@ export default function ChatVigilante({
                       />
                     </div>
                   ) : (
-                    <div className={cn(
-                      'w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold',
-                      mine ? 'bg-finca-peach/40 text-finca-coral' : 'bg-finca-peach text-finca-coral',
-                    )}>
-                      {mine ? (perfil?.nombre_completo?.[0]?.toUpperCase() ?? 'V') : vecinoNombre[0]?.toUpperCase()}
+                    // Inicial del vecino
+                    <div className="w-7 h-7 rounded-full bg-finca-peach flex items-center justify-center text-[10px] font-bold text-finca-coral">
+                      {vecinoNombre[0]?.toUpperCase()}
                     </div>
                   )}
                 </div>

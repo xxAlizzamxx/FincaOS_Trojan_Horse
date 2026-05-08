@@ -215,12 +215,15 @@ export default function PorteriaPage() {
               const mio = msg.sender_id === user?.uid;
               return (
                 <div key={msg.id} className={cn('flex gap-2', mio ? 'flex-row-reverse' : 'flex-row')}>
-                  <div className={cn(
-                    'w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0',
-                    mio ? 'bg-finca-peach text-finca-coral' : 'bg-finca-peach/60 text-finca-coral',
-                  )}>
-                    {mio ? perfil?.nombre_completo?.[0]?.toUpperCase() : '🛡️'}
-                  </div>
+                  {mio ? (
+                    <div className="w-7 h-7 rounded-full bg-finca-peach flex items-center justify-center text-[10px] font-bold text-finca-coral shrink-0">
+                      {perfil?.nombre_completo?.[0]?.toUpperCase()}
+                    </div>
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-finca-coral flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                    </div>
+                  )}
                   <div className={cn(
                     'max-w-[75%] rounded-2xl px-3 py-2',
                     mio ? 'bg-finca-coral text-white rounded-br-md' : 'bg-white border border-border rounded-bl-md',

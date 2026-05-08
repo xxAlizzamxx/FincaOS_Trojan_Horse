@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, query, where, addDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, addDoc, onSnapshot, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -111,6 +111,8 @@ function PillSelector({ options, value, onChange, accent = false }: {
   );
 }
 
+interface VigilanteItem { id: string; nombre_completo: string; }
+
 export default function BitacoraPage() {
   const { perfil, user } = useAuth();
   const [entradas, setEntradas] = useState<EntradaBitacora[]>([]);
@@ -118,6 +120,11 @@ export default function BitacoraPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving]     = useState(false);
   const [tipo, setTipo]         = useState('observacion');
+
+  // Vigilantes para cambio de turno
+  const [vigilantes, setVigilantes] = useState<VigilanteItem[]>([]);
+  const [busquedaVigilante, setBusquedaVigilante] = useState('');
+  const [showVigSuggestions, setShowVigSuggestions] = useState(false);
 
   // ── Form state per type ──────────────────────────────────────────────────
   // Observacion / fallback
@@ -164,6 +171,22 @@ export default function BitacoraPage() {
   }
 
   useEffect(() => { resetForm(); }, [tipo]);
+
+  // Load vigilantes for turno search
+  useEffect(() => {
+    if (!comunidadId) return;
+    getDocs(query(collection(db, 'perfiles'), where('comunidad_id', '==', comunidadId), where('rol', '==', 'vigilante')))
+      .then(snap => setVigilantes(snap.docs
+        .map(d => ({ id: d.id, nombre_completo: d.data().nombre_completo || '' }))
+        .filter(v => v.id !== user?.uid && v.nombre_completo)
+      ))
+      .catch(() => {});
+  }, [comunidadId, user?.uid]);
+
+  const vigSugerencias = vigilantes.filter(v =>
+    busquedaVigilante.length >= 1 &&
+    v.nombre_completo.toLowerCase().includes(busquedaVigilante.toLowerCase())
+  );
 
   useEffect(() => {
     if (!comunidadId) return;
@@ -253,9 +276,14 @@ export default function BitacoraPage() {
       }
 
       await addDoc(collection(db, 'bitacora_vigilancia'), { ...base, ...extra });
+      // Al registrar cambio de turno → marcar vigilante como en descanso
+      if (tipo === 'turno' && user?.uid) {
+        updateDoc(doc(db, 'perfiles', user.uid), { en_turno: false }).catch(() => {});
+      }
       toast.success('Entrada registrada en la bitacora');
       setShowForm(false);
       resetForm();
+      setBusquedaVigilante('');
       setTipo('observacion');
     } catch (err) {
       console.error('[Bitacora] Error:', err);
@@ -489,8 +517,30 @@ export default function BitacoraPage() {
                     <Input value={perfil?.nombre_completo || ''} disabled className="bg-gray-50 text-muted-foreground" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="b-recibe">Vigilante que recibe *</Label>
-                    <Input id="b-recibe" placeholder="Nombre del vigilante entrante" value={vigilanteRecibe} onChange={e => setVigilanteRecibe(e.target.value)} required />
+                    <Label>Vigilante que recibe *</Label>
+                    <div className="relative">
+                      <Input
+                        placeholder={vigilantes.length ? 'Buscar vigilante...' : 'Nombre del vigilante entrante'}
+                        value={busquedaVigilante}
+                        onChange={e => { setBusquedaVigilante(e.target.value); setVigilanteRecibe(e.target.value); setShowVigSuggestions(true); }}
+                        onFocus={() => setShowVigSuggestions(true)}
+                        required
+                      />
+                      {showVigSuggestions && vigSugerencias.length > 0 && (
+                        <div className="absolute z-10 top-full mt-1 left-0 right-0 bg-white border border-border rounded-xl shadow-lg overflow-hidden">
+                          {vigSugerencias.map(v => (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => { setBusquedaVigilante(v.nombre_completo); setVigilanteRecibe(v.nombre_completo); setShowVigSuggestions(false); }}
+                              className="w-full text-left px-3 py-2.5 hover:bg-finca-peach/30 transition-colors border-b last:border-0 border-border/40"
+                            >
+                              <p className="text-sm font-medium text-finca-dark">{v.nombre_completo}</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Estado de las instalaciones</Label>

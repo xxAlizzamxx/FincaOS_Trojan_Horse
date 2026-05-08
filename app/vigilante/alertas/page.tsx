@@ -119,7 +119,7 @@ export default function AlertasPage() {
         mensaje:    descripcion,
         created_by: user.uid,
         related_id: comunidadId,
-        link:       '/porteria',
+        link:       '/alertas',
       }).catch(() => { /* fire-and-forget */ });
 
       toast.success('Alerta creada y enviada a la comunidad');
