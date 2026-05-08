@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from 'react';
 import {
-  collection, query, where, onSnapshot, orderBy,
-  doc, updateDoc, addDoc, getDocs, getDoc,
+  collection, query, where, orderBy, onSnapshot,
+  doc, updateDoc, addDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -82,16 +82,16 @@ export default function PorteriaPage() {
       collection(db, 'accesos'),
       where('comunidad_id', '==', comunidadId),
       where('vecino_id', '==', user.uid),
-      orderBy('hora_entrada', 'desc'),
     );
 
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as Acceso))
-        .filter(a => new Date(a.hora_entrada) >= hoy);
+        .filter(a => new Date(a.hora_entrada) >= hoy)
+        .sort((a, b) => new Date(b.hora_entrada).getTime() - new Date(a.hora_entrada).getTime());
       setAccesos(items);
       setLoadingAccesos(false);
-    }, () => setLoadingAccesos(false));
+    }, (err) => { console.error('[Porteria] accesos error:', err); setLoadingAccesos(false); });
 
     return () => unsub();
   }, [comunidadId, user]);
@@ -104,14 +104,15 @@ export default function PorteriaPage() {
       collection(db, 'chats_vigilancia'),
       where('comunidad_id', '==', comunidadId),
       where('vecino_id', '==', user.uid),
-      orderBy('updated_at', 'desc'),
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatResumen));
+      const items = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as ChatResumen))
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
       setChats(items);
       setLoadingChats(false);
-    }, () => setLoadingChats(false));
+    }, (err) => { console.error('[Porteria] chats error:', err); setLoadingChats(false); });
 
     return () => unsub();
   }, [comunidadId, user]);

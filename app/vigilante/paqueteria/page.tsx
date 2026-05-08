@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, query, where, addDoc, getDocs, onSnapshot, orderBy, updateDoc, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, addDoc, getDocs, onSnapshot, updateDoc, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -73,14 +73,15 @@ export default function PaqueteriaPage() {
     const q = query(
       collection(db, 'paqueteria'),
       where('comunidad_id', '==', comunidadId),
-      orderBy('created_at', 'desc'),
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Paquete));
+      const items = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as Paquete))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setPaquetes(items);
       setLoading(false);
-    }, () => setLoading(false));
+    }, (err) => { console.error('[Paqueteria] onSnapshot error:', err); setLoading(false); });
 
     return () => unsub();
   }, [comunidadId]);
