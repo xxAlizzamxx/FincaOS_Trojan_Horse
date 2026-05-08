@@ -36,6 +36,13 @@ service cloud.firestore {
           && p.comunidad_id == comunidadId;
     }
 
+    function isVigilanteOfCommunity(comunidadId) {
+      let p = profile();
+      return isAuth()
+          && p.rol == 'vigilante'
+          && p.comunidad_id == comunidadId;
+    }
+
     function canManageMediacion(comunidadId) {
       let p = profile();
       return isAuth()
@@ -466,6 +473,62 @@ service cloud.firestore {
                     && request.resource.data.keys().hasOnly([
                          'user_id', 'comunidad_id', 'event', 'created_at', 'metadata'
                        ]);
+    }
+
+    // ── Accesos (control de visitantes — vigilante) ────────────────────────
+
+    match /accesos/{accesoId} {
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAuth()
+                    && (isVigilanteOfCommunity(request.resource.data.comunidad_id)
+                        || isAdminOfCommunity(request.resource.data.comunidad_id));
+      allow update: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+    }
+
+    // ── Paqueteria (paquetes y recibos — vigilante) ──────────────────────
+
+    match /paqueteria/{paqueteId} {
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAuth()
+                    && (isVigilanteOfCommunity(request.resource.data.comunidad_id)
+                        || isAdminOfCommunity(request.resource.data.comunidad_id));
+      allow update: if isAuth()
+                    && (isVigilanteOfCommunity(resource.data.comunidad_id)
+                        || isAdminOfCommunity(resource.data.comunidad_id));
+    }
+
+    // ── Alertas comunidad (avisos del vigilante) ─────────────────────────
+
+    match /alertas_comunidad/{alertaId} {
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAuth()
+                    && (isVigilanteOfCommunity(request.resource.data.comunidad_id)
+                        || isAdminOfCommunity(request.resource.data.comunidad_id));
+      allow update: if isAuth()
+                    && (isVigilanteOfCommunity(resource.data.comunidad_id)
+                        || isAdminOfCommunity(resource.data.comunidad_id));
+    }
+
+    // ── Chats vigilancia (mensajes vigilante ↔ vecino) ───────────────────
+
+    match /chats_vigilancia/{chatId} {
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAuth() && belongsToCommunity(request.resource.data.comunidad_id);
+      allow update: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+
+      match /mensajes/{mensajeId} {
+        allow read:   if isAuth();
+        allow create: if isAuth();
+      }
+    }
+
+    // ── Bitacora vigilancia (notas del turno) ────────────────────────────
+
+    match /bitacora_vigilancia/{entradaId} {
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAuth()
+                    && (isVigilanteOfCommunity(request.resource.data.comunidad_id)
+                        || isAdminOfCommunity(request.resource.data.comunidad_id));
     }
 
     // ── Pagos (top-level, complementary to cuotas subcollection) ──────────
