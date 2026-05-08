@@ -1,4 +1,4 @@
-/**
+﻿/**
  * POST /api/ai/chat
  *
  * Unified AI assistant — combines conversational chat AND autonomous action.
@@ -162,7 +162,7 @@ function stripMarkdown(text: string): string {
 // Covers ~80% of common user queries without touching Gemini.
 // Normalise: lowercase + strip Spanish diacritics before matching.
 
-type Intent = 'cuotas' | 'votaciones' | 'anuncios' | 'incidencias' | null;
+type Intent = 'cuotas' | 'votaciones' | 'anuncios' | 'incidencias' | 'resumen' | 'porteria' | null;
 
 function detectIntent(msg: string): Intent {
   const m = msg
@@ -170,10 +170,14 @@ function detectIntent(msg: string): Intent {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, ''); // strip accents → "votación" → "votacion"
 
-  if (/cuota|debo|pago pendiente|deuda|vencimiento|mora|adeudo/.test(m)) return 'cuotas';
-  if (/votac|votar|referend|referendum/.test(m))                          return 'votaciones';
-  if (/anuncio|comunicado|aviso|novedad|noticias|tablon/.test(m))         return 'anuncios';
-  if (/incidencia|averia|reparac|reporte|averias/.test(m))                return 'incidencias';
+  if (/cuota|debo|pago pendiente|deuda|vencimiento|mora|adeudo/.test(m))  return 'cuotas';
+  if (/votac|votar|referend|referendum/.test(m))                           return 'votaciones';
+  if (/anuncio|comunicado|aviso|tablon/.test(m))                           return 'anuncios';
+  if (/incidencia|averia|reparac|reporte|averias/.test(m))                 return 'incidencias';
+  // Porteria: paquetes, recibos, visitas, domicilios, accesos
+  if (/porteria|paquete|recibo|domicilio|visita.*(espera|pend|autor)|espera.*(autor|ingres)|pendiente.*(recoger)|autorizar visita/.test(m)) return 'porteria';
+  // Resumen general de la comunidad
+  if (/resumen|estado general|como esta|en este momento|estado de (mi |la )?comunidad|novedades generales/.test(m)) return 'resumen';
   return null;
 }
 
@@ -437,6 +441,179 @@ async function directIncidencias(comunidadId: string, uid: string, rol: string):
   return lines.join('\n');
 }
 
+// ── directPorteria ────────────────────────────────────────────────────────────
+// Reads paqueteria, accesos, alertas for the community.
+// For vecinos: shows only their own packages/visits. For vigilante/admin: shows all.
+
+async function directPorteria(comunidadId: string, uid: string, rol: string): Promise<string | null> {
+  const db = getAdminDb();
+  const isVigilante = rol === 'vigilante' || rol === 'admin' || rol === 'presidente';
+
+  const [paqSnap, accSnap, altSnap] = await Promise.allSettled([
+    db.collection('paqueteria').where('comunidad_id', '==', comunidadId).get(),
+    db.collection('accesos').where('comunidad_id', '==', comunidadId).get(),
+    db.collection('alertas_comunidad').where('comunidad_id', '==', comunidadId).where('activa', '==', true).get(),
+  ]);
+
+  const todosPaquetes = paqSnap.status === 'fulfilled' ? paqSnap.value.docs.map(d => d.data()) : [];
+  const pendientes = todosPaquetes.filter(p =>
+    ['recibido', 'notificado'].includes(p.estado as string) &&
+    (isVigilante || p.vecino_id === uid),
+  );
+
+  const todosAccesos = accSnap.status === 'fulfilled' ? accSnap.value.docs.map(d => d.data()) : [];
+  const esperando   = todosAccesos.filter(a =>
+    a.estado === 'esperando' && (isVigilante || a.vecino_id === uid),
+  );
+
+  const alertas = altSnap.status === 'fulfilled' ? altSnap.value.docs.map(d => d.data()) : [];
+
+  const lines: string[] = [
+    isVigilante ? 'Estado actual de portería:' : 'Esto es lo que hay pendiente para ti en portería:',
+  ];
+
+  // Paquetes
+  if (pendientes.length === 0) {
+    lines.push('• Sin paquetes ni recibos pendientes de recogida.');
+  } else {
+    const tipos: Record<string, number> = {};
+    pendientes.forEach(p => { tipos[p.tipo as string] = (tipos[p.tipo as string] || 0) + 1; });
+    const partes: string[] = [];
+    if (tipos.paquete)   partes.push(`${tipos.paquete} paquete${tipos.paquete   > 1 ? 's' : ''}`);
+    if (tipos.recibo)    partes.push(`${tipos.recibo} recibo${tipos.recibo     > 1 ? 's' : ''}`);
+    if (tipos.domicilio) partes.push(`${tipos.domicilio} domicilio${tipos.domicilio > 1 ? 's' : ''}`);
+    lines.push(`• Pendiente de recogida: ${partes.join(', ')}.`);
+    if (isVigilante && pendientes.length <= 5) {
+      pendientes.forEach(p => lines.push(`  - ${p.destinatario_nombre} (${p.tipo})`));
+    }
+  }
+
+  // Visitas esperando
+  if (esperando.length > 0) {
+    if (isVigilante) {
+      lines.push(`• ${esperando.length} visita${esperando.length > 1 ? 's' : ''} esperando autorización:`);
+      esperando.slice(0, 4).forEach(a => lines.push(`  - ${a.visitante_nombre} → ${a.apartamento_destino}`));
+    } else {
+      const nombres = esperando.slice(0, 2).map(a => a.visitante_nombre as string).join(', ');
+      lines.push(`• Tienes ${esperando.length} visita${esperando.length > 1 ? 's' : ''} esperando tu autorización: ${nombres}.`);
+    }
+  } else {
+    lines.push(isVigilante ? '• Sin visitas esperando autorización.' : '• No hay visitas esperando tu autorización.');
+  }
+
+  // Alertas activas
+  if (alertas.length > 0) {
+    const urgente = alertas.find(a => a.prioridad === 'urgente');
+    if (urgente) {
+      lines.push(`• ⚠️ Alerta urgente activa: "${urgente.titulo}".`);
+    } else {
+      lines.push(`• ${alertas.length} alerta${alertas.length > 1 ? 's comunitarias' : ' comunitaria'} activa${alertas.length > 1 ? 's' : ''}.`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+// ── directResumen ─────────────────────────────────────────────────────────────
+// Full community state summary — incidencias + cuotas + votaciones + paquetes + alertas.
+
+async function directResumen(comunidadId: string, uid: string, rol: string): Promise<string | null> {
+  const db = getAdminDb();
+  const isAdmin = rol === 'admin' || rol === 'presidente';
+
+  const [incSnap, cuotasSnap, votSnap, anunciosSnap, alertasSnap, paqSnap] =
+    await Promise.allSettled([
+      db.collection('incidencias').where('comunidad_id', '==', comunidadId).limit(100).get(),
+      db.collection('cuotas').where('comunidad_id', '==', comunidadId).get(),
+      db.collection('votaciones').where('comunidad_id', '==', comunidadId).where('activa', '==', true).get(),
+      db.collection('anuncios').where('comunidad_id', '==', comunidadId).limit(5).get(),
+      db.collection('alertas_comunidad').where('comunidad_id', '==', comunidadId).where('activa', '==', true).get(),
+      db.collection('paqueteria').where('comunidad_id', '==', comunidadId).get(),
+    ]);
+
+  // Incidencias abiertas
+  const incidencias = incSnap.status === 'fulfilled' ? incSnap.value.docs.map(d => d.data()) : [];
+  const abiertas    = incidencias.filter(d => !['resuelta', 'cerrada'].includes(d.estado as string ?? ''));
+  const urgentes    = abiertas.filter(d => d.prioridad === 'urgente');
+
+  // Cuotas pendientes del usuario
+  let cuotasPendientes = 0;
+  if (cuotasSnap.status === 'fulfilled') {
+    const cuotaResults = await Promise.allSettled(
+      cuotasSnap.value.docs.map(async (cuotaDoc) => {
+        const pagoSnap = await db.collection('cuotas').doc(cuotaDoc.id).collection('pagos').doc(uid).get();
+        return pagoSnap.exists && pagoSnap.data()?.estado === 'pagado' ? null : cuotaDoc.id;
+      }),
+    );
+    cuotasPendientes = cuotaResults.filter(r => r.status === 'fulfilled' && r.value !== null).length;
+  }
+
+  // Votaciones activas
+  const numVotaciones = votSnap.status === 'fulfilled' ? votSnap.value.size : 0;
+
+  // Alertas activas
+  const alertas   = alertasSnap.status === 'fulfilled' ? alertasSnap.value.docs.map(d => d.data()) : [];
+  const urgAlerta = alertas.find(a => a.prioridad === 'urgente');
+
+  // Mis paquetes pendientes
+  const paquetes     = paqSnap.status === 'fulfilled' ? paqSnap.value.docs.map(d => d.data()) : [];
+  const misPaquetes  = paquetes.filter(p =>
+    p.vecino_id === uid && ['recibido', 'notificado'].includes(p.estado as string),
+  );
+
+  // Anuncios recientes
+  const anuncios = anunciosSnap.status === 'fulfilled'
+    ? anunciosSnap.value.docs
+        .map(d => d.data())
+        .sort((a, b) => ((b.created_at as string) ?? '') > ((a.created_at as string) ?? '') ? 1 : -1)
+        .slice(0, 2)
+    : [];
+
+  const lines: string[] = ['Resumen de tu comunidad:'];
+
+  // Incidencias
+  if (abiertas.length === 0) {
+    lines.push('• Sin incidencias abiertas.');
+  } else {
+    const urg = urgentes.length > 0 ? `, ${urgentes.length} urgente${urgentes.length > 1 ? 's' : ''}` : '';
+    lines.push(`• ${abiertas.length} incidencia${abiertas.length > 1 ? 's' : ''} abierta${abiertas.length > 1 ? 's' : ''}${urg}.`);
+  }
+
+  // Cuotas
+  lines.push(cuotasPendientes === 0
+    ? '• Estás al día con tus cuotas.'
+    : `• Tienes ${cuotasPendientes} cuota${cuotasPendientes > 1 ? 's' : ''} pendiente${cuotasPendientes > 1 ? 's' : ''} de pago.`,
+  );
+
+  // Votaciones
+  if (numVotaciones > 0) {
+    lines.push(`• ${numVotaciones} votación${numVotaciones > 1 ? 'es' : ''} activa${numVotaciones > 1 ? 's' : ''} — recuerda votar.`);
+  }
+
+  // Paquetes / portería
+  if (misPaquetes.length > 0) {
+    lines.push(`• Tienes ${misPaquetes.length} ${misPaquetes.length === 1 ? 'paquete/recibo' : 'paquetes/recibos'} pendiente${misPaquetes.length > 1 ? 's' : ''} de recoger en portería.`);
+  }
+
+  // Alertas
+  if (urgAlerta) {
+    lines.push(`• ⚠️ Alerta urgente activa: "${urgAlerta.titulo}".`);
+  } else if (alertas.length > 0) {
+    lines.push(`• ${alertas.length} alerta${alertas.length > 1 ? 's' : ''} activa${alertas.length > 1 ? 's' : ''} en la comunidad.`);
+  }
+
+  // Anuncios
+  if (anuncios.length > 0) {
+    lines.push(`• Últimos anuncios: ${anuncios.map(a => `"${a.titulo}"`).join(' / ')}.`);
+  }
+
+  if (!isAdmin && abiertas.length === 0 && cuotasPendientes === 0 && numVotaciones === 0 && alertas.length === 0) {
+    lines.push('Todo en orden. No hay nada urgente que requiera tu atención.');
+  }
+
+  return lines.join('\n');
+}
+
 /** Orchestrates direct Firestore responses for known intents. Returns null to fall through to Gemini. */
 async function buildDirectFirestoreResponse(
   intent: NonNullable<Intent>,
@@ -449,6 +626,8 @@ async function buildDirectFirestoreResponse(
     case 'votaciones':  return directVotaciones(comunidadId);
     case 'anuncios':    return directAnuncios(comunidadId);
     case 'incidencias': return directIncidencias(comunidadId, uid, rol);
+    case 'porteria':    return directPorteria(comunidadId, uid, rol);
+    case 'resumen':     return directResumen(comunidadId, uid, rol);
   }
 }
 
