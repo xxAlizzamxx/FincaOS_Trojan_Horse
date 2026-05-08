@@ -186,7 +186,7 @@ export default function PorteriaPage() {
   // Vista de chat abierto
   if (chatAbierto) {
     return (
-      <div className="px-4 py-5 max-w-2xl flex flex-col h-[calc(100vh-8rem)]">
+      <div className="px-4 py-5 max-w-2xl mx-auto flex flex-col h-[calc(100vh-8rem)]">
         <button
           onClick={() => setChatAbierto(null)}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-finca-dark mb-3 transition-colors"
@@ -259,7 +259,7 @@ export default function PorteriaPage() {
   }
 
   return (
-    <div className="px-4 py-5 max-w-2xl space-y-4">
+    <div className="px-4 py-5 max-w-2xl mx-auto space-y-4">
       <div>
         <h1 className="text-xl font-bold text-finca-dark">Portería</h1>
         <p className="text-sm text-muted-foreground">Visitas y mensajes de vigilancia</p>

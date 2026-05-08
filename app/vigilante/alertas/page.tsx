@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { collection, query, where, addDoc, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -50,6 +51,7 @@ const prioridades = [
 
 export default function AlertasPage() {
   const { perfil, user } = useAuth();
+  const searchParams = useSearchParams();
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -60,6 +62,16 @@ export default function AlertasPage() {
   const [descripcion, setDescripcion] = useState('');
   const [tipo, setTipo] = useState('informativa');
   const [prioridad, setPrioridad] = useState('media');
+
+  // Auto-open form when ?tipo=emergencia is in URL
+  useEffect(() => {
+    if (searchParams?.get('tipo') === 'emergencia') {
+      setShowForm(true);
+      setTipo('emergencia');
+      setPrioridad('urgente');
+      setTitulo('Alerta de Emergencia');
+    }
+  }, [searchParams]);
 
   const comunidadId = perfil?.comunidad_id;
 

@@ -83,8 +83,13 @@ export default function ChatsVigilantePage() {
         </button>
 
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center text-finca-coral font-bold text-sm">
-            {selectedVecino.nombre_completo[0]?.toUpperCase()}
+          <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center text-finca-coral font-bold text-sm overflow-hidden shrink-0">
+            {selectedVecino.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={selectedVecino.avatar_url} alt={selectedVecino.nombre_completo} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            ) : (
+              selectedVecino.nombre_completo[0]?.toUpperCase()
+            )}
           </div>
           <div>
             <p className="font-semibold text-finca-dark">{selectedVecino.nombre_completo}</p>
