@@ -16,7 +16,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
-import { BotMessageSquare, Send, Loader2, ChevronDown, CheckCircle2, ExternalLink, Receipt, Vote, Megaphone, AlertTriangle, Scale, BookOpen, Package, DoorOpen, ShieldAlert } from 'lucide-react';
+import { BotMessageSquare, Send, Loader2, ChevronDown, CheckCircle2, ExternalLink, Receipt, Vote, Megaphone, AlertTriangle, Scale, BookOpen, Package, DoorOpen, ShieldAlert, Bell } from 'lucide-react';
 import Link from 'next/link';
 
 interface Message {
@@ -50,16 +50,16 @@ export function AIAssistantWidget() {
     { label: 'Anuncios',              icon: Megaphone,     message: '¿Cuáles son los últimos anuncios?' },
     { label: 'Mis incidencias',       icon: AlertTriangle, message: '¿Qué incidencias tengo abiertas?' },
     { label: 'Normativa',             icon: Scale,         message: '¿Qué dice la normativa sobre ruidos y horarios?' },
-    { label: 'Resumen comunidad',     icon: BookOpen,      message: '¿Cuál es el estado general de la comunidad?' },
+    { label: 'Resumen comunidad',     icon: BookOpen,      message: 'Dame un resumen del estado de mi comunidad' },
+    { label: 'Actividad en portería', icon: Bell,          message: '¿Qué hay pendiente en portería? Paquetes, visitas o recibos.' },
   ];
 
   const QUICK_ACTIONS_VIGILANTE = [
-    { label: '¿Hay recibos en portería?',  icon: Package,      message: '¿Cuántos paquetes o recibos hay pendientes en portería?' },
-    { label: '¿Visitas pendientes?',       icon: DoorOpen,     message: '¿Cuántas visitas están esperando autorización?' },
-    { label: '¿Alertas activas?',          icon: ShieldAlert,  message: '¿Qué alertas comunitarias están activas?' },
-    { label: 'Incidencias abiertas',       icon: AlertTriangle,message: '¿Qué incidencias hay abiertas en la comunidad?' },
-    { label: 'Resumen del turno',          icon: BookOpen,     message: '¿Cómo está la comunidad en este momento?' },
-    { label: 'Normativa de accesos',       icon: Scale,        message: '¿Cuál es la normativa para el control de accesos y visitantes?' },
+    { label: 'Actividad en portería', icon: Bell,          message: '¿Qué hay pendiente en portería? Paquetes, visitas o recibos.' },
+    { label: '¿Alertas activas?',     icon: ShieldAlert,   message: '¿Qué alertas comunitarias están activas?' },
+    { label: 'Incidencias abiertas',  icon: AlertTriangle, message: '¿Qué incidencias hay abiertas en la comunidad?' },
+    { label: 'Resumen del turno',     icon: BookOpen,      message: 'Dame un resumen del estado de mi comunidad' },
+    { label: 'Normativa de accesos',  icon: Scale,         message: '¿Cuál es la normativa para el control de accesos y visitantes?' },
   ];
 
   const QUICK_ACTIONS = rol === 'vigilante' ? QUICK_ACTIONS_VIGILANTE : QUICK_ACTIONS_VECINO;
