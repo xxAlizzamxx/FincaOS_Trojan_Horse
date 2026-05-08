@@ -21,6 +21,9 @@ const EVENT_LABELS: Record<SoundEvent, string> = {
   publicacion_tablon:  '📋 Tablón',
   pago_realizado:      '💳 Pago',
   documento_publicado: '📄 Documento',
+  mensaje_recibido:    '💬 Mensaje',
+  notificacion_nueva:  '🔔 Notificación',
+  alerta_comunidad:    '🚨 Alerta',
 };
 
 // Mapa de efectos GSAP para cada evento
@@ -31,6 +34,9 @@ const GSAP_FX: Record<SoundEvent, (el?: Element | null) => void> = {
   publicacion_tablon:  FX.tablon,
   pago_realizado:      FX.pago,
   documento_publicado: FX.documento,
+  mensaje_recibido:    (el) => el?.classList.add('sound-pop'),
+  notificacion_nueva:  (el) => el?.classList.add('sound-pop'),
+  alerta_comunidad:    (el) => el?.classList.add('sound-shake'),
 };
 
 export function SoundDemo() {
