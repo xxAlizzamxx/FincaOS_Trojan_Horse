@@ -1,19 +1,59 @@
 /**
- * FincaOS Service Worker — v3
+ * FincaOS Service Worker — v5
  *
- * Estrategias de caché:
- *  - Shell estático (/offline, /manifest.json) → precache en install
- *  - Next.js JS/CSS (/_next/static/) + fuentes  → cache-first (inmutables)
- *  - Imágenes (.png/.jpg/.svg/etc.)             → cache-first
- *  - Navegación (HTML)                          → network-first + fallback /offline
- *  - APIs, Firebase, auth                       → network-only (nunca interceptar)
+ * Handles:
+ *  1. FCM background push notifications (Firebase Messaging compat SDK)
+ *  2. Cache strategies for offline / PWA support
  *
- * Versionado: incrementar CACHE_STATIC y CACHE_PAGES cuando cambie el deploy.
+ * Cache versioning: bump CACHE_STATIC / CACHE_PAGES on every deploy.
  */
 
-const CACHE_STATIC  = 'fincaos-static-v4';   // JS, CSS, fuentes, imágenes
-const CACHE_PAGES   = 'fincaos-pages-v4';     // páginas HTML navegadas
-const ALL_CACHES    = [CACHE_STATIC, CACHE_PAGES];
+// ── Firebase Messaging (background push) ────────────────────────────────────
+// MUST be at the very top so Firebase SDK intercepts the `push` event
+// before any other listener. Without this the raw push event fires but
+// FCM tokens generated with getToken() won't trigger showNotification.
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
+
+firebase.initializeApp({
+  apiKey:            'AIzaSyDXEHnQ5reKyOe1yVAJG3fgLQZHecRBjls',
+  authDomain:        'fincaostrojanhorse.firebaseapp.com',
+  projectId:         'fincaostrojanhorse',
+  storageBucket:     'fincaostrojanhorse.firebasestorage.app',
+  messagingSenderId: '870092780057',
+  appId:             '1:870092780057:web:f1d34431391d86d638f088',
+});
+
+const messaging = firebase.messaging();
+
+/**
+ * onBackgroundMessage — fires for data-only FCM messages (no `notification`
+ * field in the webpush payload). Notification messages without this handler
+ * would be displayed automatically by FCM but without custom icon/badge.
+ * We always send data-only from the Admin SDK so we always end up here.
+ */
+messaging.onBackgroundMessage((payload) => {
+  const notif = payload.notification ?? {};
+  const data  = payload.data        ?? {};
+
+  const title = notif.title || data.title || 'FincaOS';
+  const body  = notif.body  || data.body  || '';
+  const url   = data.url    || notif.click_action || '/inicio';
+
+  self.registration.showNotification(title, {
+    body,
+    icon:    '/logo-app.png',
+    badge:   '/logo-app.png',
+    data:    { url },
+    vibrate: [200, 100, 200],
+  });
+});
+
+// ── Cache constants ──────────────────────────────────────────────────────────
+
+const CACHE_STATIC = 'fincaos-static-v5';
+const CACHE_PAGES  = 'fincaos-pages-v5';
+const ALL_CACHES   = [CACHE_STATIC, CACHE_PAGES];
 
 /** Recursos precacheados en install — offline fallback garantizado. */
 const SHELL_URLS = [
@@ -21,7 +61,7 @@ const SHELL_URLS = [
   '/manifest.json',
 ];
 
-/* ── Helpers ───────────────────────────────────────────────────────────────── */
+/* ── Helpers ────────────────────────────────────────────────────────────────── */
 
 function isCacheable(url) {
   try {
@@ -32,7 +72,6 @@ function isCacheable(url) {
   }
 }
 
-/** Guarda en caché de forma segura: nunca lanza. */
 async function safePut(cacheName, request, response) {
   try {
     const url = typeof request === 'string' ? request : request.url;
@@ -44,10 +83,6 @@ async function safePut(cacheName, request, response) {
   }
 }
 
-/**
- * fetch con AbortController timeout.
- * Si la red no responde en `ms` ms → rechaza con AbortError.
- */
 function fetchWithTimeout(request, ms) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
@@ -55,7 +90,6 @@ function fetchWithTimeout(request, ms) {
     .finally(() => clearTimeout(timer));
 }
 
-/** Devuelve true si la URL es de una API o servicio externo que no debe cachearse. */
 function isNetworkOnly(url) {
   return (
     url.includes('/api/')                            ||
@@ -67,11 +101,12 @@ function isNetworkOnly(url) {
     url.includes('googleapis.com/upload')            ||
     url.includes('storage.googleapis.com')           ||
     url.includes('stripe.com')                       ||
-    url.includes('cloudinary.com')
+    url.includes('cloudinary.com')                   ||
+    url.includes('gstatic.com')
   );
 }
 
-/* ── Install: precache shell ───────────────────────────────────────────────── */
+/* ── Install: precache shell ────────────────────────────────────────────────── */
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -89,7 +124,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-/* ── Activate: eliminar caches anteriores ──────────────────────────────────── */
+/* ── Activate: eliminar caches anteriores ───────────────────────────────────── */
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -105,22 +140,16 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-/* ── Fetch ─────────────────────────────────────────────────────────────────── */
+/* ── Fetch ──────────────────────────────────────────────────────────────────── */
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // Solo GET
   if (request.method !== 'GET') return;
-
-  // Solo http/https (ignorar chrome-extension://, blob:, etc.)
   if (!isCacheable(request.url)) return;
-
-  // APIs y servicios externos: network-only (nunca interceptar)
   if (isNetworkOnly(request.url)) return;
 
-  // ── A. Activos estáticos Next.js (/_next/static/) — cache-first ───────────
-  // Son inmutables (nombre incluye hash): servir desde caché siempre.
+  // A. Activos estáticos Next.js (/_next/static/) — cache-first (inmutables)
   if (request.url.includes('/_next/static/')) {
     event.respondWith(
       caches.match(request, { cacheName: CACHE_STATIC }).then((cached) => {
@@ -134,7 +163,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── B. Fuentes web — cache-first ──────────────────────────────────────────
+  // B. Fuentes web — cache-first
   if (request.url.match(/\.(woff2?|ttf|otf|eot)(\?.*)?$/)) {
     event.respondWith(
       caches.match(request).then((cached) => {
@@ -148,7 +177,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── C. Imágenes — cache-first ─────────────────────────────────────────────
+  // C. Imágenes — cache-first
   if (request.url.match(/\.(png|jpe?g|gif|svg|ico|webp|avif)(\?.*)?$/)) {
     event.respondWith(
       caches.match(request).then((cached) => {
@@ -164,10 +193,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── D. Navegación HTML — network-first (3s timeout), fallback /offline ──────
-  // La app usa Firebase JS SDK (no SSR con datos), por lo que la shell HTML
-  // no caduca: podemos cachearla y servirla offline sin problemas de stale data.
-  // Timeout de 3s evita esperar indefinidamente en redes lentas/portal cautivo.
+  // D. Navegación HTML — network-first (3s timeout), fallback /offline
   if (request.mode === 'navigate') {
     event.respondWith(
       fetchWithTimeout(request, 3000)
@@ -182,38 +208,9 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-
-  // ── E. Resto (JS de terceros, etc.) — network-first simple ───────────────
-  // No almacenar en caché para evitar crecer indefinidamente.
 });
 
-/* ── Push notifications ────────────────────────────────────────────────────── */
-
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-
-  // Supports both FCM webpush format { notification:{title,body}, fcmOptions:{link} }
-  // and direct format { title, body, url }
-  let payload = {};
-  try { payload = event.data.json(); } catch { return; }
-
-  const title = payload.notification?.title || payload.title || 'FincaOS';
-  const body  = payload.notification?.body  || payload.body  || '';
-  const url   = payload.fcmOptions?.link    || payload.data?.url || payload.url || '/inicio';
-  const icon  = payload.notification?.icon  || '/logo-app.png';
-
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon,
-      badge:   '/logo-app.png',
-      data:    { url },
-      vibrate: [200, 100, 200],
-    })
-  );
-});
-
-/* ── Notification click ────────────────────────────────────────────────────── */
+/* ── Notification click ─────────────────────────────────────────────────────── */
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

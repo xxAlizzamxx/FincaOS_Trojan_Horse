@@ -336,6 +336,15 @@
         { "fieldPath": "vigilante_id", "order": "ASCENDING" },
         { "fieldPath": "estado", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "rondas_vigilancia",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "vigilante_id", "order": "ASCENDING" },
+        { "fieldPath": "iniciada_at", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

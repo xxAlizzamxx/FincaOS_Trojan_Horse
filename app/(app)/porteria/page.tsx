@@ -203,6 +203,22 @@ export default function PorteriaPage() {
         no_leidos_vigilante: 1,
         updated_at:          new Date().toISOString(),
       });
+
+      // Push al vigilante (fire-and-forget)
+      if (comunidadId && chatAbierto.vigilante_id) {
+        fetch('/api/notificaciones/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            comunidad_id:  comunidadId,
+            title:         `Vecino: ${perfil?.nombre_completo?.split(' ')[0] ?? 'Residente'}`,
+            body:          texto.trim().slice(0, 100),
+            url:           '/vigilante/chats',
+            targetUserIds: [chatAbierto.vigilante_id],
+          }),
+        }).catch(() => {});
+      }
+
       setTexto('');
     } catch {
       toast.error('Error al enviar');

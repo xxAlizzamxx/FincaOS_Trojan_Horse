@@ -96,17 +96,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, sent: 0 });
     }
 
-    // 3. Send multicast push
+    // 3. Send multicast push — data-only so onBackgroundMessage always fires
+    // in the service worker regardless of whether the app is open or closed.
     const response = await getMessaging().sendEachForMulticast({
       tokens,
-      notification: { title, body: msgBody },
       webpush: {
-        notification: {
-          icon: '/navegador.png',
-          badge: '/navegador.png',
-          data: { url },
+        data: {
+          title,
+          body: msgBody,
+          url,
+          icon: '/logo-app.png',
         },
-        fcmOptions: { link: url },
+        headers: {
+          TTL: '86400',
+          Urgency: 'high',
+        },
       },
     });
 

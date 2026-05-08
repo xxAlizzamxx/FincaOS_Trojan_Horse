@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Download, FileSpreadsheet, Users, DoorOpen, Loader2, CheckCircle2,
+  Download, FileSpreadsheet, Navigation, DoorOpen, Loader2, CheckCircle2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { subDays, format } from 'date-fns';
@@ -244,6 +244,8 @@ export default function AdminReportesPage() {
     onExport,
     loading,
     accentColor,
+    iconBg,
+    iconColor,
     children,
   }: {
     icon: typeof Download;
@@ -252,17 +254,16 @@ export default function AdminReportesPage() {
     onExport: () => void;
     loading: boolean;
     accentColor: string;
+    iconBg: string;
+    iconColor: string;
     children?: React.ReactNode;
   }) => (
     <Card className="border-0 shadow-sm overflow-hidden">
       <div className={cn('h-1', accentColor)} />
       <CardHeader className="pb-2">
         <div className="flex items-start gap-3">
-          <div className={cn(
-            'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-            accentColor.replace('bg-', 'bg-').replace('-500', '-50').replace('-600', '-50'),
-          )}>
-            <Icon className={cn('w-5 h-5', accentColor.replace('bg-', 'text-'))} />
+          <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', iconBg)}>
+            <Icon className={cn('w-5 h-5', iconColor)} />
           </div>
           <div>
             <CardTitle className="text-base font-semibold text-finca-dark">{title}</CardTitle>
@@ -332,6 +333,8 @@ export default function AdminReportesPage() {
         onExport={exportarCuotas}
         loading={loadingCuotas}
         accentColor="bg-green-500"
+        iconBg="bg-green-50"
+        iconColor="text-green-600"
       >
         <p className="text-xs text-muted-foreground">
           Columnas: cuota · monto · vencimiento · vecino · piso · estado · fecha pago
@@ -346,6 +349,8 @@ export default function AdminReportesPage() {
         onExport={exportarAccesos}
         loading={loadingAccesos}
         accentColor="bg-blue-500"
+        iconBg="bg-blue-50"
+        iconColor="text-blue-600"
       >
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">Período:</p>
@@ -358,12 +363,14 @@ export default function AdminReportesPage() {
 
       {/* Reporte: Rondas */}
       <ReporteCard
-        icon={Users}
+        icon={Navigation}
         title="Historial de rondas"
         description="Rondas de vigilancia con sus checkpoints detallados"
         onExport={exportarRondas}
         loading={loadingRondas}
-        accentColor="bg-finca-coral"
+        accentColor="bg-orange-500"
+        iconBg="bg-orange-50"
+        iconColor="text-orange-600"
       >
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">Período:</p>

@@ -182,9 +182,10 @@ export async function notifyEvent(
     // Send push notifications if requested
     if (options?.pushNotify) {
       const pushPayload = {
-        comunidadId,
-        titulo: options.pushTitle || title,
+        comunidad_id: comunidadId,
+        title: options.pushTitle || title,
         body: options.pushBody || body,
+        url: link,
         targetUserIds: options.targetUserIds,
       };
 

@@ -417,7 +417,7 @@ export default function IncidenciaDetailPage() {
     try {
       const nuevo = await actualizarEstadoIncidencia(incidencia.id, estadoActual, perfil.id);
 
-      // Notificar al autor
+      // Notificar al autor (Firestore + push)
       if (incidencia.autor_id !== perfil.id && perfil.comunidad_id) {
         const nuevoCfg = ESTADO_CONFIG[nuevo];
         notificarUsuario(
@@ -428,6 +428,17 @@ export default function IncidenciaDetailPage() {
           `Estado actualizado a "${nuevoCfg?.label}"`,
           `/incidencias/${incidencia.id}`,
         );
+        fetch('/api/notificaciones/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            comunidad_id:  perfil.comunidad_id,
+            title:         `Incidencia: ${incidencia.titulo.slice(0, 50)}`,
+            body:          `Estado actualizado a "${nuevoCfg?.label}"`,
+            url:           `/incidencias/${incidencia.id}`,
+            targetUserIds: [incidencia.autor_id],
+          }),
+        }).catch(() => {});
       }
 
       // Emit status change event for notification system
@@ -518,7 +529,7 @@ export default function IncidenciaDetailPage() {
       });
       setNuevo('');
 
-      // onSnapshot listener will automatically update comentarios
+      // Notificar al autor del comentario (Firestore + push)
       if (incidencia && incidencia.autor_id !== perfil.id && perfil.comunidad_id) {
         notificarUsuario(
           incidencia.autor_id, perfil.comunidad_id, 'comentario',
@@ -526,6 +537,17 @@ export default function IncidenciaDetailPage() {
           `${perfil.nombre_completo} comentó en tu incidencia`,
           `/incidencias/${incidencia.id}`,
         );
+        fetch('/api/notificaciones/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            comunidad_id:  perfil.comunidad_id,
+            title:         `Nuevo comentario en tu incidencia`,
+            body:          `${perfil.nombre_completo}: ${nuevoComentario.trim().slice(0, 80)}`,
+            url:           `/incidencias/${incidencia.id}`,
+            targetUserIds: [incidencia.autor_id],
+          }),
+        }).catch(() => {});
       }
 
       // Emit comment.created event for notification system

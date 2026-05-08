@@ -30,16 +30,9 @@ export function usePushNotifications(userId: string | undefined) {
       const messaging = await getFirebaseMessaging();
       if (!messaging) return true; // permission granted but FCM not supported
 
-      // Use the firebase-messaging-sw.js registration so FCM can handle
-      // background messages properly. Fall back to any registered SW if not found.
-      let swReg: ServiceWorkerRegistration | undefined;
-      try {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        swReg = regs.find(r => r.active?.scriptURL.includes('firebase-messaging-sw'))
-          ?? await navigator.serviceWorker.ready;
-      } catch {
-        swReg = await navigator.serviceWorker.ready;
-      }
+      // Use sw.js — it now embeds Firebase Messaging SDK so FCM tokens
+      // generated here will correctly trigger onBackgroundMessage in background.
+      const swReg = await navigator.serviceWorker.ready;
 
       const token = await getToken(messaging, {
         vapidKey: VAPID_KEY,
