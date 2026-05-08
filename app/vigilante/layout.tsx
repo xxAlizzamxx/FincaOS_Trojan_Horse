@@ -15,17 +15,17 @@ import { PageTransition } from '@/components/animation/PageTransition';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/vigilante',           icon: LayoutDashboard, label: 'Dashboard'    },
-  { href: '/vigilante/chats',     icon: MessageSquare,   label: 'Chats'        },
-  { href: '/vigilante/accesos',   icon: DoorOpen,        label: 'Accesos'      },
-  { href: '/vigilante/paqueteria',icon: Package,         label: 'Paqueteria'   },
-  { href: '/vigilante/alertas',   icon: AlertTriangle,   label: 'Alertas'      },
-  { href: '/vigilante/bitacora',  icon: ClipboardList,   label: 'Bitacora'     },
+  { href: '/vigilante',            icon: LayoutDashboard, label: 'Dashboard'  },
+  { href: '/vigilante/chats',      icon: MessageSquare,   label: 'Chats'      },
+  { href: '/vigilante/accesos',    icon: DoorOpen,        label: 'Accesos'    },
+  { href: '/vigilante/paqueteria', icon: Package,         label: 'Paqueteria' },
+  { href: '/vigilante/alertas',    icon: AlertTriangle,   label: 'Alertas'    },
+  { href: '/vigilante/bitacora',   icon: ClipboardList,   label: 'Bitacora'   },
 ];
 
 export default function VigilanteLayout({ children }: { children: React.ReactNode }) {
   const { user, perfil, loading, signOut } = useAuth();
-  const router = useRouter();
+  const router   = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -38,7 +38,7 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
+        <div className="w-8 h-8 rounded-full border-4 border-finca-coral border-t-transparent animate-spin" />
       </div>
     );
   }
@@ -47,8 +47,8 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
 
   const Sidebar = () => (
     <aside className="w-64 bg-white border-r border-border flex flex-col h-full">
-      {/* Logo */}
-      <div className="px-5 py-4 bg-gradient-to-br from-emerald-600 to-emerald-700">
+      {/* Logo — misma cabecera que el panel admin */}
+      <div className="px-5 py-4 bg-gradient-to-br from-finca-coral to-finca-salmon">
         <Image
           src="/Logo sin bg.png"
           alt="FincaOS"
@@ -74,11 +74,11 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
                 isActive
-                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                  : 'text-finca-dark/60 hover:text-finca-dark hover:bg-emerald-50'
+                  ? 'bg-finca-coral text-white shadow-sm shadow-finca-coral/30'
+                  : 'text-finca-dark/60 hover:text-finca-dark hover:bg-finca-peach/30',
               )}
             >
-              <item.icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-emerald-600/70')} />
+              <item.icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-finca-coral/70')} />
               {item.label}
             </Link>
           );
@@ -89,9 +89,9 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
       <div className="p-3 border-t border-border space-y-0.5">
         <Link
           href="/inicio"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-finca-dark/60 hover:text-finca-dark hover:bg-emerald-50 transition-colors"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-finca-dark/60 hover:text-finca-dark hover:bg-finca-peach/30 transition-colors"
         >
-          <Users className="w-4 h-4 text-emerald-600/70" />
+          <Users className="w-4 h-4 text-finca-coral/70" />
           Vista comunidad
         </Link>
         <button
@@ -134,15 +134,15 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
             <Menu className="w-5 h-5" />
           </Button>
           <div className="flex-1 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <ShieldCheck className="w-4 h-4 text-finca-coral" />
             <p className="text-sm font-medium text-finca-dark">
               {navItems.find((n) =>
-                pathname === n.href || (n.href !== '/vigilante' && pathname.startsWith(n.href))
+                pathname === n.href || (n.href !== '/vigilante' && pathname.startsWith(n.href)),
               )?.label || 'Vigilancia'}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
+            <span className="text-xs bg-finca-peach/60 text-finca-coral px-2 py-0.5 rounded-full font-medium">
               En turno
             </span>
             {perfil && <AvatarVecino perfil={perfil} size="sm" />}
