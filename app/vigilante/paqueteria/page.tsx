@@ -23,6 +23,8 @@ interface Paquete {
   id: string;
   destinatario_nombre: string;
   apartamento: string;
+  vecino_id?: string;
+  remitente?: string;
   tipo: string;
   descripcion?: string;
   estado: string;
@@ -68,6 +70,8 @@ export default function PaqueteriaPage() {
   // Form
   const [nombre, setNombre] = useState('');
   const [apartamento, setApartamento] = useState('');
+  const [vecinoId, setVecinoId] = useState('');
+  const [remitente, setRemitente] = useState('');
   const [tipo, setTipo] = useState('paquete');
   const [reciboTipo, setReciboTipo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -89,6 +93,7 @@ export default function PaqueteriaPage() {
 
   function seleccionarVecino(v: Vecino) {
     setNombre(v.nombre_completo);
+    setVecinoId(v.id);
     const apto = [v.torre && `Torre ${v.torre}`, v.piso && `Piso ${v.piso}`, v.puerta && `Apto ${v.puerta}`].filter(Boolean).join(' - ');
     setApartamento(apto || v.puerta || '');
     setBusquedaVecino(v.nombre_completo);
@@ -121,21 +126,23 @@ export default function PaqueteriaPage() {
 
     try {
       await addDoc(collection(db, 'paqueteria'), {
-        comunidad_id: comunidadId,
-        vigilante_id: user.uid,
+        comunidad_id:        comunidadId,
+        vigilante_id:        user.uid,
         destinatario_nombre: nombre,
         apartamento,
+        ...(vecinoId ? { vecino_id: vecinoId } : {}),
+        ...(remitente  ? { remitente }           : {}),
         tipo,
         ...(tipo === 'recibo' && reciboTipo ? { recibo_tipo: reciboTipo } : {}),
-        descripcion: descripcion || null,
-        estado: 'recibido',
-        created_at: new Date().toISOString(),
+        descripcion:  descripcion || null,
+        estado:       'recibido',
+        created_at:   new Date().toISOString(),
         entregado_at: null,
       });
 
       toast.success(tipo === 'recibo' ? 'Recibo registrado' : 'Paquete registrado');
       setShowForm(false);
-      setNombre(''); setApartamento(''); setTipo('paquete'); setReciboTipo(''); setDescripcion('');
+      setNombre(''); setApartamento(''); setVecinoId(''); setRemitente(''); setTipo('paquete'); setReciboTipo(''); setDescripcion('');
     } catch (err) {
       console.error('[Paqueteria] Error:', err);
       toast.error('Error al registrar');
@@ -259,7 +266,7 @@ export default function PaqueteriaPage() {
                   <Input
                     placeholder="Buscar residente por nombre..."
                     value={busquedaVecino}
-                    onChange={e => { setBusquedaVecino(e.target.value); setNombre(e.target.value); setShowSuggestions(true); }}
+                    onChange={e => { setBusquedaVecino(e.target.value); setNombre(e.target.value); setVecinoId(''); setShowSuggestions(true); }}
                     onFocus={() => setShowSuggestions(true)}
                     className="pl-9"
                     required
@@ -286,6 +293,11 @@ export default function PaqueteriaPage() {
               <div className="space-y-1.5">
                 <Label htmlFor="p-apto">Apartamento / Ubicacion *</Label>
                 <Input id="p-apto" placeholder="Se rellena al seleccionar residente" value={apartamento} onChange={e => setApartamento(e.target.value)} required />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="p-remitente">Remitente / Transportadora (opcional)</Label>
+                <Input id="p-remitente" placeholder="Ej: Coordinadora, Servientrega, Amazon..." value={remitente} onChange={e => setRemitente(e.target.value)} />
               </div>
 
               {/* Tipo selector */}

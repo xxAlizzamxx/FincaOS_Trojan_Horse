@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   collection, addDoc, onSnapshot, query, orderBy, doc, getDoc, setDoc, updateDoc, increment,
 } from 'firebase/firestore';
@@ -60,8 +60,10 @@ export default function ChatVigilante({
   const [sending, setSending] = useState(false);
   const [showPlantillas, setShowPlantillas] = useState(true);
   const [imgError, setImgError] = useState(false);
+  const [vecinoTyping, setVecinoTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const chatId = getChatId(vigilanteId, vecinoId);
 
@@ -83,12 +85,39 @@ export default function ChatVigilante({
     return () => unsub();
   }, [chatId]);
 
+  // Listener del doc del chat → detecta typing_vecino
+  useEffect(() => {
+    const chatRef = doc(db, 'chats_vigilancia', chatId);
+    const unsub = onSnapshot(chatRef, (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.typing_vecino && data.typing_vecino_at) {
+        const age = Date.now() - new Date(data.typing_vecino_at).getTime();
+        setVecinoTyping(age < 5000); // activo si escribió hace menos de 5s
+      } else {
+        setVecinoTyping(false);
+      }
+    }, () => {});
+    return () => unsub();
+  }, [chatId]);
+
+  // Typing indicator: debounce — escribe typing_vigilante en Firestore
+  const notifyTyping = useCallback(() => {
+    const chatRef = doc(db, 'chats_vigilancia', chatId);
+    updateDoc(chatRef, { typing_vigilante: true, typing_vigilante_at: new Date().toISOString() }).catch(() => {});
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      updateDoc(chatRef, { typing_vigilante: false }).catch(() => {});
+    }, 3000);
+  }, [chatId]);
+
   // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [mensajes]);
+  }, [mensajes, vecinoTyping]);
 
   // Ensure chat doc exists
   async function ensureChatDoc() {
@@ -187,7 +216,7 @@ export default function ChatVigilante({
         </div>
 
         {/* Mensajes */}
-        <div ref={scrollRef} className="h-80 overflow-y-auto space-y-2 rounded-xl bg-gray-50 p-3">
+        <div ref={scrollRef} className="h-80 overflow-y-auto space-y-2 rounded-xl bg-gray-50 p-3 scroll-smooth">
           {mensajes.length === 0 && (
             <div className="text-center py-12 space-y-2">
               <Send className="w-8 h-8 text-muted-foreground mx-auto opacity-40" />
@@ -260,6 +289,25 @@ export default function ChatVigilante({
           })}
         </div>
 
+        {/* Typing indicator — vecino escribiendo */}
+        {vecinoTyping && (
+          <div className="flex items-center gap-2 px-1">
+            <div className="w-6 h-6 rounded-full bg-finca-peach flex items-center justify-center shrink-0 text-[10px] font-bold text-finca-coral">
+              {vecinoNombre[0]?.toUpperCase()}
+            </div>
+            <div className="bg-white border border-border rounded-2xl rounded-bl-md px-3 py-2 flex items-center gap-1">
+              {[0, 150, 300].map(delay => (
+                <span
+                  key={delay}
+                  className="w-1.5 h-1.5 bg-finca-coral/60 rounded-full animate-bounce"
+                  style={{ animationDelay: `${delay}ms` }}
+                />
+              ))}
+            </div>
+            <span className="text-[10px] text-muted-foreground">escribiendo...</span>
+          </div>
+        )}
+
         {/* Input */}
         <div className="space-y-2">
           <div className="flex items-center gap-1">
@@ -280,7 +328,7 @@ export default function ChatVigilante({
               ref={inputRef}
               placeholder="Escribe un mensaje..."
               value={texto}
-              onChange={(e) => setTexto(e.target.value)}
+              onChange={(e) => { setTexto(e.target.value); notifyTyping(); }}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage(texto)}
               className="flex-1 text-sm"
               disabled={sending}
