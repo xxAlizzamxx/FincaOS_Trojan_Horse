@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  collection, query, where, getDocs, addDoc, orderBy, onSnapshot,
+  collection, query, where, getDocs, addDoc, onSnapshot,
   doc, setDoc, updateDoc, getDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
@@ -105,16 +105,16 @@ export default function AccesosPage() {
     const q = query(
       collection(db, 'accesos'),
       where('comunidad_id', '==', comunidadId),
-      orderBy('hora_entrada', 'desc'),
     );
 
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as Acceso))
-        .filter(a => new Date(a.hora_entrada) >= hoy);
+        .filter(a => new Date(a.hora_entrada) >= hoy)
+        .sort((a, b) => new Date(b.hora_entrada).getTime() - new Date(a.hora_entrada).getTime());
       setAccesos(items);
       setLoading(false);
-    }, () => setLoading(false));
+    }, (err) => { console.error('[Accesos] onSnapshot error:', err); setLoading(false); });
 
     return () => unsub();
   }, [comunidadId]);

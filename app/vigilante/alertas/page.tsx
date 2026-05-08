@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, query, where, addDoc, onSnapshot, orderBy, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, addDoc, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -68,14 +68,15 @@ export default function AlertasPage() {
     const q = query(
       collection(db, 'alertas_comunidad'),
       where('comunidad_id', '==', comunidadId),
-      orderBy('created_at', 'desc'),
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Alerta));
+      const items = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as Alerta))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setAlertas(items);
       setLoading(false);
-    }, () => setLoading(false));
+    }, (err) => { console.error('[Alertas] onSnapshot error:', err); setLoading(false); });
 
     return () => unsub();
   }, [comunidadId]);
