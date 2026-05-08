@@ -1,4 +1,4 @@
-export type Rol = 'vecino' | 'presidente' | 'admin' | 'mediador';
+export type Rol = 'vecino' | 'presidente' | 'admin' | 'mediador' | 'vigilante';
 export type EstadoIncidencia =
   | 'pendiente'      // inicial / "Reportada" en UI
   | 'en_revision'
@@ -366,4 +366,105 @@ export interface Mediacion {
   valoracion_comentario?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/* ─── Vigilancia ─── */
+
+export type TipoVisitante = 'visitante' | 'repartidor' | 'proveedor' | 'tecnico' | 'familiar';
+export type EstadoAcceso = 'esperando' | 'autorizado' | 'rechazado' | 'expirado';
+export type TipoPaquete = 'paquete' | 'recibo_luz' | 'recibo_agua' | 'recibo_gas' | 'recibo_admin' | 'correspondencia' | 'documento_legal';
+export type EstadoPaquete = 'recibido' | 'notificado' | 'entregado';
+export type TipoAlertaComunidad = 'corte_agua' | 'corte_luz' | 'corte_gas' | 'mantenimiento' | 'emergencia' | 'seguridad' | 'general';
+
+export interface AccesoVisitante {
+  id: string;
+  comunidad_id: string;
+  vigilante_id: string;
+  visitante_nombre: string;
+  visitante_cedula?: string;
+  tipo: TipoVisitante;
+  vecino_id: string;
+  apartamento_destino: string;
+  motivo?: string;
+  estado: EstadoAcceso;
+  hora_entrada: string;
+  hora_salida?: string | null;
+  created_at: string;
+}
+
+export interface PaqueteVigilancia {
+  id: string;
+  comunidad_id: string;
+  vigilante_id: string;
+  vecino_id: string;
+  tipo: TipoPaquete;
+  descripcion: string;
+  remitente?: string;
+  foto_url?: string | null;
+  estado: EstadoPaquete;
+  created_at: string;
+  entregado_at?: string | null;
+}
+
+export interface AlertaComunidad {
+  id: string;
+  comunidad_id: string;
+  creado_por: string;
+  tipo: TipoAlertaComunidad;
+  titulo: string;
+  descripcion: string;
+  prioridad: 'normal' | 'alta' | 'urgente';
+  activa: boolean;
+  created_at: string;
+  expires_at?: string | null;
+}
+
+export interface ChatVigilancia {
+  id: string;
+  comunidad_id: string;
+  vigilante_id: string;
+  vecino_id: string;
+  vecino_nombre: string;
+  vecino_torre?: string | null;
+  vecino_piso?: string | null;
+  vecino_puerta?: string | null;
+  ultimo_mensaje: string;
+  no_leidos_vigilante: number;
+  no_leidos_vecino: number;
+  updated_at: string;
+}
+
+export interface MensajeVigilancia {
+  id: string;
+  sender_id: string;
+  texto: string;
+  tipo: 'texto' | 'plantilla' | 'imagen' | 'audio' | 'sistema';
+  plantilla_tipo?: 'paquete' | 'visita' | 'recibo' | 'emergencia' | 'vehiculo' | 'correspondencia' | 'tecnico';
+  leido: boolean;
+  created_at: string;
+}
+
+export interface BitacoraTurno {
+  id: string;
+  comunidad_id: string;
+  vigilante_id: string;
+  turno: 'diurno' | 'nocturno';
+  fecha: string;
+  notas: string;
+  pendientes_siguiente_turno?: string;
+  incidencias_detectadas?: string[];
+  created_at: string;
+}
+
+export interface RondaVigilancia {
+  id: string;
+  comunidad_id: string;
+  vigilante_id: string;
+  turno: 'diurno' | 'nocturno';
+  checkpoints: Array<{
+    zona: string;
+    hora: string;
+    observacion?: string;
+  }>;
+  created_at: string;
 }
