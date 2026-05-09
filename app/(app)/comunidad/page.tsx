@@ -356,6 +356,34 @@ export default function ComunidadPage() {
         </TabsList>
 
         <TabsContent value="tablón" className="mt-4 space-y-3">
+          {/* Alertas activas al tope del tablón */}
+          {alertas.length > 0 && alertas.map(a => {
+            const colorClass = ALERTA_COLORS[a.tipo] ?? ALERTA_COLORS.informativa;
+            const [bg, text] = colorClass.split(' ');
+            const IconComp = ALERTA_ICONS[a.tipo] ?? Info;
+            return (
+              <Card key={a.id} className={cn(
+                'border-0 shadow-sm',
+                a.prioridad === 'urgente' && 'border-l-4 border-l-red-500 bg-red-50/40',
+                a.prioridad === 'alta'    && 'border-l-4 border-l-orange-500 bg-orange-50/30',
+                a.prioridad === 'media'   && 'border-l-4 border-l-yellow-400',
+              )}>
+                <CardContent className="p-3 flex items-start gap-3">
+                  <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', bg)}>
+                    <IconComp className={cn('w-4 h-4', text)} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">⚠ Alerta activa</p>
+                    </div>
+                    <p className="text-sm font-semibold text-finca-dark">{a.titulo}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{a.descripcion}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+
           {anuncios.length === 0 ? (
             <div className="py-10 text-center space-y-2">
               <Megaphone className="w-10 h-10 text-muted-foreground/30 mx-auto" />
