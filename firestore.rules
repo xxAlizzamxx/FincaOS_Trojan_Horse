@@ -512,6 +512,22 @@ service cloud.firestore {
                         || isAdminOfCommunity(resource.data.comunidad_id));
     }
 
+    // ── Pases de acceso QR (generados por vecino, validados por portería) ──
+
+    match /pases_acceso/{paseId} {
+      // Cualquier miembro autenticado de la comunidad puede leer
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      // El propio vecino crea su pase
+      allow create: if isAuth()
+                    && belongsToCommunity(request.resource.data.comunidad_id)
+                    && request.resource.data.vecino_id == request.auth.uid;
+      // El vecino puede cancelar (estado), el vigilante puede actualizar usos/estado
+      allow update: if isAuth()
+                    && belongsToCommunity(resource.data.comunidad_id)
+                    && (resource.data.vecino_id == request.auth.uid
+                        || isVigilanteOfCommunity(resource.data.comunidad_id));
+    }
+
     // ── Alertas comunidad (avisos del vigilante) ─────────────────────────
 
     match /alertas_comunidad/{alertaId} {
