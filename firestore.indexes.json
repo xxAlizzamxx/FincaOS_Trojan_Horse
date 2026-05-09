@@ -318,6 +318,25 @@
       ]
     },
 
+    // ── Eventos calendario ─────────────────────────────────────────────────
+
+    {
+      "collectionGroup": "eventos_calendario",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "eventos_calendario",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+
     // ── Rondas vigilancia ─────────────────────────────────────────────────
 
     {
