@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Wallet, Loader2, Info } from 'lucide-react';
 import { db } from '@/lib/firebase/client';
 import {
@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 
 export default function NuevaCuotaPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { perfil, loading: authLoading } = useAuthGuard(
     ['admin', 'presidente'],
     '/cuotas',
@@ -29,7 +30,7 @@ export default function NuevaCuotaPage() {
 
   const [nombre, setNombre] = useState('');
   const [monto, setMonto] = useState('');
-  const [fechaLimite, setFechaLimite] = useState('');
+  const [fechaLimite, setFechaLimite] = useState(searchParams.get('fecha') || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

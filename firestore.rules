@@ -293,6 +293,15 @@ service cloud.firestore {
       allow update: if isAdminOfCommunity(resource.data.comunidad_id);
     }
 
+    // ── Eventos calendario (reuniones, eventos generales) ──────────────
+
+    match /eventos_calendario/{eventoId} {
+      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow create: if isAdminOfCommunity(request.resource.data.comunidad_id);
+      allow update: if isAdminOfCommunity(resource.data.comunidad_id);
+      allow delete: if isAdminOfCommunity(resource.data.comunidad_id);
+    }
+
     // ── Mediaciones ──────────────────────────────────────────────────────
 
     match /mediaciones/{mediacionId} {
