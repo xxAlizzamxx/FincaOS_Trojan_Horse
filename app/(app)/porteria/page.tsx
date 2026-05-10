@@ -134,7 +134,6 @@ export default function PorteriaPage() {
   const [paseTipo, setPaseTipo] = useState('visitante');
   const [paseMotivo, setPaseMotivo] = useState('');
   const [paseDuracion, setPaseDuracion] = useState(60);
-  const [paseUsoUnico, setPaseUsoUnico] = useState(true);
 
   // Chats — vigilante + admin
   const [vigilanteChat, setVigilanteChat] = useState<ChatResumen | null>(null);
@@ -301,8 +300,8 @@ export default function PorteriaPage() {
         motivo: paseMotivo.trim() || undefined,
         token,
         expira_at,
-        uso_unico: paseUsoUnico,
-        max_usos: paseUsoUnico ? 1 : 10,
+        uso_unico: true,
+        max_usos: 1,
         usos: 0,
         estado: 'activo' as const,
         created_at: new Date().toISOString(),
@@ -332,7 +331,7 @@ export default function PorteriaPage() {
 
   function resetFormPase() {
     setPaseNombre(''); setPaseTipo('visitante'); setPaseMotivo('');
-    setPaseDuracion(60); setPaseUsoUnico(true);
+    setPaseDuracion(60);
   }
 
   function getPaseUrl(token: string): string {
@@ -713,21 +712,7 @@ export default function PorteriaPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between py-2 px-3 bg-muted/40 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-finca-dark dark:text-white">Uso unico</p>
-                    <p className="text-[11px] text-muted-foreground">El pase se invalida tras el primer uso</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setPaseUsoUnico(!paseUsoUnico)}
-                    className={cn('w-10 h-6 rounded-full transition-colors relative', paseUsoUnico ? 'bg-finca-coral' : 'bg-gray-300')}
-                  >
-                    <span className={cn('w-4 h-4 bg-white rounded-full absolute top-1 transition-transform', paseUsoUnico ? 'translate-x-5' : 'translate-x-1')} />
-                  </button>
-                </div>
-
-                <div className="space-y-1.5">
+<div className="space-y-1.5">
                   <Label htmlFor="p-motivo">Motivo (opcional)</Label>
                   <Input id="p-motivo" placeholder="Ej: Visita familiar" value={paseMotivo} onChange={e => setPaseMotivo(e.target.value)} />
                 </div>
