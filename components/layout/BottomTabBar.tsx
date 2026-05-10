@@ -45,11 +45,11 @@ export function BottomTabBar() {
 
   // Tabs para vigilante: acceso directo al panel
   const tabsVigilante: TabItem[] = [
-    { href: '/vigilante',            icon: ShieldCheck, label: 'Panel'     },
-    { href: '/vigilante/chats',      icon: DoorOpen,    label: 'Chats'     },
-    { href: '/vigilante/alertas',    icon: AlertCircle, label: 'Alertas'   },
+    { href: '/vigilante',            icon: ShieldCheck, label: 'Panel'    },
+    { href: '/vigilante/alertas',    icon: AlertCircle, label: 'Alertas'  },
     { href: '/vigilante/bitacora',   icon: Plus,        label: 'Bitácora', isFab: true },
-    { href: '/vigilante/paqueteria', icon: Users,       label: 'Paquetes'  },
+    { href: '/vigilante/chats',      icon: DoorOpen,    label: 'Chats'    },
+    { href: '/vigilante/paqueteria', icon: Users,       label: 'Paquetes' },
   ];
 
   // Tabs para vecinos
@@ -72,16 +72,17 @@ export function BottomTabBar() {
 
           if (tab.isFab) {
             return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className="flex-1 flex flex-col items-center justify-center -mt-6"
-              >
-                <div className="w-14 h-14 rounded-full bg-finca-coral flex items-center justify-center shadow-lg shadow-finca-coral/30 transition-transform active:scale-95">
-                  <Icon className="w-6 h-6 text-white" />
-                </div>
-                <span className="text-[10px] mt-1 text-finca-coral font-medium">{tab.label}</span>
-              </Link>
+              <div key={tab.href} className="flex-1 relative self-stretch">
+                <Link
+                  href={tab.href}
+                  className="absolute left-1/2 -translate-x-1/2 -top-7 flex flex-col items-center"
+                >
+                  <div className="w-14 h-14 rounded-full bg-finca-coral flex items-center justify-center shadow-lg shadow-finca-coral/30 transition-transform active:scale-95">
+                    <Icon className="w-6 h-6 text-white" />
+                  </div>
+                  <span className="text-[10px] mt-1 text-finca-coral font-medium whitespace-nowrap">{tab.label}</span>
+                </Link>
+              </div>
             );
           }
 

@@ -111,8 +111,6 @@ export default function CalendarioPage() {
         getDocs(query(
           collection(db, 'incidencias'),
           where('comunidad_id', '==', cid),
-          where('created_at', '>=', mesInicioISO),
-          where('created_at', '<=', mesFinISO),
         )),
         getDocs(query(
           collection(db, 'eventos_calendario'),
@@ -151,20 +149,27 @@ export default function CalendarioPage() {
             editable: false,
           };
         }),
-        ...incSnap.docs.map(d => {
-          const data = d.data();
-          return {
-            id: d.id,
-            titulo: data.titulo as string,
-            tipo: 'incidencia' as const,
-            fecha: new Date(data.created_at as string),
-            descripcion: data.descripcion as string | undefined,
-            color: TIPO_CONFIG.incidencia.color,
-            url: `/incidencias/${d.id}`,
-            source: 'incidencias' as const,
-            editable: false,
-          };
-        }),
+        ...incSnap.docs
+          .filter(d => {
+            const ca = d.data().created_at as string | undefined;
+            if (!ca) return false;
+            const t = new Date(ca).getTime();
+            return t >= mesInicio.getTime() && t <= mesFin.getTime();
+          })
+          .map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              titulo: data.titulo as string,
+              tipo: 'incidencia' as const,
+              fecha: new Date(data.created_at as string),
+              descripcion: data.descripcion as string | undefined,
+              color: TIPO_CONFIG.incidencia.color,
+              url: `/incidencias/${d.id}`,
+              source: 'incidencias' as const,
+              editable: false,
+            };
+          }),
         ...evtSnap.docs.map(d => {
           const data = d.data();
           return {
