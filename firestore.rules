@@ -274,7 +274,7 @@ service cloud.firestore {
     // ── Cuotas ───────────────────────────────────────────────────────────
 
     match /cuotas/{cuotaId} {
-      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow read:   if isAuth();
       allow create: if isAdminOfCommunity(request.resource.data.comunidad_id);
       allow update: if isAdminOfCommunity(resource.data.comunidad_id);
       allow delete: if isAdminOfCommunity(resource.data.comunidad_id);
@@ -296,7 +296,7 @@ service cloud.firestore {
     // ── Eventos calendario (reuniones, eventos generales) ──────────────
 
     match /eventos_calendario/{eventoId} {
-      allow read:   if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+      allow read:   if isAuth();
       allow create: if isAdminOfCommunity(request.resource.data.comunidad_id);
       allow update: if isAdminOfCommunity(resource.data.comunidad_id);
       allow delete: if isAdminOfCommunity(resource.data.comunidad_id);
