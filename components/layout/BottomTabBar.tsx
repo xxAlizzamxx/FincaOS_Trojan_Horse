@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, DoorOpen, ShieldCheck, LucideIcon, MessageSquare } from 'lucide-react';
+import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, DoorOpen, ShieldCheck, LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,24 +20,24 @@ interface TabItem {
 export function BottomTabBar() {
   const pathname = usePathname();
   const { perfil, user } = useAuth();
-  const [porteriaBadge, setPorteriaBadge] = useState(0);
-  const [adminBadge, setAdminBadge]       = useState(0);
+  const [vigilanteBadge, setVigilanteBadge] = useState(0);
+  const [adminBadge, setAdminBadge]         = useState(0);
 
   const esVigilante = perfil?.rol === 'vigilante';
 
-  // Badge portería: doc read — no query, no composite index needed
+  // Badge portería (vigilante chat)
   useEffect(() => {
     if (!user || !perfil?.comunidad_id || esVigilante) return;
     const chatId = `${perfil.comunidad_id}_vigilante_${user.uid}`;
     const unsub = onSnapshot(
       doc(db, 'chats_comunidad', chatId),
-      (snap) => setPorteriaBadge(snap.exists() ? (snap.data()?.no_leidos_vecino || 0) : 0),
+      (snap) => setVigilanteBadge(snap.exists() ? (snap.data()?.no_leidos_vecino || 0) : 0),
       () => {},
     );
     return () => unsub();
   }, [user, perfil?.comunidad_id, esVigilante]);
 
-  // Badge admin messages: doc read — no query, no composite index needed
+  // Badge portería (admin chat) — combined into portería badge
   useEffect(() => {
     if (!user || !perfil?.comunidad_id || esVigilante) return;
     const chatId = `${perfil.comunidad_id}_admin_${user.uid}`;
@@ -48,6 +48,8 @@ export function BottomTabBar() {
     );
     return () => unsub();
   }, [user, perfil?.comunidad_id, esVigilante]);
+
+  const porteriaBadge = vigilanteBadge + adminBadge;
 
   // Tabs para vigilante: acceso directo al panel
   const tabsVigilante: TabItem[] = [
@@ -60,11 +62,11 @@ export function BottomTabBar() {
 
   // Tabs para vecinos
   const tabsVecino: TabItem[] = [
-    { href: '/inicio',          icon: Home,           label: 'Inicio'      },
-    { href: '/incidencias',     icon: AlertCircle,    label: 'Incidencias' },
-    { href: '/nueva',           icon: Plus,           label: 'Nuevo', isFab: true },
-    { href: '/porteria',        icon: DoorOpen,       label: 'Portería', badge: porteriaBadge },
-    { href: '/mensajes-admin',  icon: MessageSquare,  label: 'Admin',  badge: adminBadge },
+    { href: '/inicio',      icon: Home,        label: 'Inicio'      },
+    { href: '/incidencias', icon: AlertCircle, label: 'Incidencias' },
+    { href: '/nueva',       icon: Plus,        label: 'Nuevo', isFab: true },
+    { href: '/porteria',    icon: DoorOpen,    label: 'Portería', badge: porteriaBadge },
+    { href: '/comunidad',   icon: Users,       label: 'Comunidad'   },
   ];
 
   const tabs: TabItem[] = esVigilante ? tabsVigilante : tabsVecino;
