@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, TrendingUp, ChevronRight, Plus, Share2, Scale } from 'lucide-react';
+import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, TrendingUp, ChevronRight, Plus, Share2, Scale, ShieldAlert, Wrench, Droplets, Flame, Volume2, Car, Info, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   collection, query, where, orderBy, limit, getDocs, doc, getDoc, onSnapshot,
@@ -17,8 +17,40 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AnuncioReacciones } from '@/components/ui/AnuncioReacciones';
-import { formatDistanceToNow } from 'date-fns';
+import { useEliminar } from '@/hooks/useEliminar';
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog';
+import { formatDistanceToNow, format } from 'date-fns';
 import { es } from 'date-fns/locale';
+
+interface AlertaComunidad {
+  id: string;
+  titulo: string;
+  descripcion: string;
+  tipo: string;
+  prioridad: string;
+  activa: boolean;
+  created_at: string;
+}
+
+const ALERTA_ICONS: Record<string, React.ElementType> = {
+  emergencia:    ShieldAlert,
+  mantenimiento: Wrench,
+  agua:          Droplets,
+  gas:           Flame,
+  ruido:         Volume2,
+  vehiculo:      Car,
+  informativa:   Info,
+};
+
+const ALERTA_COLORS: Record<string, string> = {
+  emergencia:    'bg-red-50 text-red-600',
+  mantenimiento: 'bg-orange-50 text-orange-600',
+  agua:          'bg-blue-50 text-blue-600',
+  gas:           'bg-amber-50 text-amber-600',
+  ruido:         'bg-purple-50 text-purple-600',
+  vehiculo:      'bg-cyan-50 text-cyan-600',
+  informativa:   'bg-green-50 text-green-600',
+};
 
 const estadoConfig: Record<string, { label: string; color: string }> = {
   pendiente:    { label: 'Pendiente',    color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
@@ -34,12 +66,15 @@ export default function InicioPage() {
   const { perfil, user, loading: authLoading } = useAuth();
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
+  const [alertas, setAlertas] = useState<AlertaComunidad[]>([]);
   const [stats, setStats] = useState({ abiertas: 0, resueltas: 0, vecinos: 0 });
   const [mediacionesCount, setMediacionesCount] = useState<{ disponibles: number; total: number } | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
 
+  const esAdmin = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
   const verMediaciones = perfil?.rol === 'mediador' || perfil?.rol === 'admin' || perfil?.rol === 'presidente';
   const esMediador = perfil?.rol === 'mediador';
+  const { confirmar, dialogProps } = useEliminar();
 
   const nombreCorto = perfil?.nombre_completo?.split(' ')[0] || 'Vecino';
   const comunidadId = perfil?.comunidad_id;
@@ -89,6 +124,23 @@ export default function InicioPage() {
     return () => unsub();
   }, [comunidadId]);
 
+  // Real-time listener for alertas activas
+  useEffect(() => {
+    if (!comunidadId) return;
+    const q = query(
+      collection(db, 'alertas_comunidad'),
+      where('comunidad_id', '==', comunidadId),
+      where('activa', '==', true),
+    );
+    return onSnapshot(q, (snap) => {
+      setAlertas(
+        snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as AlertaComunidad))
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+      );
+    }, () => {});
+  }, [comunidadId]);
+
   async function fetchData() {
     try {
       const rol = perfil?.rol;
@@ -104,9 +156,22 @@ export default function InicioPage() {
 
       console.log('[Inicio] anuncios:', anuncSnap.size, '| allIncs:', allIncSnap.size);
 
-      const anuncsTodos: Anuncio[] = anuncSnap.docs.map(
-        (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Anuncio),
+      const anunciosRaw = anuncSnap.docs.map(
+        (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }),
       );
+      // Resolve autor names
+      const autorIds = Array.from(new Set(anunciosRaw.map((a: any) => a.autor_id).filter(Boolean))) as string[];
+      const autorMap: Record<string, string> = {};
+      await Promise.all(autorIds.map(async (autorId) => {
+        try {
+          const autorSnap = await getDoc(doc(db, 'perfiles', autorId));
+          if (autorSnap.exists()) autorMap[autorId] = (autorSnap.data() as any).nombre_completo;
+        } catch {}
+      }));
+      const anuncsTodos: Anuncio[] = anunciosRaw.map((a: any) => ({
+        ...a,
+        autor: a.autor_id ? { nombre_completo: autorMap[a.autor_id] || '' } : null,
+      })) as Anuncio[];
       // Pinned first, then recientes; show up to 5
       const anuncs = [
         ...anuncsTodos.filter(a => a.fijado),
@@ -253,7 +318,7 @@ export default function InicioPage() {
         </Button>
       </div>
 
-      {anuncios.length > 0 && (
+      {(alertas.length > 0 || anuncios.length > 0) && (
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-finca-dark">Tablón</h2>
@@ -262,18 +327,62 @@ export default function InicioPage() {
             </Link>
           </div>
           <div className="space-y-2">
+            {/* Alertas activas */}
+            {alertas.map(a => {
+              const colorClass = ALERTA_COLORS[a.tipo] ?? ALERTA_COLORS.informativa;
+              const [bg, text] = colorClass.split(' ');
+              const IconComp = ALERTA_ICONS[a.tipo] ?? Info;
+              return (
+                <Card key={a.id} className={cn(
+                  'border-0 shadow-sm',
+                  a.prioridad === 'urgente' && 'border-l-4 border-l-red-500 bg-red-50/40',
+                  a.prioridad === 'alta'    && 'border-l-4 border-l-orange-500 bg-orange-50/30',
+                  a.prioridad === 'media'   && 'border-l-4 border-l-yellow-400',
+                )}>
+                  <CardContent className="p-3 flex items-start gap-3">
+                    <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', bg)}>
+                      <IconComp className={cn('w-4 h-4', text)} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">⚠ Alerta activa</p>
+                      <p className="text-sm font-semibold text-finca-dark">{a.titulo}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{a.descripcion}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            {/* Anuncios */}
             {anuncios.map((anuncio) => (
               <Card key={anuncio.id} className={cn('border-0 shadow-sm', anuncio.fijado && 'border-l-4 border-l-finca-coral')}>
-                <CardContent className="p-3">
-                  {anuncio.fijado && (
-                    <span className="text-[10px] font-medium text-finca-coral uppercase tracking-wide">Fijado</span>
-                  )}
-                  <p className="font-medium text-sm text-finca-dark">{anuncio.titulo}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{anuncio.contenido}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1.5">
-                    {formatDistanceToNow(new Date(anuncio.publicado_at), { addSuffix: true, locale: es })}
-                  </p>
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      {anuncio.fijado && <span className="text-[10px] font-semibold text-finca-coral uppercase tracking-wide block mb-0.5">Fijado</span>}
+                      <p className="font-semibold text-sm text-finca-dark">{anuncio.titulo}</p>
+                    </div>
+                    {esAdmin && (
+                      <button
+                        onClick={() => confirmar({
+                          tipo: 'anuncio',
+                          id: anuncio.id,
+                          nombre: anuncio.titulo,
+                          onExito: () => setAnuncios((prev) => prev.filter((a) => a.id !== anuncio.id)),
+                        })}
+                        className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                        title="Eliminar anuncio"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{anuncio.contenido}</p>
                   <AnuncioReacciones anuncioId={anuncio.id} />
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-[11px] text-muted-foreground">{(anuncio.autor as any)?.nombre_completo?.split(' ')[0]}</p>
+                    <p className="text-[11px] text-muted-foreground">{format(new Date(anuncio.publicado_at), "d MMM", { locale: es })}</p>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -375,6 +484,8 @@ export default function InicioPage() {
           </Button>
         </CardContent>
       </Card>
+
+      <ConfirmDeleteDialog {...dialogProps} />
     </div>
   );
 }

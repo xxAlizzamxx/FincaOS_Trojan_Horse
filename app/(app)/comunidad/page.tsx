@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Users, Megaphone, Building2, Share2, Vote, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check, Trash2, ShieldCheck, Package, DoorOpen, ShieldAlert, Wrench, Droplets, Flame, Volume2, Car, Info, CalendarDays } from 'lucide-react';
+import { FileText, Building2, Share2, Vote, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle, Plus, Check, Trash2, ShieldCheck, Package, DoorOpen, ShieldAlert, Wrench, Droplets, Flame, Volume2, Car, Info, CalendarDays, BarChart2, BookOpen, Shield, Scale, CalendarCheck, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import {
@@ -28,7 +28,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { AnuncioReacciones } from '@/components/ui/AnuncioReacciones';
 import { format, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -251,6 +250,10 @@ export default function ComunidadPage() {
 
   const esAdmin = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
   const { confirmar, dialogProps } = useEliminar();
+
+  const [subTabParticipacion, setSubTabParticipacion] = useState<'votaciones' | 'encuestas'>('votaciones');
+  const [subTabFinanzas, setSubTabFinanzas]           = useState<'cuotas' | 'cobros'>('cuotas');
+  const [subTabDocs, setSubTabDocs]                   = useState<'reglamentos' | 'actas' | 'polizas' | 'escrituras'>('reglamentos');
   const rolLabel: Record<string, string> = {
     vecino:     'Vecino',
     presidente: 'Presidente',
@@ -340,14 +343,14 @@ export default function ComunidadPage() {
         Ver calendario de eventos
       </Button>
 
-      <Tabs defaultValue="tablón">
+      <Tabs defaultValue="reservas">
         <TabsList className="flex w-full h-9 px-0 gap-0">
-          <TabsTrigger value="tablón"    className="flex-1 text-xs min-w-0 px-1">Tablón</TabsTrigger>
-          <TabsTrigger value="votaciones" className="flex-1 text-xs min-w-0 px-1">Votos</TabsTrigger>
-          <TabsTrigger value="finanzas"  className="flex-1 text-xs min-w-0 px-1">Cuotas</TabsTrigger>
-          <TabsTrigger value="vecinos"   className="flex-1 text-xs min-w-0 px-1">Vecinos</TabsTrigger>
-          <TabsTrigger value="docs"      className="flex-1 text-xs min-w-0 px-1">Docs</TabsTrigger>
-          <TabsTrigger value="vigilancia" className="flex-1 text-xs min-w-0 px-1 relative">
+          <TabsTrigger value="reservas"      className="flex-1 text-xs min-w-0 px-1">Reservas</TabsTrigger>
+          <TabsTrigger value="participacion" className="flex-1 text-xs min-w-0 px-1">Participar</TabsTrigger>
+          <TabsTrigger value="finanzas"      className="flex-1 text-xs min-w-0 px-1">Finanzas</TabsTrigger>
+          <TabsTrigger value="sugerencias"   className="flex-1 text-xs min-w-0 px-1">Sugerir</TabsTrigger>
+          <TabsTrigger value="docs"          className="flex-1 text-xs min-w-0 px-1">Docs</TabsTrigger>
+          <TabsTrigger value="vigilancia"    className="flex-1 text-xs min-w-0 px-1 relative">
             <span className="truncate">Seguridad</span>
             {(paquetes.length > 0 || alertas.length > 0) && (
               <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-finca-coral" />
@@ -355,117 +358,136 @@ export default function ComunidadPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="tablón" className="mt-4 space-y-3">
-          {/* Alertas activas al tope del tablón */}
-          {alertas.length > 0 && alertas.map(a => {
-            const colorClass = ALERTA_COLORS[a.tipo] ?? ALERTA_COLORS.informativa;
-            const [bg, text] = colorClass.split(' ');
-            const IconComp = ALERTA_ICONS[a.tipo] ?? Info;
-            return (
-              <Card key={a.id} className={cn(
-                'border-0 shadow-sm',
-                a.prioridad === 'urgente' && 'border-l-4 border-l-red-500 bg-red-50/40',
-                a.prioridad === 'alta'    && 'border-l-4 border-l-orange-500 bg-orange-50/30',
-                a.prioridad === 'media'   && 'border-l-4 border-l-yellow-400',
-              )}>
-                <CardContent className="p-3 flex items-start gap-3">
-                  <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', bg)}>
-                    <IconComp className={cn('w-4 h-4', text)} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">⚠ Alerta activa</p>
-                    </div>
-                    <p className="text-sm font-semibold text-finca-dark">{a.titulo}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{a.descripcion}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-
-          {anuncios.length === 0 ? (
-            <div className="py-10 text-center space-y-2">
-              <Megaphone className="w-10 h-10 text-muted-foreground/30 mx-auto" />
-              <p className="text-sm font-medium text-finca-dark">Sin anuncios</p>
-              <p className="text-xs text-muted-foreground">El administrador publicará los anuncios aquí</p>
+        {/* ── Tab Reservas ── */}
+        <TabsContent value="reservas" className="mt-4">
+          <div className="py-12 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-finca-peach/50 flex items-center justify-center mx-auto">
+              <CalendarCheck className="w-8 h-8 text-finca-coral" />
             </div>
-          ) : (
-            anuncios.map((anuncio) => (
-              <Card key={anuncio.id} className={cn('border-0 shadow-sm', anuncio.fijado && 'border-l-4 border-l-finca-coral')}>
-                <CardContent className="p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      {anuncio.fijado && <span className="text-[10px] font-semibold text-finca-coral uppercase tracking-wide block mb-0.5">Fijado</span>}
-                      <p className="font-semibold text-sm text-finca-dark">{anuncio.titulo}</p>
-                    </div>
-                    {esAdmin && (
-                      <button
-                        onClick={() => confirmar({
-                          tipo: 'anuncio',
-                          id: anuncio.id,
-                          nombre: anuncio.titulo,
-                          onExito: () => setAnuncios((prev) => prev.filter((a) => a.id !== anuncio.id)),
-                        })}
-                        className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                        title="Eliminar anuncio"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{anuncio.contenido}</p>
-                  <AnuncioReacciones anuncioId={anuncio.id} />
-                  <div className="flex items-center justify-between pt-1">
-                    <p className="text-[11px] text-muted-foreground">{(anuncio.autor as any)?.nombre_completo?.split(' ')[0]}</p>
-                    <p className="text-[11px] text-muted-foreground">{format(new Date(anuncio.publicado_at), "d MMM", { locale: es })}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+            <div>
+              <p className="font-semibold text-finca-dark text-base">Reservas de espacios</p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">Próximamente podrás reservar la piscina, salón de eventos, cancha y más áreas comunes</p>
+            </div>
+            <span className="inline-block text-xs font-semibold text-finca-coral bg-finca-peach/40 border border-finca-coral/20 rounded-full px-3 py-1">Próximamente</span>
+          </div>
+        </TabsContent>
+
+        {/* ── Tab Participar ── */}
+        <TabsContent value="participacion" className="mt-4 space-y-3">
+          {/* Sub-tabs */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+            <button
+              onClick={() => setSubTabParticipacion('votaciones')}
+              className={cn('flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all',
+                subTabParticipacion === 'votaciones' ? 'bg-white dark:bg-card shadow-sm text-finca-dark dark:text-white' : 'text-muted-foreground'
+              )}
+            >
+              <Vote className="w-3.5 h-3.5" />
+              Votaciones
+            </button>
+            <button
+              onClick={() => setSubTabParticipacion('encuestas')}
+              className={cn('flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all',
+                subTabParticipacion === 'encuestas' ? 'bg-white dark:bg-card shadow-sm text-finca-dark dark:text-white' : 'text-muted-foreground'
+              )}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              Encuestas
+            </button>
+          </div>
+
+          {subTabParticipacion === 'votaciones' && (
+            <>
+              {votaciones.slice(0, 2).map((votacion) => {
+                const totalVotos = votacion.opciones.reduce((s, o) => s + o.votos, 0);
+                return (
+                  <Card key={votacion.id} className="border-0 shadow-sm">
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge className={cn('text-[10px] border-0', votacion.activa ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')}>
+                          {votacion.activa ? 'Activa' : 'Cerrada'}
+                        </Badge>
+                        <span className="text-[11px] text-muted-foreground">{totalVotos} votos</span>
+                      </div>
+                      <p className="font-semibold text-sm text-finca-dark leading-snug">{votacion.titulo}</p>
+                      {votacion.descripcion && (
+                        <p className="text-xs text-muted-foreground line-clamp-1">{votacion.descripcion}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              {votaciones.length === 0 && (
+                <div className="py-8 text-center space-y-2">
+                  <Vote className="w-10 h-10 text-muted-foreground/30 mx-auto" />
+                  <p className="text-sm font-medium text-finca-dark">Sin votaciones</p>
+                  <p className="text-xs text-muted-foreground">El presidente puede crear votaciones comunitarias</p>
+                </div>
+              )}
+              {esAdmin && (
+                <Button variant="outline" size="sm" className="w-full border-finca-coral/30 text-finca-coral" onClick={() => router.push('/votos/nueva')}>
+                  <Plus className="w-3.5 h-3.5 mr-1.5" />Nueva votación
+                </Button>
+              )}
+              <Button className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white" onClick={() => router.push('/votos')}>
+                <Vote className="w-4 h-4 mr-2" />
+                {votaciones.length > 0 ? 'Ver todas las votaciones' : 'Ir a votaciones'}
+              </Button>
+            </>
+          )}
+
+          {subTabParticipacion === 'encuestas' && (
+            <div className="py-12 text-center space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-finca-peach/50 flex items-center justify-center mx-auto">
+                <BarChart2 className="w-8 h-8 text-finca-coral" />
+              </div>
+              <div>
+                <p className="font-semibold text-finca-dark text-base">Encuestas de comunidad</p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">Próximamente podrás crear encuestas rápidas y consultar la opinión de tus vecinos</p>
+              </div>
+              <span className="inline-block text-xs font-semibold text-finca-coral bg-finca-peach/40 border border-finca-coral/20 rounded-full px-3 py-1">Próximamente</span>
+            </div>
           )}
         </TabsContent>
 
-        <TabsContent value="votaciones" className="mt-4 space-y-3">
-          {/* Resumen rápido */}
-          {votaciones.slice(0, 2).map((votacion) => {
-            const totalVotos = votacion.opciones.reduce((s, o) => s + o.votos, 0);
-            return (
-              <Card key={votacion.id} className="border-0 shadow-sm">
-                <CardContent className="p-4 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Badge className={cn('text-[10px] border-0', votacion.activa ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')}>
-                      {votacion.activa ? 'Activa' : 'Cerrada'}
-                    </Badge>
-                    <span className="text-[11px] text-muted-foreground">{totalVotos} votos</span>
-                  </div>
-                  <p className="font-semibold text-sm text-finca-dark leading-snug">{votacion.titulo}</p>
-                  {votacion.descripcion && (
-                    <p className="text-xs text-muted-foreground line-clamp-1">{votacion.descripcion}</p>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-
-          {votaciones.length === 0 && (
-            <div className="py-8 text-center space-y-2">
-              <Vote className="w-10 h-10 text-muted-foreground/30 mx-auto" />
-              <p className="text-sm font-medium text-finca-dark">Sin votaciones</p>
-              <p className="text-xs text-muted-foreground">El presidente puede crear votaciones comunitarias</p>
-            </div>
-          )}
-
-          <Button
-            className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
-            onClick={() => router.push('/votos')}
-          >
-            <Vote className="w-4 h-4 mr-2" />
-            {votaciones.length > 0 ? 'Ver todas las votaciones' : 'Ir a votaciones'}
-          </Button>
-        </TabsContent>
-
+        {/* ── Tab Finanzas ── */}
         <TabsContent value="finanzas" className="mt-4 space-y-3">
+          {/* Sub-tabs */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+            <button
+              onClick={() => setSubTabFinanzas('cuotas')}
+              className={cn('flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all',
+                subTabFinanzas === 'cuotas' ? 'bg-white dark:bg-card shadow-sm text-finca-dark dark:text-white' : 'text-muted-foreground'
+              )}
+            >
+              <Wallet className="w-3.5 h-3.5" />
+              Cuotas
+            </button>
+            <button
+              onClick={() => setSubTabFinanzas('cobros')}
+              className={cn('flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all',
+                subTabFinanzas === 'cobros' ? 'bg-white dark:bg-card shadow-sm text-finca-dark dark:text-white' : 'text-muted-foreground'
+              )}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Cobros
+            </button>
+          </div>
+
+          {subTabFinanzas === 'cobros' && (
+            <div className="py-12 text-center space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-finca-peach/50 flex items-center justify-center mx-auto">
+                <FileText className="w-8 h-8 text-finca-coral" />
+              </div>
+              <div>
+                <p className="font-semibold text-finca-dark text-base">Cobros de la comunidad</p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">Próximamente verás aquí todos los cobros pendientes y pagados enviados por la administración</p>
+              </div>
+              <span className="inline-block text-xs font-semibold text-finca-coral bg-finca-peach/40 border border-finca-coral/20 rounded-full px-3 py-1">Próximamente</span>
+            </div>
+          )}
+
+          {subTabFinanzas === 'cuotas' && (<>
           {/* Header row */}
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
@@ -567,77 +589,110 @@ export default function ComunidadPage() {
               </Button>
             </>
           )}
+          </>)}
         </TabsContent>
 
-        <TabsContent value="vecinos" className="mt-4 space-y-3">
-          {/* Vista previa: primeros 3 vecinos con foto de Google */}
-          {vecinos.slice(0, 3).map((v) => (
-            <Card key={v.id} className="border-0 shadow-sm">
-              <CardContent className="p-3 flex items-center gap-3">
-                <AvatarVecino perfil={v} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm text-finca-dark truncate">{v.nombre_completo}</p>
-                  {v.numero_piso && (
-                    <p className="text-xs text-muted-foreground">{v.numero_piso}</p>
-                  )}
-                </div>
-                <Badge className={cn('text-[10px] border-0 shrink-0', rolColor[v.rol] ?? 'bg-gray-100 text-gray-600')}>
-                  {rolLabel[v.rol] ?? v.rol}
-                </Badge>
-              </CardContent>
-            </Card>
-          ))}
-
-          {vecinos.length === 0 && (
-            <div className="py-8 text-center space-y-2">
-              <Users className="w-10 h-10 text-muted-foreground/30 mx-auto" />
-              <p className="text-sm font-medium text-finca-dark">Sin vecinos registrados</p>
-              <p className="text-xs text-muted-foreground">Comparte el link de invitación</p>
+        {/* ── Tab Sugerencias ── */}
+        <TabsContent value="sugerencias" className="mt-4">
+          <div className="py-12 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-finca-peach/50 flex items-center justify-center mx-auto">
+              <Lightbulb className="w-8 h-8 text-finca-coral" />
             </div>
-          )}
-
-          <Button
-            className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
-            onClick={() => router.push('/vecinos')}
-          >
-            <Users className="w-4 h-4 mr-2" />
-            Ver todos los vecinos ({vecinos.length})
-          </Button>
+            <div className="space-y-1">
+              <p className="font-semibold text-finca-dark text-base">Sugerencias anónimas</p>
+              <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                {esAdmin
+                  ? 'Próximamente verás aquí las sugerencias anónimas enviadas por los vecinos'
+                  : 'Próximamente podrás enviar sugerencias de forma anónima a la administración'}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-finca-coral bg-finca-peach/40 border border-finca-coral/20 rounded-full px-3 py-1">
+                🚧 Próximamente
+              </span>
+              <div className="flex flex-col gap-1.5 text-xs text-muted-foreground mt-2">
+                {esAdmin ? (
+                  <span className="inline-flex items-center gap-1 justify-center">👨‍💼 Admin · Ver y gestionar sugerencias recibidas</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 justify-center">👤 Vecino · Enviar sugerencias de forma anónima</span>
+                )}
+              </div>
+            </div>
+          </div>
         </TabsContent>
 
+        {/* ── Tab Docs ── */}
         <TabsContent value="docs" className="mt-4 space-y-3">
-          {/* Vista previa de últimos 2 documentos */}
-          {documentos.slice(0, 2).map((documento) => (
-            <Card key={documento.id} className="border-0 shadow-sm">
-              <CardContent className="p-3 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-finca-peach/50 flex items-center justify-center shrink-0">
-                  <FileText className="w-5 h-5 text-finca-coral" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm text-finca-dark truncate">{documento.nombre}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {format(new Date(documento.created_at), "d MMM yyyy", { locale: es })}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {/* Sub-tabs: 4 categorías */}
+          <div className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+            {([
+              { key: 'reglamentos', label: 'Reglas',     icon: Scale    },
+              { key: 'actas',       label: 'Actas',      icon: BookOpen },
+              { key: 'polizas',     label: 'Pólizas',    icon: Shield   },
+              { key: 'escrituras',  label: 'Escrituras', icon: FileText },
+            ] as const).map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setSubTabDocs(key)}
+                className={cn('flex flex-col items-center justify-center gap-1 py-2 rounded-lg text-[10px] font-medium transition-all',
+                  subTabDocs === key ? 'bg-white dark:bg-card shadow-sm text-finca-dark dark:text-white' : 'text-muted-foreground'
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
 
-          {documentos.length === 0 && (
-            <div className="py-8 text-center space-y-2">
-              <FileText className="w-10 h-10 text-muted-foreground/30 mx-auto" />
-              <p className="text-sm font-medium text-finca-dark">Sin documentos</p>
-              <p className="text-xs text-muted-foreground">El administrador subirá estatutos y actas aquí</p>
+          {subTabDocs === 'reglamentos' ? (
+            <>
+              {esAdmin && (
+                <Button variant="outline" size="sm" className="w-full border-finca-coral/30 text-finca-coral" onClick={() => toast.info('Subir documentos — próximamente')}>
+                  <Plus className="w-3.5 h-3.5 mr-1.5" />Subir documento
+                </Button>
+              )}
+              {documentos.length === 0 ? (
+                <div className="py-8 text-center space-y-2">
+                  <FileText className="w-10 h-10 text-muted-foreground/30 mx-auto" />
+                  <p className="text-sm font-medium text-finca-dark">Sin documentos</p>
+                  <p className="text-xs text-muted-foreground">El administrador subirá estatutos y reglamentos aquí</p>
+                </div>
+              ) : (
+                documentos.map((documento) => (
+                  <Card key={documento.id} className="border-0 shadow-sm">
+                    <CardContent className="p-3 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-finca-peach/50 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-finca-coral" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm text-finca-dark truncate">{documento.nombre}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {format(new Date(documento.created_at), "d MMM yyyy", { locale: es })}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </>
+          ) : (
+            <div className="py-12 text-center space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-finca-peach/50 flex items-center justify-center mx-auto">
+                {subTabDocs === 'actas'      && <BookOpen className="w-8 h-8 text-finca-coral" />}
+                {subTabDocs === 'polizas'    && <Shield   className="w-8 h-8 text-finca-coral" />}
+                {subTabDocs === 'escrituras' && <FileText className="w-8 h-8 text-finca-coral" />}
+              </div>
+              <div>
+                <p className="font-semibold text-finca-dark text-base">
+                  {subTabDocs === 'actas'      && 'Libro de actas'}
+                  {subTabDocs === 'polizas'    && 'Pólizas de seguro'}
+                  {subTabDocs === 'escrituras' && 'Escrituras'}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">Próximamente podrás gestionar y descargar estos documentos</p>
+              </div>
+              <span className="inline-block text-xs font-semibold text-finca-coral bg-finca-peach/40 border border-finca-coral/20 rounded-full px-3 py-1">Próximamente</span>
             </div>
           )}
-
-          <Button
-            className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white"
-            onClick={() => router.push('/docs')}
-          >
-            <FileText className="w-4 h-4 mr-2" />
-            {documentos.length > 0 ? 'Ver todos los documentos' : 'Ir a documentos'}
-          </Button>
         </TabsContent>
         {/* ── Tab Vigilancia ── */}
         <TabsContent value="vigilancia" className="mt-4 space-y-4">
