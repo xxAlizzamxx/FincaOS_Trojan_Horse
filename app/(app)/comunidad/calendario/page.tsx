@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  collection, query, where, getDocs, updateDoc, deleteDoc, doc,
+  collection, query, where, getDocs, getDocsFromServer, updateDoc, deleteDoc, doc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -98,14 +98,16 @@ export default function CalendarioPage() {
         getDocs(query(collection(db, 'votaciones'),         where('comunidad_id', '==', cid))),
         getDocs(query(collection(db, 'cuotas'),             where('comunidad_id', '==', cid))),
         getDocs(query(collection(db, 'incidencias'),        where('comunidad_id', '==', cid))),
-        getDocs(query(collection(db, 'eventos_calendario'), where('comunidad_id', '==', cid))),
+        // getDocsFromServer: bypasses Firestore client cache to always get fresh data
+        getDocsFromServer(query(collection(db, 'eventos_calendario'), where('comunidad_id', '==', cid))),
       ]);
 
-      // Log silencioso si alguna colección falló
+      // Log si alguna colección falló — eventos_calendario usa console.error para que sea visible
       [votRes, cuotaRes, incRes, evtRes].forEach((r, i) => {
         if (r.status === 'rejected') {
           const names = ['votaciones', 'cuotas', 'incidencias', 'eventos_calendario'];
-          console.warn(`[Calendario] ${names[i]} no disponible:`, r.reason?.code ?? r.reason);
+          const logFn = names[i] === 'eventos_calendario' ? console.error : console.warn;
+          logFn(`[Calendario] ${names[i]} no disponible (code=${r.reason?.code}):`, r.reason);
         }
       });
 
@@ -296,6 +298,20 @@ export default function CalendarioPage() {
       }
 
       const { id: eventoId } = await res.json();
+
+      // Optimistic update: add event to local state immediately so it shows
+      // in the calendar without waiting for the re-fetch to complete.
+      const fechaEvento = new Date(fechaISO);
+      setEventos(prev => [...prev, {
+        id:          eventoId,
+        titulo:      formTitulo.trim(),
+        tipo:        formTipo as TipoEvento,
+        fecha:       fechaEvento,
+        descripcion: formDescripcion.trim() || undefined,
+        color:       TIPO_CONFIG[formTipo as TipoEvento]?.color || TIPO_CONFIG.evento.color,
+        source:      'eventos_calendario',
+        editable:    true,
+      }]);
 
       void crearNotificacionComunidad(comunidadId, {
         tipo: 'anuncio',
