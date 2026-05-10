@@ -16,6 +16,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AnuncioReacciones } from '@/components/ui/AnuncioReacciones';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -96,16 +97,21 @@ export default function InicioPage() {
       console.log('[Inicio] fetchData — comunidadId:', comunidadId, 'rol:', rol);
 
       const [anuncSnap, allIncSnap, vecinosSnap] = await Promise.all([
-        getDocs(query(collection(db, 'anuncios'),   where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3))) as Promise<QuerySnapshot<DocumentData>>,
+        getDocs(query(collection(db, 'anuncios'),   where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(20))) as Promise<QuerySnapshot<DocumentData>>,
         getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId))) as Promise<QuerySnapshot<DocumentData>>,
         getDocs(query(collection(db, 'perfiles'),   where('comunidad_id', '==', comunidadId))) as Promise<QuerySnapshot<DocumentData>>,
       ]);
 
       console.log('[Inicio] anuncios:', anuncSnap.size, '| allIncs:', allIncSnap.size);
 
-      const anuncs: Anuncio[] = anuncSnap.docs.map(
+      const anuncsTodos: Anuncio[] = anuncSnap.docs.map(
         (d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() } as Anuncio),
       );
+      // Pinned first, then recientes; show up to 5
+      const anuncs = [
+        ...anuncsTodos.filter(a => a.fijado),
+        ...anuncsTodos.filter(a => !a.fijado),
+      ].slice(0, 5);
       const allIncs: DocumentData[] = allIncSnap.docs.map(
         (d: QueryDocumentSnapshot<DocumentData>) => d.data(),
       );
@@ -267,6 +273,7 @@ export default function InicioPage() {
                   <p className="text-[10px] text-muted-foreground mt-1.5">
                     {formatDistanceToNow(new Date(anuncio.publicado_at), { addSuffix: true, locale: es })}
                   </p>
+                  <AnuncioReacciones anuncioId={anuncio.id} />
                 </CardContent>
               </Card>
             ))}

@@ -59,7 +59,7 @@ export function AIAssistantWidget() {
     { label: 'Actividad en portería', icon: Bell,          message: '¿Qué hay pendiente en portería? Paquetes, visitas o recibos.' },
     { label: '¿Alertas activas?',     icon: ShieldAlert,   message: '¿Qué alertas comunitarias están activas?' },
     { label: 'Incidencias abiertas',  icon: AlertTriangle, message: '¿Qué incidencias hay abiertas en la comunidad?' },
-    { label: 'Resumen del turno',     icon: BookOpen,      message: 'Dame un resumen del estado de mi comunidad' },
+    { label: 'Resumen del turno',     icon: BookOpen,      message: 'Dame el resumen completo del turno: accesos de hoy, paquetes, alertas, incidencias, mensajes, bitácora y rondas.' },
     { label: 'Normativa de accesos',  icon: Scale,         message: '¿Cuál es la normativa para el control de accesos y visitantes?' },
   ];
 

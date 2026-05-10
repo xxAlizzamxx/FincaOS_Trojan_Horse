@@ -519,8 +519,10 @@ async function directPorteria(comunidadId: string, uid: string, rol: string): Pr
 
 async function directResumen(comunidadId: string, uid: string, rol: string): Promise<string | null> {
   const db = getAdminDb();
-  const isAdmin = rol === 'admin' || rol === 'presidente';
+  const isAdmin     = rol === 'admin' || rol === 'presidente';
+  const isVigilante = rol === 'vigilante';
 
+  // Base fetches — shared across all roles
   const [incSnap, cuotasSnap, votSnap, anunciosSnap, alertasSnap, paqSnap] =
     await Promise.allSettled([
       db.collection('incidencias').where('comunidad_id', '==', comunidadId).limit(100).get(),
@@ -531,12 +533,123 @@ async function directResumen(comunidadId: string, uid: string, rol: string): Pro
       db.collection('paqueteria').where('comunidad_id', '==', comunidadId).get(),
     ]);
 
-  // Incidencias abiertas
+  // Vigilante-specific fetches (no composite index required — single equality + get)
+  let accesosHoy:  Record<string, any>[] = [];
+  let bitacora:    Record<string, any>[] = [];
+  let rondasHoy:   Record<string, any>[] = [];
+  let chatsNoLeidos = 0;
+
+  if (isVigilante) {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const hoyISO  = hoy.toISOString();
+    const hace24h = new Date(Date.now() - 86_400_000).toISOString();
+
+    const [accSnap, bitSnap, rondasSnap, chatsSnap] = await Promise.allSettled([
+      db.collection('accesos').where('comunidad_id', '==', comunidadId).get(),
+      db.collection('bitacora_vigilancia').where('comunidad_id', '==', comunidadId).get(),
+      db.collection('rondas_vigilancia').where('comunidad_id', '==', comunidadId).get(),
+      db.collection('chats_comunidad').where('comunidad_id', '==', comunidadId).get(),
+    ]);
+
+    if (accSnap.status === 'fulfilled')
+      accesosHoy = accSnap.value.docs.map(d => d.data()).filter(a => (a.hora_entrada as string) >= hoyISO);
+    if (bitSnap.status === 'fulfilled')
+      bitacora = bitSnap.value.docs.map(d => d.data()).filter(b => (b.created_at as string) >= hace24h);
+    if (rondasSnap.status === 'fulfilled')
+      rondasHoy = rondasSnap.value.docs.map(d => d.data()).filter(r => ((r.iniciada_at as string) ?? '') >= hoyISO);
+    if (chatsSnap.status === 'fulfilled')
+      chatsNoLeidos = chatsSnap.value.docs
+        .filter(d => d.data().tipo === 'vigilante')
+        .reduce((s, d) => s + ((d.data().no_leidos_vigilante as number) || 0), 0);
+  }
+
+  // Shared data
   const incidencias = incSnap.status === 'fulfilled' ? incSnap.value.docs.map(d => d.data()) : [];
   const abiertas    = incidencias.filter(d => !['resuelta', 'cerrada'].includes(d.estado as string ?? ''));
   const urgentes    = abiertas.filter(d => d.prioridad === 'urgente');
 
-  // Cuotas pendientes del usuario
+  const alertas   = alertasSnap.status === 'fulfilled' ? alertasSnap.value.docs.map(d => d.data()) : [];
+  const urgAlerta = alertas.find(a => a.prioridad === 'urgente');
+
+  const paquetes  = paqSnap.status === 'fulfilled' ? paqSnap.value.docs.map(d => d.data()) : [];
+
+  const anuncios = anunciosSnap.status === 'fulfilled'
+    ? anunciosSnap.value.docs
+        .map(d => d.data())
+        .sort((a, b) => ((b.created_at as string) ?? '') > ((a.created_at as string) ?? '') ? 1 : -1)
+        .slice(0, 2)
+    : [];
+
+  // ── Vigilante resumen ────────────────────────────────────────────────────────
+  if (isVigilante) {
+    const lines: string[] = ['Resumen del turno de vigilancia:'];
+
+    // 1. Accesos del día
+    if (accesosHoy.length === 0) {
+      lines.push('• Accesos hoy: ninguno registrado.');
+    } else {
+      const aut = accesosHoy.filter(a => a.estado === 'autorizado').length;
+      const rec = accesosHoy.filter(a => a.estado === 'rechazado').length;
+      const esp = accesosHoy.filter(a => a.estado === 'esperando').length;
+      const partes: string[] = [];
+      if (aut) partes.push(`${aut} autorizado${aut > 1 ? 's' : ''}`);
+      if (rec) partes.push(`${rec} rechazado${rec > 1 ? 's' : ''}`);
+      if (esp) partes.push(`${esp} esperando`);
+      lines.push(`• Accesos hoy: ${accesosHoy.length} total (${partes.join(', ')}).${esp > 0 ? ' ⚠️ Hay visitas pendientes de autorizar.' : ''}`);
+    }
+
+    // 2. Paquetes pendientes
+    const paqPend = paquetes.filter(p => ['recibido', 'notificado'].includes(p.estado as string));
+    lines.push(paqPend.length === 0
+      ? '• Paquetería: sin pendientes.'
+      : `• Paquetería: ${paqPend.length} paquete${paqPend.length > 1 ? 's/recibos' : '/recibo'} pendiente${paqPend.length > 1 ? 's' : ''} de recogida.`,
+    );
+
+    // 3. Alertas
+    if (urgAlerta) {
+      lines.push(`• ⚠️ Alerta urgente activa: "${urgAlerta.titulo}".`);
+    } else if (alertas.length > 0) {
+      lines.push(`• Alertas: ${alertas.length} activa${alertas.length > 1 ? 's' : ''}.`);
+    } else {
+      lines.push('• Alertas: ninguna activa.');
+    }
+
+    // 4. Incidencias abiertas
+    if (abiertas.length === 0) {
+      lines.push('• Incidencias: ninguna abierta.');
+    } else {
+      const urg = urgentes.length > 0 ? `, ${urgentes.length} urgente${urgentes.length > 1 ? 's' : ''}` : '';
+      lines.push(`• Incidencias: ${abiertas.length} abierta${abiertas.length > 1 ? 's' : ''}${urg}.`);
+    }
+
+    // 5. Mensajes no leídos de vecinos
+    lines.push(chatsNoLeidos > 0
+      ? `• Mensajes: ${chatsNoLeidos} no leído${chatsNoLeidos > 1 ? 's' : ''} de vecinos.`
+      : '• Mensajes: sin mensajes nuevos.',
+    );
+
+    // 6. Bitácora del turno
+    lines.push(bitacora.length > 0
+      ? `• Bitácora: ${bitacora.length} entrada${bitacora.length > 1 ? 's' : ''} en las últimas 24 h.`
+      : '• Bitácora: sin entradas en las últimas 24 h.',
+    );
+
+    // 7. Rondas del día
+    const rondasCompletas = rondasHoy.filter(r => r.estado === 'completada').length;
+    lines.push(rondasHoy.length > 0
+      ? `• Rondas hoy: ${rondasHoy.length}${rondasCompletas > 0 ? `, ${rondasCompletas} completada${rondasCompletas > 1 ? 's' : ''}` : ' en curso'}.`
+      : '• Rondas: ninguna registrada hoy.',
+    );
+
+    if (anuncios.length > 0) {
+      lines.push(`• Últimos anuncios: ${anuncios.map(a => `"${a.titulo as string}"`).join(' / ')}.`);
+    }
+
+    return lines.join('\n');
+  }
+
+  // ── Vecino / admin resumen (comportamiento existente) ────────────────────────
   let cuotasPendientes = 0;
   if (cuotasSnap.status === 'fulfilled') {
     const cuotaResults = await Promise.allSettled(
@@ -548,30 +661,13 @@ async function directResumen(comunidadId: string, uid: string, rol: string): Pro
     cuotasPendientes = cuotaResults.filter(r => r.status === 'fulfilled' && r.value !== null).length;
   }
 
-  // Votaciones activas
   const numVotaciones = votSnap.status === 'fulfilled' ? votSnap.value.size : 0;
-
-  // Alertas activas
-  const alertas   = alertasSnap.status === 'fulfilled' ? alertasSnap.value.docs.map(d => d.data()) : [];
-  const urgAlerta = alertas.find(a => a.prioridad === 'urgente');
-
-  // Mis paquetes pendientes
-  const paquetes     = paqSnap.status === 'fulfilled' ? paqSnap.value.docs.map(d => d.data()) : [];
-  const misPaquetes  = paquetes.filter(p =>
+  const misPaquetes   = paquetes.filter(p =>
     p.vecino_id === uid && ['recibido', 'notificado'].includes(p.estado as string),
   );
 
-  // Anuncios recientes
-  const anuncios = anunciosSnap.status === 'fulfilled'
-    ? anunciosSnap.value.docs
-        .map(d => d.data())
-        .sort((a, b) => ((b.created_at as string) ?? '') > ((a.created_at as string) ?? '') ? 1 : -1)
-        .slice(0, 2)
-    : [];
-
   const lines: string[] = ['Resumen de tu comunidad:'];
 
-  // Incidencias
   if (abiertas.length === 0) {
     lines.push('• Sin incidencias abiertas.');
   } else {
@@ -579,32 +675,27 @@ async function directResumen(comunidadId: string, uid: string, rol: string): Pro
     lines.push(`• ${abiertas.length} incidencia${abiertas.length > 1 ? 's' : ''} abierta${abiertas.length > 1 ? 's' : ''}${urg}.`);
   }
 
-  // Cuotas
   lines.push(cuotasPendientes === 0
     ? '• Estás al día con tus cuotas.'
     : `• Tienes ${cuotasPendientes} cuota${cuotasPendientes > 1 ? 's' : ''} pendiente${cuotasPendientes > 1 ? 's' : ''} de pago.`,
   );
 
-  // Votaciones
   if (numVotaciones > 0) {
     lines.push(`• ${numVotaciones} votación${numVotaciones > 1 ? 'es' : ''} activa${numVotaciones > 1 ? 's' : ''} — recuerda votar.`);
   }
 
-  // Paquetes / portería
   if (misPaquetes.length > 0) {
     lines.push(`• Tienes ${misPaquetes.length} ${misPaquetes.length === 1 ? 'paquete/recibo' : 'paquetes/recibos'} pendiente${misPaquetes.length > 1 ? 's' : ''} de recoger en portería.`);
   }
 
-  // Alertas
   if (urgAlerta) {
     lines.push(`• ⚠️ Alerta urgente activa: "${urgAlerta.titulo}".`);
   } else if (alertas.length > 0) {
     lines.push(`• ${alertas.length} alerta${alertas.length > 1 ? 's' : ''} activa${alertas.length > 1 ? 's' : ''} en la comunidad.`);
   }
 
-  // Anuncios
   if (anuncios.length > 0) {
-    lines.push(`• Últimos anuncios: ${anuncios.map(a => `"${a.titulo}"`).join(' / ')}.`);
+    lines.push(`• Últimos anuncios: ${anuncios.map(a => `"${a.titulo as string}"`).join(' / ')}.`);
   }
 
   if (!isAdmin && abiertas.length === 0 && cuotasPendientes === 0 && numVotaciones === 0 && alertas.length === 0) {
