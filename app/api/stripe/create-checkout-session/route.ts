@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { getAuth } from 'firebase-admin/auth';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
+import { checkRateLimit, maybeCleanBuckets } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -31,6 +32,16 @@ export async function POST(req: NextRequest) {
     uid = decoded.uid;
   } catch {
     return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+  }
+
+  /* ── 0b. Rate limit — 5 checkout sessions per user per minute ── */
+  maybeCleanBuckets();
+  const rl = checkRateLimit(`checkout:${uid}`, 5, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Espera un momento.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.resetIn / 1000)) } },
+    );
   }
 
   /* ── 1. Validate env ── */
