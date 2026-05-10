@@ -16,7 +16,7 @@ if (!getApps().length) {
 }
 
 /** Allowed payment types — prevents injection of arbitrary tipo values into metadata */
-const VALID_TIPOS = new Set(['cuota', 'mediacion', 'incidencia']);
+const VALID_TIPOS = new Set(['cuota', 'mediacion', 'incidencia', 'cobro']);
 
 export async function POST(req: NextRequest) {
 
@@ -70,6 +70,20 @@ export async function POST(req: NextRequest) {
   const montoNum = Number(monto);
   if (!Number.isFinite(montoNum) || montoNum <= 0 || montoNum > 99_999) {
     return NextResponse.json({ error: 'monto no válido (debe ser entre 0.01 y 99999 €)' }, { status: 400 });
+  }
+  // Validate that comunidad_id belongs to the authenticated user
+  if (comunidad_id) {
+    try {
+      const { getAdminDb: getDb } = await import('@/lib/firebase/admin');
+      const adminDb = getDb();
+      const perfilSnap = await adminDb.collection('perfiles').doc(uid).get();
+      if (!perfilSnap.exists || perfilSnap.data()?.comunidad_id !== comunidad_id) {
+        return NextResponse.json({ error: 'comunidad_id no pertenece al usuario' }, { status: 403 });
+      }
+    } catch (e) {
+      console.error('[checkout] comunidad_id validation failed:', e);
+      return NextResponse.json({ error: 'Error validando comunidad' }, { status: 500 });
+    }
   }
 
   /* ── 4. Generate pago ID (independent of Firestore) ── */
@@ -132,7 +146,7 @@ export async function POST(req: NextRequest) {
           },
         },
       ],
-      success_url: `${origin}/pago/exito?tipo=${tipo}&ref=${referencia_id}&pago_id=${pagoId}`,
+      success_url: `${origin}/pago/exito?tipo=${tipo}&ref=${referencia_id}&pago_id=${pagoId}&monto=${montoNum}&concepto=${encodeURIComponent(descripcion ?? labelMap[tipo] ?? 'Pago FincaOS')}`,
       cancel_url:  `${origin}/pago/cancelado?tipo=${tipo}&ref=${referencia_id}`,
     });
 

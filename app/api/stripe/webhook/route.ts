@@ -147,6 +147,24 @@ export async function POST(req: NextRequest) {
           await db.collection('incidencias').doc(referencia_id).update({
             estado_pago_proveedor: 'pagado', pago_proveedor_at: now, updated_at: now,
           });
+
+        } else if (tipo === 'cobro') {
+          // Mark cobro as paid and update its chat message estado
+          await db.collection('cobros').doc(referencia_id).update({
+            estado: 'pagado', pagado_at: now, updated_at: now,
+          }).catch((e: unknown) => console.error('[Webhook] cobros update failed:', e));
+
+          // Update the mensaje estado in chats_admin so the card reflects payment
+          const chatId = `${meta.comunidad_id ?? ''}_${usuario_id}`;
+          const msgsSnap = await db
+            .collection('chats_admin').doc(chatId)
+            .collection('mensajes')
+            .where('cobro_id', '==', referencia_id)
+            .limit(1)
+            .get();
+          if (!msgsSnap.empty) {
+            await msgsSnap.docs[0].ref.update({ estado: 'pagado' }).catch(() => {});
+          }
         }
         break;
       }
@@ -234,7 +252,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Mark fully processed
-    await processedRef.update({ completed_at: now }).catch(() => {});
+    await processedRef.update({ completed_at: now }).catch((e: unknown) => {
+      console.warn('[Webhook] processedRef.update completed_at failed:', e);
+    });
 
     // Emit payment event for observability
     eventBus.emit({

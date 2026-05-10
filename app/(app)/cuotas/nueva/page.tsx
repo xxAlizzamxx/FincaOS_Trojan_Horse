@@ -78,7 +78,7 @@ export default function NuevaCuotaPage() {
       });
       await batch.commit();
 
-      // Push notification
+      // Push notification — fire and forget, non-fatal
       fetch('/api/notificaciones/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -88,7 +88,7 @@ export default function NuevaCuotaPage() {
           body: `${nombre.trim()} — ${montoNum}€`,
           url: '/cuotas',
         }),
-      }).catch(() => {});
+      }).catch((err) => console.warn('[cuotas/nueva] push notification failed:', err));
 
       router.push('/cuotas');
     } catch (err) {

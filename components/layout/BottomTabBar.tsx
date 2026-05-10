@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, DoorOpen, ShieldCheck, LucideIcon } from 'lucide-react';
+import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, DoorOpen, ShieldCheck, LucideIcon, MessageSquare } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,6 +21,7 @@ export function BottomTabBar() {
   const pathname = usePathname();
   const { perfil, user } = useAuth();
   const [porteriaBadge, setPorteriaBadge] = useState(0);
+  const [adminBadge, setAdminBadge]       = useState(0);
 
   const esVigilante = perfil?.rol === 'vigilante';
 
@@ -43,6 +44,25 @@ export function BottomTabBar() {
     return () => unsubChats();
   }, [user, perfil?.comunidad_id, esVigilante]);
 
+  // Badge admin messages: cobros/mensajes no leídos del admin
+  useEffect(() => {
+    if (!user || !perfil?.comunidad_id || esVigilante) return;
+
+    const unsubAdmin = onSnapshot(
+      query(
+        collection(db, 'chats_admin'),
+        where('comunidad_id', '==', perfil.comunidad_id),
+        where('vecino_id', '==', user.uid),
+      ),
+      (snap) => {
+        const noLeidos = snap.docs.reduce((sum, d) => sum + (d.data().no_leidos_vecino || 0), 0);
+        setAdminBadge(noLeidos);
+      },
+    );
+
+    return () => unsubAdmin();
+  }, [user, perfil?.comunidad_id, esVigilante]);
+
   // Tabs para vigilante: acceso directo al panel
   const tabsVigilante: TabItem[] = [
     { href: '/vigilante',            icon: ShieldCheck, label: 'Panel'    },
@@ -54,11 +74,11 @@ export function BottomTabBar() {
 
   // Tabs para vecinos
   const tabsVecino: TabItem[] = [
-    { href: '/inicio',      icon: Home,        label: 'Inicio'      },
-    { href: '/incidencias', icon: AlertCircle, label: 'Incidencias' },
-    { href: '/nueva',       icon: Plus,        label: 'Nuevo', isFab: true },
-    { href: '/porteria',    icon: DoorOpen,    label: 'Portería', badge: porteriaBadge },
-    { href: '/comunidad',   icon: Users,       label: 'Comunidad'   },
+    { href: '/inicio',          icon: Home,           label: 'Inicio'      },
+    { href: '/incidencias',     icon: AlertCircle,    label: 'Incidencias' },
+    { href: '/nueva',           icon: Plus,           label: 'Nuevo', isFab: true },
+    { href: '/porteria',        icon: DoorOpen,       label: 'Portería', badge: porteriaBadge },
+    { href: '/mensajes-admin',  icon: MessageSquare,  label: 'Admin',  badge: adminBadge },
   ];
 
   const tabs: TabItem[] = esVigilante ? tabsVigilante : tabsVecino;
