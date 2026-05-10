@@ -24,6 +24,7 @@ import { format, addMinutes, addHours, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { useSound } from '@/hooks/useSound';
+import { useQR } from '@/hooks/useQR';
 
 interface Acceso {
   id: string;
@@ -85,6 +86,13 @@ const tiposVisitante = [
   { value: 'tecnico',    label: 'Tecnico'    },
   { value: 'proveedor',  label: 'Proveedor'  },
 ];
+
+function QRImage({ data, className }: { data: string; className?: string }) {
+  const { qrUrl, loading, error } = useQR(data);
+  if (loading) return <div className={cn('flex items-center justify-center bg-muted rounded-xl', className)}><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+  if (error || !qrUrl) return <div className={cn('flex flex-col items-center justify-center bg-muted rounded-xl gap-1', className)}><QrCode className="w-8 h-8 text-muted-foreground" /><span className="text-[10px] text-muted-foreground">QR no disponible</span></div>;
+  return <img src={qrUrl} alt="Código QR" className={cn('rounded-xl', className)} />;
+}
 
 function generarToken(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(12)))
@@ -212,7 +220,8 @@ export default function PorteriaPage() {
       updateDoc(doc(db, 'chats_vigilancia', chatAbierto.id), { no_leidos_vecino: 0 }).catch(() => {});
     });
     return () => unsub();
-  }, [chatAbierto]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatAbierto, user?.uid, play]);
 
   useEffect(() => {
     if (!chatAbierto) return;
@@ -332,16 +341,15 @@ export default function PorteriaPage() {
   }
 
   async function descargarQR(pase: PaseAcceso) {
-    const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(getPaseUrl(pase.token))}`;
     try {
-      const resp = await fetch(url);
-      const blob = await resp.blob();
+      const QRCode = await import('qrcode');
+      const dataUrl = await QRCode.default.toDataURL(getPaseUrl(pase.token), { width: 400, margin: 2 });
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
+      a.href = dataUrl;
       a.download = `pase-${pase.visitante_nombre.replace(/\s+/g, '-')}.png`;
       a.click();
     } catch {
-      toast.error('Error al descargar');
+      toast.error('Error al descargar el QR');
     }
   }
 
@@ -367,7 +375,7 @@ export default function PorteriaPage() {
             body: texto.trim().slice(0, 100), url: '/vigilante/chats',
             targetUserIds: [chatAbierto.vigilante_id],
           }),
-        }).catch(() => {});
+        }).catch((err) => console.warn('[porteria] push notification failed:', err));
       }
       setTexto('');
     } catch { toast.error('Error al enviar'); } finally { setSending(false); }
@@ -652,11 +660,7 @@ export default function PorteriaPage() {
                 </div>
 
                 <div className="flex justify-center">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getPaseUrl(paseGenerado.token))}`}
-                    alt="QR del pase"
-                    className="w-44 h-44 rounded-xl"
-                  />
+                  <QRImage data={getPaseUrl(paseGenerado.token)} className="w-44 h-44" />
                 </div>
 
                 <p className="text-[11px] text-center text-muted-foreground">

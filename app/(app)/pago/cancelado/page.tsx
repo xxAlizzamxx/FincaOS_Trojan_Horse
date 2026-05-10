@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 
 const TIPO_RUTA: Record<string, (ref: string) => string> = {
   cuota:      () => '/cuotas',
+  cobro:      () => '/mensajes-admin',
   mediacion:  (ref) => `/mediaciones/${ref}`,
   incidencia: (ref) => `/incidencias/${ref}`,
 };

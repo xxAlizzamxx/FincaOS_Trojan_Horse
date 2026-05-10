@@ -281,7 +281,8 @@ service cloud.firestore {
 
       match /pagos/{userId} {
         allow read:   if isAuth() && (request.auth.uid == userId || (profile().rol == 'admin' || profile().rol == 'presidente'));
-        allow create: if isAuth();
+        // Only the owner or an admin can create their pago record (batch set by admin on cuota creation)
+        allow create: if isAuth() && (request.auth.uid == userId || (profile().rol == 'admin' || profile().rol == 'presidente'));
         allow update: if isAuth() && (profile().rol == 'admin' || profile().rol == 'presidente');
       }
     }
@@ -581,6 +582,32 @@ service cloud.firestore {
                             get(/databases/$(database)/documents/rondas_vigilancia/$(rondaId)).data.comunidad_id)
                           || isAdminOfCommunity(
                             get(/databases/$(database)/documents/rondas_vigilancia/$(rondaId)).data.comunidad_id));
+      }
+    }
+
+    // ── Cobros (admin → vecino payment requests) ──────────────────────────
+    // Admin creates cobros for individual vecinos; vecinos read their own.
+
+    match /cobros/{cobroId} {
+      allow read:  if isAuth() && (
+        resource.data.vecino_id == request.auth.uid
+        || isAdminOfCommunity(resource.data.comunidad_id)
+      );
+      allow create: if isAdminOfCommunity(request.resource.data.comunidad_id);
+      allow update: if isAdminOfCommunity(resource.data.comunidad_id);
+      allow delete: if isAdminOfCommunity(resource.data.comunidad_id);
+    }
+
+    // ── Chats admin (mensajes admin ↔ vecino) ─────────────────────────────
+
+    match /chats_admin/{chatId} {
+      allow read:   if isAuth() && (resource == null || belongsToCommunity(resource.data.comunidad_id));
+      allow create: if isAuth() && belongsToCommunity(request.resource.data.comunidad_id);
+      allow update: if isAuth() && belongsToCommunity(resource.data.comunidad_id);
+
+      match /mensajes/{mensajeId} {
+        allow read:   if isAuth();
+        allow create: if isAuth();
       }
     }
 

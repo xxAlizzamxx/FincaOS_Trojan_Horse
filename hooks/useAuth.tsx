@@ -38,8 +38,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
+        // Set session cookie for middleware (non-httpOnly so JS can write it)
+        firebaseUser.getIdToken().then((token) => {
+          document.cookie = `__session=${token}; path=/; max-age=3600; SameSite=Strict`;
+        }).catch(() => {});
         await fetchPerfil(firebaseUser);
       } else {
+        // Clear session cookie on sign-out
+        document.cookie = '__session=; path=/; max-age=0; SameSite=Strict';
         setPerfil(null);
         setPerfilPrivado(null);
         setPerfilCargado(true);
