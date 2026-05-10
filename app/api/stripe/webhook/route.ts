@@ -154,10 +154,10 @@ export async function POST(req: NextRequest) {
             estado: 'pagado', pagado_at: now, updated_at: now,
           }).catch((e: unknown) => console.error('[Webhook] cobros update failed:', e));
 
-          // Update the mensaje estado in chats_admin so the card reflects payment
-          const chatId = `${meta.comunidad_id ?? ''}_${usuario_id}`;
+          // Update the mensaje estado in chats_comunidad so the card reflects payment
+          const chatId = `${meta.comunidad_id ?? ''}_admin_${usuario_id}`;
           const msgsSnap = await db
-            .collection('chats_admin').doc(chatId)
+            .collection('chats_comunidad').doc(chatId)
             .collection('mensajes')
             .where('cobro_id', '==', referencia_id)
             .limit(1)

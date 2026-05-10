@@ -15,12 +15,12 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  DoorOpen, Package, CheckCircle2, XCircle, Clock,
+  DoorOpen, CheckCircle2, XCircle,
   MessageSquare, Send, Loader2, ShieldCheck, ChevronRight, ArrowLeft,
-  QrCode, Share2, Copy, Download, X, Plus,
+  QrCode, Share2, Copy, Download, X, Plus, UserCog, CreditCard, Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, addMinutes, addHours, addDays } from 'date-fns';
+import { format, addMinutes } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { useSound } from '@/hooks/useSound';
@@ -40,8 +40,8 @@ interface Acceso {
 
 interface ChatResumen {
   id: string;
-  vigilante_id: string;
-  vecino_id: string;
+  tipo: 'vigilante' | 'admin';
+  vigilante_id?: string;
   ultimo_mensaje: string;
   no_leidos_vecino: number;
   updated_at: string;
@@ -50,8 +50,15 @@ interface ChatResumen {
 interface Mensaje {
   id: string;
   sender_id: string;
-  texto: string;
+  sender_rol?: string;
   tipo: string;
+  texto?: string;
+  // payment_request fields
+  cobro_id?: string;
+  concepto?: string;
+  descripcion?: string | null;
+  monto?: number;
+  estado?: string;
   leido: boolean;
   created_at: string;
 }
@@ -73,10 +80,10 @@ interface PaseAcceso {
 type Tab = 'visitas' | 'pases' | 'mensajes';
 
 const DURACIONES = [
-  { value: 30,    label: '30 min',  unit: 'min'  },
-  { value: 60,    label: '1 hora',  unit: 'hour' },
-  { value: 240,   label: '4 horas', unit: 'hour4' },
-  { value: 1440,  label: '1 dia',   unit: 'day'  },
+  { value: 30,   label: '30 min',  unit: 'min'   },
+  { value: 60,   label: '1 hora',  unit: 'hour'  },
+  { value: 240,  label: '4 horas', unit: 'hour4' },
+  { value: 1440, label: '1 dia',   unit: 'day'   },
 ];
 
 const tiposVisitante = [
@@ -129,18 +136,23 @@ export default function PorteriaPage() {
   const [paseDuracion, setPaseDuracion] = useState(60);
   const [paseUsoUnico, setPaseUsoUnico] = useState(true);
 
-  // Chats
-  const [chats, setChats] = useState<ChatResumen[]>([]);
-  const [loadingChats, setLoadingChats] = useState(true);
-  const [chatAbierto, setChatAbierto] = useState<ChatResumen | null>(null);
-  const [mensajes, setMensajes] = useState<Mensaje[]>([]);
-  const [texto, setTexto] = useState('');
-  const [sending, setSending] = useState(false);
-  const [vigilanteTyping, setVigilanteTyping] = useState(false);
+  // Chats — vigilante + admin
+  const [vigilanteChat, setVigilanteChat] = useState<ChatResumen | null>(null);
+  const [adminChat, setAdminChat]         = useState<ChatResumen | null>(null);
+  const [loadingChats, setLoadingChats]   = useState(true);
+  const [chatAbierto, setChatAbierto]     = useState<ChatResumen | null>(null);
+  const [mensajes, setMensajes]           = useState<Mensaje[]>([]);
+  const [texto, setTexto]                 = useState('');
+  const [sending, setSending]             = useState(false);
+  const [pagando, setPagando]             = useState<string | null>(null);
+  const [contraparteTyping, setContraparteTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const comunidadId = perfil?.comunidad_id;
+
+  // Computed chats list (vigilante first, then admin)
+  const chats = [vigilanteChat, adminChat].filter(Boolean) as ChatResumen[];
 
   // Visitas en tiempo real
   useEffect(() => {
@@ -181,29 +193,32 @@ export default function PorteriaPage() {
     return () => unsub();
   }, [comunidadId, user]);
 
-  // Chats
+  // Chat vigilante — deterministic chatId
+  const vigilanteChatId = comunidadId && user ? `${comunidadId}_vigilante_${user.uid}` : null;
   useEffect(() => {
-    if (!comunidadId || !user) return;
-    const q = query(
-      collection(db, 'chats_vigilancia'),
-      where('comunidad_id', '==', comunidadId),
-      where('vecino_id', '==', user.uid),
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      const items = snap.docs
-        .map(d => ({ id: d.id, ...d.data() } as ChatResumen))
-        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-      setChats(items);
+    if (!vigilanteChatId) { setLoadingChats(false); return; }
+    const unsub = onSnapshot(doc(db, 'chats_comunidad', vigilanteChatId), (snap) => {
+      setVigilanteChat(snap.exists() ? ({ id: vigilanteChatId, tipo: 'vigilante', ...snap.data() } as ChatResumen) : null);
       setLoadingChats(false);
     }, () => setLoadingChats(false));
     return () => unsub();
-  }, [comunidadId, user]);
+  }, [vigilanteChatId]);
+
+  // Chat admin — deterministic chatId
+  const adminChatId = comunidadId && user ? `${comunidadId}_admin_${user.uid}` : null;
+  useEffect(() => {
+    if (!adminChatId) return;
+    const unsub = onSnapshot(doc(db, 'chats_comunidad', adminChatId), (snap) => {
+      setAdminChat(snap.exists() ? ({ id: adminChatId, tipo: 'admin', ...snap.data() } as ChatResumen) : null);
+    }, () => {});
+    return () => unsub();
+  }, [adminChatId]);
 
   // Mensajes del chat abierto
   useEffect(() => {
     if (!chatAbierto) return;
     const q = query(
-      collection(db, 'chats_vigilancia', chatAbierto.id, 'mensajes'),
+      collection(db, 'chats_comunidad', chatAbierto.id, 'mensajes'),
       orderBy('created_at', 'asc'),
     );
     let isFirst = true;
@@ -217,21 +232,22 @@ export default function PorteriaPage() {
       }
       isFirst = false;
       setMensajes(snap.docs.map(d => ({ id: d.id, ...d.data() } as Mensaje)));
-      updateDoc(doc(db, 'chats_vigilancia', chatAbierto.id), { no_leidos_vecino: 0 }).catch(() => {});
+      updateDoc(doc(db, 'chats_comunidad', chatAbierto.id), { no_leidos_vecino: 0 }).catch(() => {});
     });
     return () => unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatAbierto, user?.uid, play]);
 
+  // Typing indicator (solo para chat de vigilante)
   useEffect(() => {
-    if (!chatAbierto) return;
-    const unsub = onSnapshot(doc(db, 'chats_vigilancia', chatAbierto.id), (snap) => {
+    if (!chatAbierto || chatAbierto.tipo !== 'vigilante') return;
+    const unsub = onSnapshot(doc(db, 'chats_comunidad', chatAbierto.id), (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
-      if (data.typing_vigilante && data.typing_vigilante_at) {
-        setVigilanteTyping(Date.now() - new Date(data.typing_vigilante_at).getTime() < 5000);
+      if (data.typing_contraparte && data.typing_contraparte_at) {
+        setContraparteTyping(Date.now() - new Date(data.typing_contraparte_at).getTime() < 5000);
       } else {
-        setVigilanteTyping(false);
+        setContraparteTyping(false);
       }
     }, () => {});
     return () => unsub();
@@ -239,11 +255,11 @@ export default function PorteriaPage() {
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [mensajes, vigilanteTyping]);
+  }, [mensajes, contraparteTyping]);
 
   const notifyVecinoTyping = useCallback(() => {
     if (!chatAbierto || !user) return;
-    const chatRef = doc(db, 'chats_vigilancia', chatAbierto.id);
+    const chatRef = doc(db, 'chats_comunidad', chatAbierto.id);
     updateDoc(chatRef, { typing_vecino: true, typing_vecino_at: new Date().toISOString() }).catch(() => {});
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
@@ -357,16 +373,18 @@ export default function PorteriaPage() {
     if (!texto.trim() || sending || !chatAbierto || !user) return;
     setSending(true);
     try {
-      await addDoc(collection(db, 'chats_vigilancia', chatAbierto.id, 'mensajes'), {
-        sender_id: user.uid, texto: texto.trim(), tipo: 'texto', leido: false,
-        created_at: new Date().toISOString(),
+      const now = new Date().toISOString();
+      await addDoc(collection(db, 'chats_comunidad', chatAbierto.id, 'mensajes'), {
+        sender_id: user.uid, sender_rol: 'vecino', tipo: 'texto', texto: texto.trim(),
+        leido: false, created_at: now,
       });
-      await updateDoc(doc(db, 'chats_vigilancia', chatAbierto.id), {
-        ultimo_mensaje: texto.trim().slice(0, 100),
-        no_leidos_vigilante: 1,
-        updated_at: new Date().toISOString(),
+      await updateDoc(doc(db, 'chats_comunidad', chatAbierto.id), {
+        ultimo_mensaje:        texto.trim().slice(0, 100),
+        no_leidos_contraparte: 1,
+        updated_at:            now,
       });
-      if (comunidadId && chatAbierto.vigilante_id) {
+      // Push notification only for vigilante chat
+      if (comunidadId && chatAbierto.tipo === 'vigilante' && chatAbierto.vigilante_id) {
         fetch('/api/notificaciones/push', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -381,24 +399,52 @@ export default function PorteriaPage() {
     } catch { toast.error('Error al enviar'); } finally { setSending(false); }
   }
 
+  async function pagarCobro(msg: Mensaje) {
+    if (!user || !msg.cobro_id || !msg.monto || !comunidadId) return;
+    setPagando(msg.id);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          monto: msg.monto, tipo: 'cobro', referencia_id: msg.cobro_id,
+          usuario_id: user.uid, comunidad_id: comunidadId,
+          descripcion: `Cobro: ${msg.concepto}`, email: user.email ?? undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error');
+      if (data.url) window.location.href = data.url;
+    } catch (err: any) {
+      toast.error(err.message ?? 'No se pudo iniciar el pago');
+    } finally {
+      setPagando(null);
+    }
+  }
+
   const totalNoLeidos = chats.reduce((sum, c) => sum + (c.no_leidos_vecino || 0), 0);
   const visitasPendientes = accesos.filter(a => a.estado === 'esperando');
   const pasesActivos = pases.filter(p => p.estado === 'activo' && new Date(p.expira_at) > new Date());
 
   // Vista de chat abierto
   if (chatAbierto) {
+    const isAdmin = chatAbierto.tipo === 'admin';
     return (
       <div className="px-4 py-5 max-w-2xl mx-auto flex flex-col h-[calc(100vh-8rem)]">
-        <button onClick={() => setChatAbierto(null)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-finca-dark mb-3 transition-colors">
+        <button onClick={() => { setChatAbierto(null); setContraparteTyping(false); }} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-finca-dark mb-3 transition-colors">
           ← Volver a portería
         </button>
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center">
-            <ShieldCheck className="w-5 h-5 text-finca-coral" />
+          <div className={cn('w-10 h-10 rounded-full flex items-center justify-center', isAdmin ? 'bg-finca-coral' : 'bg-finca-peach')}>
+            {isAdmin
+              ? <UserCog className="w-5 h-5 text-white" />
+              : <ShieldCheck className="w-5 h-5 text-finca-coral" />
+            }
           </div>
           <div>
-            <p className="font-semibold text-finca-dark">Portería</p>
-            <p className="text-xs text-muted-foreground">Vigilancia de la comunidad</p>
+            <p className="font-semibold text-finca-dark">{isAdmin ? 'Administración' : 'Portería'}</p>
+            <p className="text-xs text-muted-foreground">{isAdmin ? 'Cobros y comunicaciones de tu comunidad' : 'Vigilancia de la comunidad'}</p>
           </div>
         </div>
         <Card className="flex-1 border-0 shadow-sm flex flex-col overflow-hidden">
@@ -411,6 +457,60 @@ export default function PorteriaPage() {
             )}
             {mensajes.map(msg => {
               const mio = msg.sender_id === user?.uid;
+
+              // Cobro / solicitud de pago
+              if (msg.tipo === 'payment_request') {
+                const pagado = msg.estado === 'pagado';
+                return (
+                  <div key={msg.id} className="flex justify-start">
+                    <div className="flex gap-2 items-end max-w-[90%]">
+                      <div className="w-7 h-7 rounded-full bg-finca-coral flex items-center justify-center shrink-0 mb-0.5">
+                        <UserCog className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <div className="bg-white border border-border rounded-2xl rounded-bl-md p-3 shadow-sm space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0', pagado ? 'bg-green-100' : 'bg-yellow-100')}>
+                            <Wallet className={cn('w-4 h-4', pagado ? 'text-green-600' : 'text-yellow-600')} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-finca-dark">Solicitud de pago</p>
+                            <p className="text-[11px] text-muted-foreground">Administración</p>
+                          </div>
+                          <Badge className={cn('ml-auto text-[9px]', pagado ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>
+                            {pagado ? 'Pagado' : 'Pendiente'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-finca-dark">{msg.concepto}</p>
+                          {msg.descripcion && <p className="text-xs text-muted-foreground mt-0.5">{msg.descripcion}</p>}
+                          <p className="text-lg font-bold text-finca-coral mt-1">{msg.monto?.toFixed(2)}€</p>
+                        </div>
+                        {!pagado && (
+                          <Button
+                            className="w-full h-9 bg-finca-coral hover:bg-finca-coral/90 text-white text-sm"
+                            onClick={() => pagarCobro(msg)}
+                            disabled={pagando === msg.id}
+                          >
+                            {pagando === msg.id ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CreditCard className="w-4 h-4 mr-1" />}
+                            Pagar ahora
+                          </Button>
+                        )}
+                        {pagado && (
+                          <div className="flex items-center gap-1.5 text-green-600 text-xs font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Pagado correctamente
+                          </div>
+                        )}
+                        <span className="text-[9px] text-muted-foreground block">
+                          {format(new Date(msg.created_at), 'HH:mm', { locale: es })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Mensaje texto normal
               return (
                 <div key={msg.id} className={cn('flex gap-2', mio ? 'flex-row-reverse' : 'flex-row')}>
                   {mio ? (
@@ -418,8 +518,11 @@ export default function PorteriaPage() {
                       {perfil?.nombre_completo?.[0]?.toUpperCase()}
                     </div>
                   ) : (
-                    <div className="w-7 h-7 rounded-full bg-finca-coral flex items-center justify-center shrink-0">
-                      <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                    <div className={cn('w-7 h-7 rounded-full flex items-center justify-center shrink-0', 'bg-finca-coral')}>
+                      {isAdmin
+                        ? <UserCog className="w-3.5 h-3.5 text-white" />
+                        : <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                      }
                     </div>
                   )}
                   <div className={cn('max-w-[75%] rounded-2xl px-3 py-2', mio ? 'bg-finca-coral text-white rounded-br-md' : 'bg-white border border-border rounded-bl-md dark:bg-card')}>
@@ -431,7 +534,7 @@ export default function PorteriaPage() {
                 </div>
               );
             })}
-            {vigilanteTyping && (
+            {contraparteTyping && !isAdmin && (
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-full bg-finca-coral flex items-center justify-center shrink-0">
                   <ShieldCheck className="w-3.5 h-3.5 text-white" />
@@ -573,7 +676,6 @@ export default function PorteriaPage() {
             {showFormPase ? 'Cancelar' : 'Generar nuevo pase QR'}
           </Button>
 
-          {/* Formulario nuevo pase */}
           {showFormPase && (
             <Card className="border-2 border-finca-coral/20 shadow-md">
               <CardContent className="p-4 space-y-4">
@@ -638,7 +740,6 @@ export default function PorteriaPage() {
             </Card>
           )}
 
-          {/* Modal pase generado con QR + opciones compartir */}
           {paseGenerado && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPaseGenerado(null)}>
               <div className="bg-white dark:bg-card rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
@@ -668,24 +769,15 @@ export default function PorteriaPage() {
                 </p>
 
                 <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => compartirWhatsApp(paseGenerado)}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-green-50 hover:bg-green-100 border border-green-200 transition-colors"
-                  >
+                  <button onClick={() => compartirWhatsApp(paseGenerado)} className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-green-50 hover:bg-green-100 border border-green-200 transition-colors">
                     <Share2 className="w-5 h-5 text-green-600" />
                     <span className="text-[10px] font-medium text-green-700">WhatsApp</span>
                   </button>
-                  <button
-                    onClick={() => copiarEnlace(paseGenerado)}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
-                  >
+                  <button onClick={() => copiarEnlace(paseGenerado)} className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors">
                     <Copy className="w-5 h-5 text-blue-600" />
                     <span className="text-[10px] font-medium text-blue-700">Copiar link</span>
                   </button>
-                  <button
-                    onClick={() => descargarQR(paseGenerado)}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 transition-colors"
-                  >
+                  <button onClick={() => descargarQR(paseGenerado)} className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 transition-colors">
                     <Download className="w-5 h-5 text-purple-600" />
                     <span className="text-[10px] font-medium text-purple-700">Descargar</span>
                   </button>
@@ -694,7 +786,6 @@ export default function PorteriaPage() {
             </div>
           )}
 
-          {/* Lista de pases */}
           {loadingPases ? (
             <div className="space-y-2">{[1,2].map(i => <Card key={i} className="border-0 shadow-sm"><CardContent className="p-3"><Skeleton className="h-12 w-full" /></CardContent></Card>)}</div>
           ) : pases.length === 0 ? (
@@ -750,7 +841,7 @@ export default function PorteriaPage() {
             <Card className="border-dashed border-2">
               <CardContent className="py-10 text-center">
                 <MessageSquare className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No tienes mensajes de portería</p>
+                <p className="text-sm text-muted-foreground">No tienes mensajes aún</p>
               </CardContent>
             </Card>
           ) : (
@@ -758,11 +849,16 @@ export default function PorteriaPage() {
               <button key={c.id} onClick={() => setChatAbierto(c)} className="w-full text-left">
                 <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-[0.99]">
                   <CardContent className="p-3 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center shrink-0">
-                      <ShieldCheck className="w-5 h-5 text-finca-coral" />
+                    <div className={cn('w-10 h-10 rounded-full flex items-center justify-center shrink-0', c.tipo === 'admin' ? 'bg-finca-coral' : 'bg-finca-peach')}>
+                      {c.tipo === 'admin'
+                        ? <UserCog className="w-5 h-5 text-white" />
+                        : <ShieldCheck className="w-5 h-5 text-finca-coral" />
+                      }
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-finca-dark dark:text-white">Portería</p>
+                      <p className="text-sm font-medium text-finca-dark dark:text-white">
+                        {c.tipo === 'admin' ? 'Administración' : 'Portería'}
+                      </p>
                       <p className="text-xs text-muted-foreground truncate">{c.ultimo_mensaje || 'Sin mensajes'}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

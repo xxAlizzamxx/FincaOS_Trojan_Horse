@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Download, FileSpreadsheet, Navigation, DoorOpen, Loader2, CheckCircle2,
+  Download, FileSpreadsheet, Navigation, DoorOpen, Loader2, CheckCircle2, Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { subDays, format } from 'date-fns';
@@ -44,6 +44,7 @@ export default function AdminReportesPage() {
   const comunidadId = perfil?.comunidad_id;
 
   const [loadingCuotas,  setLoadingCuotas]  = useState(false);
+  const [loadingCobros,  setLoadingCobros]  = useState(false);
   const [loadingAccesos, setLoadingAccesos] = useState(false);
   const [loadingRondas,  setLoadingRondas]  = useState(false);
   const [periodoAccesos, setPeriodoAccesos] = useState<'7' | '30' | '90'>('30');
@@ -104,6 +105,52 @@ export default function AdminReportesPage() {
       toast.error('Error al exportar cuotas');
     } finally {
       setLoadingCuotas(false);
+    }
+  }
+
+  /* ── EXPORT: Cobros ──────────────────────────────────────────────────── */
+  async function exportarCobros() {
+    if (!comunidadId) return;
+    setLoadingCobros(true);
+    try {
+      const [cobrosSnap, perfilesSnap] = await Promise.all([
+        getDocs(
+          query(
+            collection(db, 'cobros'),
+            where('comunidad_id', '==', comunidadId),
+            orderBy('created_at', 'desc'),
+            limit(2000),
+          ),
+        ),
+        getDocs(query(collection(db, 'perfiles'), where('comunidad_id', '==', comunidadId))),
+      ]);
+
+      const perfilesMap = new Map<string, Perfil>();
+      perfilesSnap.docs.forEach(d => perfilesMap.set(d.id, { ...(d.data() as Perfil), id: d.id }));
+
+      const header = ['Vecino', 'Piso', 'Concepto', 'Importe (€)', 'Estado', 'Fecha creación', 'Fecha pago'];
+      const dataRows = cobrosSnap.docs.map(d => {
+        const c = { id: d.id, ...d.data() } as any;
+        const v = perfilesMap.get(c.vecino_id);
+        return [
+          v?.nombre_completo ?? c.vecino_id,
+          v?.numero_piso ?? '',
+          c.concepto ?? '',
+          String(c.monto ?? ''),
+          c.estado ?? '',
+          formatFecha(c.created_at),
+          formatFecha(c.pagado_at ?? null),
+        ];
+      });
+
+      if (dataRows.length === 0) { toast.info('No hay cobros'); return; }
+      downloadCSV(`cobros_${format(new Date(), 'yyyy-MM-dd')}.csv`, [header, ...dataRows]);
+      toast.success(`${dataRows.length} cobros exportados`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Error al exportar cobros');
+    } finally {
+      setLoadingCobros(false);
     }
   }
 
@@ -338,6 +385,22 @@ export default function AdminReportesPage() {
       >
         <p className="text-xs text-muted-foreground">
           Columnas: cuota · monto · vencimiento · vecino · piso · estado · fecha pago
+        </p>
+      </ReporteCard>
+
+      {/* Reporte: Cobros */}
+      <ReporteCard
+        icon={Wallet}
+        title="Cobros a vecinos"
+        description="Todos los cobros individuales con su estado de pago"
+        onExport={exportarCobros}
+        loading={loadingCobros}
+        accentColor="bg-finca-coral"
+        iconBg="bg-finca-peach/30"
+        iconColor="text-finca-coral"
+      >
+        <p className="text-xs text-muted-foreground">
+          Columnas: vecino · piso · concepto · importe · estado · fecha creación · fecha pago
         </p>
       </ReporteCard>
 

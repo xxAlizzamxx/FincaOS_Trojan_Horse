@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, DoorOpen, ShieldCheck, LucideIcon, MessageSquare } from 'lucide-react';
+import { Chrome as Home, CircleAlert as AlertCircle, Plus, Users, DoorOpen, ShieldCheck, LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 
 interface TabItem {
@@ -20,48 +20,36 @@ interface TabItem {
 export function BottomTabBar() {
   const pathname = usePathname();
   const { perfil, user } = useAuth();
-  const [porteriaBadge, setPorteriaBadge] = useState(0);
-  const [adminBadge, setAdminBadge]       = useState(0);
+  const [vigilanteBadge, setVigilanteBadge] = useState(0);
+  const [adminBadge, setAdminBadge]         = useState(0);
 
   const esVigilante = perfil?.rol === 'vigilante';
 
-  // Badge portería: mensajes no leídos del vigilante
+  // Badge portería (vigilante chat)
   useEffect(() => {
     if (!user || !perfil?.comunidad_id || esVigilante) return;
-
-    const unsubChats = onSnapshot(
-      query(
-        collection(db, 'chats_vigilancia'),
-        where('comunidad_id', '==', perfil.comunidad_id),
-        where('vecino_id', '==', user.uid),
-      ),
-      (snap) => {
-        const noLeidos = snap.docs.reduce((sum, d) => sum + (d.data().no_leidos_vecino || 0), 0);
-        setPorteriaBadge(noLeidos);
-      },
+    const chatId = `${perfil.comunidad_id}_vigilante_${user.uid}`;
+    const unsub = onSnapshot(
+      doc(db, 'chats_comunidad', chatId),
+      (snap) => setVigilanteBadge(snap.exists() ? (snap.data()?.no_leidos_vecino || 0) : 0),
+      () => {},
     );
-
-    return () => unsubChats();
+    return () => unsub();
   }, [user, perfil?.comunidad_id, esVigilante]);
 
-  // Badge admin messages: cobros/mensajes no leídos del admin
+  // Badge portería (admin chat) — combined into portería badge
   useEffect(() => {
     if (!user || !perfil?.comunidad_id || esVigilante) return;
-
-    const unsubAdmin = onSnapshot(
-      query(
-        collection(db, 'chats_admin'),
-        where('comunidad_id', '==', perfil.comunidad_id),
-        where('vecino_id', '==', user.uid),
-      ),
-      (snap) => {
-        const noLeidos = snap.docs.reduce((sum, d) => sum + (d.data().no_leidos_vecino || 0), 0);
-        setAdminBadge(noLeidos);
-      },
+    const chatId = `${perfil.comunidad_id}_admin_${user.uid}`;
+    const unsub = onSnapshot(
+      doc(db, 'chats_comunidad', chatId),
+      (snap) => setAdminBadge(snap.exists() ? (snap.data()?.no_leidos_vecino || 0) : 0),
+      () => {},
     );
-
-    return () => unsubAdmin();
+    return () => unsub();
   }, [user, perfil?.comunidad_id, esVigilante]);
+
+  const porteriaBadge = vigilanteBadge + adminBadge;
 
   // Tabs para vigilante: acceso directo al panel
   const tabsVigilante: TabItem[] = [
@@ -74,11 +62,11 @@ export function BottomTabBar() {
 
   // Tabs para vecinos
   const tabsVecino: TabItem[] = [
-    { href: '/inicio',          icon: Home,           label: 'Inicio'      },
-    { href: '/incidencias',     icon: AlertCircle,    label: 'Incidencias' },
-    { href: '/nueva',           icon: Plus,           label: 'Nuevo', isFab: true },
-    { href: '/porteria',        icon: DoorOpen,       label: 'Portería', badge: porteriaBadge },
-    { href: '/mensajes-admin',  icon: MessageSquare,  label: 'Admin',  badge: adminBadge },
+    { href: '/inicio',      icon: Home,        label: 'Inicio'      },
+    { href: '/incidencias', icon: AlertCircle, label: 'Incidencias' },
+    { href: '/nueva',       icon: Plus,        label: 'Nuevo', isFab: true },
+    { href: '/porteria',    icon: DoorOpen,    label: 'Portería', badge: porteriaBadge },
+    { href: '/comunidad',   icon: Users,       label: 'Comunidad'   },
   ];
 
   const tabs: TabItem[] = esVigilante ? tabsVigilante : tabsVecino;

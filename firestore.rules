@@ -611,6 +611,35 @@ service cloud.firestore {
       }
     }
 
+    // ── Chats unificados (chats_comunidad) ───────────────────────────────
+    // Replaces chats_vigilancia + chats_admin with a single typed collection.
+    // ChatId format: {comunidad_id}_{tipo}_{vecino_id}
+    // tipo ∈ { 'vigilante', 'admin' }
+
+    match /chats_comunidad/{chatId} {
+      // Vecino: can read/write their own chat (vecino_id == uid)
+      // Admin/presidente: can access 'admin' type chats in their community
+      // Vigilante: can access 'vigilante' type chats in their community
+      allow read: if isAuth() && (
+        resource == null
+        || resource.data.vecino_id == request.auth.uid
+        || belongsToCommunity(resource.data.comunidad_id)
+      );
+      allow create: if isAuth() && (
+        request.resource.data.vecino_id == request.auth.uid
+        || belongsToCommunity(request.resource.data.comunidad_id)
+      );
+      allow update: if isAuth() && (
+        resource.data.vecino_id == request.auth.uid
+        || belongsToCommunity(resource.data.comunidad_id)
+      );
+
+      match /mensajes/{msgId} {
+        allow read:   if isAuth();
+        allow create: if isAuth() && request.resource.data.sender_id == request.auth.uid;
+      }
+    }
+
     // ── Pagos (top-level, complementary to cuotas subcollection) ──────────
 
     match /pagos/{pagoId} {

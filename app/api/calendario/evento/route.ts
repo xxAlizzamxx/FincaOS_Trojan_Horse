@@ -19,6 +19,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
 import { getAdminDb } from '@/lib/firebase/admin';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
+import { checkRateLimit, maybeCleanBuckets } from '@/lib/rate-limit';
+import { logAudit } from '@/lib/audit-server';
 
 if (!getApps().length) {
   initializeApp({
@@ -45,6 +47,16 @@ export async function POST(req: NextRequest) {
       uid = decoded.uid;
     } catch {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+    }
+
+    // ── 1b. Rate limit — 10 eventos per admin per minute ───────────────────────
+    maybeCleanBuckets();
+    const rl = checkRateLimit(`calendario:${uid}`, 10, 60_000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: 'Demasiadas solicitudes. Espera un momento.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.resetIn / 1000)) } },
+      );
     }
 
     // ── 2. Parsear body ─────────────────────────────────────────────────────────
@@ -106,6 +118,16 @@ export async function POST(req: NextRequest) {
       created_at:   now,
       tipo_origen:  'evento_calendario',
       evento_id:    eventoRef.id,
+    });
+
+    // ── 6. Audit log ────────────────────────────────────────────────────────────
+    await logAudit({
+      accion:       'crear_evento',
+      recurso_tipo: 'evento_calendario',
+      recurso_id:   eventoRef.id,
+      admin_id:     uid,
+      comunidad_id,
+      detalles:     { titulo: titulo.trim(), tipo, fecha },
     });
 
     return NextResponse.json({ ok: true, id: eventoRef.id });
