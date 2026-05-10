@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, query, where, addDoc, getDocs, onSnapshot, updateDoc, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, addDoc, getDocs, onSnapshot, updateDoc, doc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -201,24 +201,21 @@ export default function PaqueteriaPage() {
         return;
       }
 
-      const vecinoId = coincidencia.id;
-      const vecinoNombre = coincidencia.data().nombre_completo;
-      const chatId  = `${user.uid}_${vecinoId}`;
-      const chatRef = doc(db, 'chats_vigilancia', chatId);
-      const chatSnap = await getDoc(chatRef);
+      const vecinoId     = coincidencia.id;
+      const vecinoNombre = coincidencia.data().nombre_completo as string;
+      const chatId  = `${comunidadId}_vigilante_${vecinoId}`;
+      const chatRef = doc(db, 'chats_comunidad', chatId);
+      const now = new Date().toISOString();
 
-      if (!chatSnap.exists()) {
-        await setDoc(chatRef, {
-          comunidad_id:        comunidadId,
-          vigilante_id:        user.uid,
-          vecino_id:           vecinoId,
-          vecino_nombre:       vecinoNombre,
-          ultimo_mensaje:      '',
-          no_leidos_vigilante: 0,
-          no_leidos_vecino:    0,
-          updated_at:          new Date().toISOString(),
-        });
-      }
+      await setDoc(chatRef, {
+        comunidad_id:    comunidadId,
+        tipo:            'vigilante',
+        contraparte_id:  user.uid,
+        contraparte_rol: 'vigilante',
+        vecino_id:       vecinoId,
+        updated_at:      now,
+        created_at:      now,
+      }, { merge: true });
 
       const reciboInfo = p.tipo === 'recibo' && p.recibo_tipo
         ? tiposRecibo.find(r => r.value === p.recibo_tipo)
@@ -228,20 +225,21 @@ export default function PaqueteriaPage() {
         ? `📄 Llego un recibo${reciboInfo ? ` de ${reciboInfo.label}` : ''} para su apartamento. Puede recogerlo en portería.`
         : `📦 Llego un paquete para su apartamento. Puede recogerlo en portería.`;
 
-      await addDoc(collection(db, 'chats_vigilancia', chatId, 'mensajes'), {
-        sender_id:     user.uid,
+      await addDoc(collection(db, 'chats_comunidad', chatId, 'mensajes'), {
+        sender_id:      user.uid,
+        sender_rol:     'vigilante',
         texto,
-        tipo:          'plantilla',
+        tipo:           'plantilla',
         plantilla_tipo: p.tipo === 'recibo' ? 'recibo' : 'paquete',
-        paquete_id:    p.id,
-        leido:         false,
-        created_at:    new Date().toISOString(),
+        paquete_id:     p.id,
+        leido:          false,
+        created_at:     now,
       });
 
       await updateDoc(chatRef, {
         ultimo_mensaje:   texto,
         no_leidos_vecino: 1,
-        updated_at:       new Date().toISOString(),
+        updated_at:       now,
       });
 
       await updateDoc(doc(db, 'paqueteria', p.id), { estado: 'notificado' });
