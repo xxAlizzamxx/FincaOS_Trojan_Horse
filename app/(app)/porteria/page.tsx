@@ -17,7 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   DoorOpen, CheckCircle2, XCircle,
   MessageSquare, Send, Loader2, ShieldCheck, ChevronRight, ArrowLeft,
-  QrCode, Share2, Copy, Download, X, Plus, UserCog, CreditCard, Wallet,
+  QrCode, Share2, Copy, Download, X, Plus, UserCog, CreditCard, Wallet, CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, addMinutes } from 'date-fns';
@@ -61,6 +61,14 @@ interface Mensaje {
   estado?: string;
   leido: boolean;
   created_at: string;
+}
+
+interface EventoCalendario {
+  id: string;
+  titulo: string;
+  descripcion?: string;
+  tipo?: string;
+  fecha: string;
 }
 
 interface PaseAcceso {
@@ -135,6 +143,9 @@ export default function PorteriaPage() {
   const [paseMotivo, setPaseMotivo] = useState('');
   const [paseDuracion, setPaseDuracion] = useState(60);
 
+  // Eventos de calendario de hoy
+  const [eventosHoy, setEventosHoy] = useState<EventoCalendario[]>([]);
+
   // Chats — vigilante + admin
   const [vigilanteChat, setVigilanteChat] = useState<ChatResumen | null>(null);
   const [adminChat, setAdminChat]         = useState<ChatResumen | null>(null);
@@ -191,6 +202,23 @@ export default function PorteriaPage() {
     }, () => setLoadingPases(false));
     return () => unsub();
   }, [comunidadId, user]);
+
+  // Eventos de hoy
+  useEffect(() => {
+    if (!comunidadId) return;
+    const hoyStr = new Date().toISOString().split('T')[0];
+    const q = query(
+      collection(db, 'eventos_calendario'),
+      where('comunidad_id', '==', comunidadId),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const hoy = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as EventoCalendario))
+        .filter(e => e.fecha?.startsWith(hoyStr));
+      setEventosHoy(hoy);
+    }, () => {});
+    return () => unsub();
+  }, [comunidadId]);
 
   // Chat vigilante — deterministic chatId
   const vigilanteChatId = comunidadId && user ? `${comunidadId}_vigilante_${user.uid}` : null;
@@ -820,6 +848,23 @@ export default function PorteriaPage() {
       {/* ── Tab Mensajes ── */}
       {tab === 'mensajes' && (
         <div className="space-y-2">
+          {/* Eventos de hoy */}
+          {eventosHoy.length > 0 && (
+            <Card className="border-l-4 border-l-finca-coral bg-finca-peach/10 border-0 shadow-sm">
+              <CardContent className="p-3 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-finca-peach flex items-center justify-center shrink-0">
+                  <CalendarDays className="w-4 h-4 text-finca-coral" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-finca-coral uppercase tracking-wide mb-1">Hoy en el calendario</p>
+                  {eventosHoy.map(e => (
+                    <p key={e.id} className="text-sm font-medium text-finca-dark truncate">{e.titulo}</p>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {loadingChats ? (
             <div className="space-y-2">{[1,2].map(i => <Card key={i} className="border-0 shadow-sm"><CardContent className="p-3"><Skeleton className="h-12 w-full" /></CardContent></Card>)}</div>
           ) : chats.length === 0 ? (
