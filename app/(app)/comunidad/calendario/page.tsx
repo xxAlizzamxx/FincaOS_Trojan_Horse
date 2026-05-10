@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc,
+  collection, query, where, getDocs, updateDoc, deleteDoc, doc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -224,6 +224,9 @@ export default function CalendarioPage() {
 
   function seleccionarDia(dia: Date) {
     setDiaSeleccionado(dia);
+  }
+
+  function dobleClickDia(dia: Date) {
     if (esAdmin) {
       abrirModalCrear(dia);
     }
@@ -271,15 +274,28 @@ export default function CalendarioPage() {
         return;
       }
 
-      const ref = await addDoc(collection(db, 'eventos_calendario'), {
-        comunidad_id: comunidadId,
-        titulo: formTitulo.trim(),
-        descripcion: formDescripcion.trim() || null,
-        tipo: formTipo,
-        fecha: fechaISO,
-        created_by: user.uid,
-        created_at: new Date().toISOString(),
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/calendario/evento', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          comunidad_id: comunidadId,
+          titulo: formTitulo.trim(),
+          tipo: formTipo,
+          fecha: fechaISO,
+          descripcion: formDescripcion.trim() || undefined,
+        }),
       });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Error al crear');
+      }
+
+      const { id: eventoId } = await res.json();
 
       void crearNotificacionComunidad(comunidadId, {
         tipo: 'anuncio',
@@ -288,7 +304,7 @@ export default function CalendarioPage() {
           ? `Nueva reunion programada para ${format(new Date(fechaISO), "d 'de' MMMM", { locale: es })}`
           : `Nuevo evento: ${formTitulo.trim()}`,
         created_by: user.uid,
-        related_id: ref.id,
+        related_id: eventoId,
         link: '/comunidad/calendario',
       });
 
@@ -413,6 +429,7 @@ export default function CalendarioPage() {
                 <button
                   key={dia.toISOString()}
                   onClick={() => seleccionarDia(dia)}
+                  onDoubleClick={() => dobleClickDia(dia)}
                   className={cn(
                     'relative flex flex-col items-center justify-start rounded-xl p-1 min-h-[40px] transition-all text-sm',
                     isToday(dia) && 'bg-finca-coral text-white font-bold',
@@ -475,7 +492,7 @@ export default function CalendarioPage() {
           {eventosDelDia.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               Sin eventos este dia
-              {esAdmin && ' — toca un dia para crear uno.'}
+              {esAdmin && ' — doble toque en un dia para crear uno.'}
             </p>
           ) : (
             eventosDelDia.map(evt => {
