@@ -185,24 +185,28 @@ export default function PaqueteriaPage() {
   async function notificarVecino(p: Paquete) {
     if (!user || !comunidadId) return;
 
-    // Buscar vecino por nombre del destinatario
     try {
-      const snap = await getDocs(query(
-        collection(db, 'perfiles'),
-        where('comunidad_id', '==', comunidadId),
-      ));
-      const coincidencia = snap.docs.find((d: import('firebase/firestore').QueryDocumentSnapshot) => {
-        const nombre = (d.data().nombre_completo || '').toLowerCase();
-        return nombre.includes(p.destinatario_nombre.toLowerCase().split(' ')[0]);
-      });
+      let vecinoId     = p.vecino_id ?? '';
+      let vecinoNombre = p.destinatario_nombre;
 
-      if (!coincidencia) {
-        toast.error('No se encontró el residente en el sistema');
-        return;
+      // If not linked to a profile yet, search by name
+      if (!vecinoId) {
+        const snap = await getDocs(query(
+          collection(db, 'perfiles'),
+          where('comunidad_id', '==', comunidadId),
+        ));
+        const coincidencia = snap.docs.find((d) => {
+          const nombre = (d.data().nombre_completo || '').toLowerCase();
+          return nombre.includes(p.destinatario_nombre.toLowerCase().split(' ')[0]);
+        });
+
+        if (!coincidencia) {
+          toast.error('No se encontró el residente en el sistema');
+          return;
+        }
+        vecinoId     = coincidencia.id;
+        vecinoNombre = coincidencia.data().nombre_completo as string;
       }
-
-      const vecinoId     = coincidencia.id;
-      const vecinoNombre = coincidencia.data().nombre_completo as string;
       const chatId  = `${comunidadId}_vigilante_${vecinoId}`;
       const chatRef = doc(db, 'chats_comunidad', chatId);
       const now = new Date().toISOString();
