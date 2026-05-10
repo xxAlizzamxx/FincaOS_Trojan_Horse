@@ -60,9 +60,6 @@ export function AppHeader() {
           {/* Sonido */}
           <SoundToggle size="sm" />
 
-          {/* Tema claro/oscuro */}
-          <ThemeToggle />
-
           {/* Campana — posición relativa para el panel flotante */}
           <div className="relative">
             <Button

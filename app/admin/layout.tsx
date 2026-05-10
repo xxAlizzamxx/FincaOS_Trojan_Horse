@@ -9,7 +9,6 @@ import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/animation/PageTransition';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -138,7 +137,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <ThemeToggle />
             {perfil && <AvatarVecino perfil={perfil} size="sm" />}
           </div>
         </header>

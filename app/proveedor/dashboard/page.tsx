@@ -37,7 +37,6 @@ import {
   LogOut, Bell, ChevronRight, MapPin, Wrench, Calendar,
   CheckCircle2, Play, AlertCircle, Zap, Moon, Building2,
 } from 'lucide-react';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 interface ProveedorProfile {
   uid: string;
@@ -668,18 +667,13 @@ export default function ProveedorDashboardPage() {
             </div>
           </div>
 
-          {/* Theme + Sign out */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <div className="bg-white/20 hover:bg-white/30 rounded-xl transition-colors [&_button]:text-white [&_svg]:text-white">
-              <ThemeToggle />
-            </div>
-            <button
-              onClick={handleSignOut}
-              className="w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
-            >
-              <LogOut className="w-4 h-4 text-white" />
-            </button>
-          </div>
+          {/* Sign out */}
+          <button
+            onClick={handleSignOut}
+            className="shrink-0 w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+          >
+            <LogOut className="w-4 h-4 text-white" />
+          </button>
         </div>
 
         {/* Notification bell (bottom-right corner) */}

@@ -14,7 +14,6 @@ import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/animation/PageTransition';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -171,7 +170,6 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <ThemeToggle />
             <button
               onClick={toggleTurno}
               disabled={togglingTurno}
