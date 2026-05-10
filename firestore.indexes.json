@@ -345,6 +345,55 @@
       ]
     },
 
+    // ── Cobros ────────────────────────────────────────────────────────────
+
+    {
+      "collectionGroup": "cobros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cobros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "vecino_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+
+    // ── Chats admin ───────────────────────────────────────────────────────
+
+    {
+      "collectionGroup": "chats_admin",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "vecino_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chats_admin",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+
+    // ── Admin logs (auditoría) ────────────────────────────────────────────
+
+    {
+      "collectionGroup": "admin_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+
     // ── Rondas vigilancia ─────────────────────────────────────────────────
 
     {

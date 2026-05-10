@@ -14,8 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  ArrowLeft, MessageSquare, Send, Loader2,
-  Wallet, CheckCircle2, CreditCard,
+  ArrowLeft, Send, Loader2,
+  Wallet, CheckCircle2, CreditCard, UserCog,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -153,8 +153,8 @@ export default function MensajesAdminPage() {
           ← Volver
         </button>
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center">
-            <MessageSquare className="w-5 h-5 text-finca-coral" />
+          <div className="w-10 h-10 rounded-full bg-finca-coral flex items-center justify-center">
+            <UserCog className="w-5 h-5 text-white" />
           </div>
           <div>
             <p className="font-semibold text-finca-dark">Administración</p>
@@ -284,8 +284,8 @@ export default function MensajesAdminPage() {
           <button key={c.id} onClick={() => setChatAbierto(c)} className="w-full text-left">
             <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-[0.99]">
               <CardContent className="p-3 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-finca-peach flex items-center justify-center shrink-0">
-                  <MessageSquare className="w-5 h-5 text-finca-coral" />
+                <div className="w-10 h-10 rounded-full bg-finca-coral flex items-center justify-center shrink-0">
+                  <UserCog className="w-5 h-5 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-finca-dark">Administración</p>
