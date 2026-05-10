@@ -93,30 +93,32 @@ export default function CalendarioPage() {
     const mesFin = endOfMonth(mes);
 
     try {
-      const [votSnap, cuotaSnap, incSnap, evtSnap] = await Promise.all([
-        getDocs(query(
-          collection(db, 'votaciones'),
-          where('comunidad_id', '==', cid),
-        )),
-        getDocs(query(
-          collection(db, 'cuotas'),
-          where('comunidad_id', '==', cid),
-        )),
-        getDocs(query(
-          collection(db, 'incidencias'),
-          where('comunidad_id', '==', cid),
-        )),
-        getDocs(query(
-          collection(db, 'eventos_calendario'),
-          where('comunidad_id', '==', cid),
-        )),
+      // Promise.allSettled: una colección sin permisos no bloquea las demás
+      const [votRes, cuotaRes, incRes, evtRes] = await Promise.allSettled([
+        getDocs(query(collection(db, 'votaciones'),         where('comunidad_id', '==', cid))),
+        getDocs(query(collection(db, 'cuotas'),             where('comunidad_id', '==', cid))),
+        getDocs(query(collection(db, 'incidencias'),        where('comunidad_id', '==', cid))),
+        getDocs(query(collection(db, 'eventos_calendario'), where('comunidad_id', '==', cid))),
       ]);
+
+      // Log silencioso si alguna colección falló
+      [votRes, cuotaRes, incRes, evtRes].forEach((r, i) => {
+        if (r.status === 'rejected') {
+          const names = ['votaciones', 'cuotas', 'incidencias', 'eventos_calendario'];
+          console.warn(`[Calendario] ${names[i]} no disponible:`, r.reason?.code ?? r.reason);
+        }
+      });
+
+      const votSnap   = votRes.status   === 'fulfilled' ? votRes.value   : null;
+      const cuotaSnap = cuotaRes.status === 'fulfilled' ? cuotaRes.value : null;
+      const incSnap   = incRes.status   === 'fulfilled' ? incRes.value   : null;
+      const evtSnap   = evtRes.status   === 'fulfilled' ? evtRes.value   : null;
 
       const mesInicioMs = mesInicio.getTime();
       const mesFinMs    = mesFin.getTime();
 
       const evts: CalendarioEvent[] = [
-        ...votSnap.docs
+        ...(votSnap?.docs ?? [])
           .filter(d => {
             const ca = d.data().created_at as string | undefined;
             if (!ca) return false;
@@ -137,7 +139,7 @@ export default function CalendarioPage() {
               editable: false,
             };
           }),
-        ...cuotaSnap.docs
+        ...(cuotaSnap?.docs ?? [])
           .filter(d => {
             const fl = d.data().fecha_limite as string | undefined;
             if (!fl) return false;
@@ -158,7 +160,7 @@ export default function CalendarioPage() {
               editable: false,
             };
           }),
-        ...incSnap.docs
+        ...(incSnap?.docs ?? [])
           .filter(d => {
             const ca = d.data().created_at as string | undefined;
             if (!ca) return false;
@@ -179,7 +181,7 @@ export default function CalendarioPage() {
               editable: false,
             };
           }),
-        ...evtSnap.docs
+        ...(evtSnap?.docs ?? [])
           .filter(d => {
             const f = d.data().fecha as string | undefined;
             if (!f) return false;

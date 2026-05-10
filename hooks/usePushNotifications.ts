@@ -26,15 +26,16 @@ export function usePushNotifications(userId: string | undefined) {
 
     if (result !== 'granted') return false;
 
+    if (!VAPID_KEY) {
+      console.warn('[PushNotifications] VAPID key no configurado — skip FCM token');
+      return true;
+    }
+
     try {
       const messaging = await getFirebaseMessaging();
-      if (!messaging) return true; // permission granted but FCM not supported
+      if (!messaging) return true;
 
-      // sw.js handles push events natively (no Firebase SDK in SW).
-      // We still use getToken() from client-side Firebase to create/refresh
-      // the FCM WebPush subscription and obtain the token.
       const swReg = await navigator.serviceWorker.ready;
-
       const token = await getToken(messaging, {
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: swReg,
@@ -47,8 +48,13 @@ export function usePushNotifications(userId: string | undefined) {
           updated_at: new Date().toISOString(),
         });
       }
-    } catch (err) {
-      console.error('[PushNotifications] Error getting FCM token:', err);
+    } catch (err: any) {
+      // 400 INVALID_ARGUMENT = VAPID key incorrecto en Vercel → solo warn, no spam
+      if (err?.code === 'installations/request-failed') {
+        console.warn('[PushNotifications] VAPID key inválido en Vercel → actualiza NEXT_PUBLIC_FIREBASE_VAPID_KEY');
+      } else {
+        console.error('[PushNotifications] Error getting FCM token:', err);
+      }
     }
 
     return true;

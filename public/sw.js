@@ -1,5 +1,5 @@
 /**
- * FincaOS Service Worker — v6
+ * FincaOS Service Worker — v7
  *
  * Handles:
  *  1. Push notifications via native push event (no Firebase SDK dependency)
@@ -7,14 +7,14 @@
  *
  * Why no Firebase compat SDK here:
  *  - importScripts from CDN can fail silently (CSP, network, CDN change)
- *  - FCM delivers webpush as standard WebPush — any SW can handle it natively
+ *  - FCM delivers webpush as standard WebPush; any SW can handle it natively
  *  - Raw push handler is simpler, faster, and always reliable
  */
 
 // ── Cache constants ──────────────────────────────────────────────────────────
 
-const CACHE_STATIC = 'fincaos-static-v6';
-const CACHE_PAGES  = 'fincaos-pages-v6';
+const CACHE_STATIC = 'fincaos-static-v7';
+const CACHE_PAGES  = 'fincaos-pages-v7';
 const ALL_CACHES   = [CACHE_STATIC, CACHE_PAGES];
 
 /** Recursos precacheados en install — offline fallback garantizado. */
