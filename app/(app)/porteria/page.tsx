@@ -181,29 +181,27 @@ export default function PorteriaPage() {
     return () => unsub();
   }, [comunidadId, user]);
 
-  // Chats
+  // Chat portería — deterministic chatId: one chat per vecino per community
+  const porteriaChat = comunidadId && user ? `${comunidadId}_vigilante_${user.uid}` : null;
+
   useEffect(() => {
-    if (!comunidadId || !user) return;
-    const q = query(
-      collection(db, 'chats_vigilancia'),
-      where('comunidad_id', '==', comunidadId),
-      where('vecino_id', '==', user.uid),
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      const items = snap.docs
-        .map(d => ({ id: d.id, ...d.data() } as ChatResumen))
-        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-      setChats(items);
+    if (!porteriaChat) return;
+    const unsub = onSnapshot(doc(db, 'chats_comunidad', porteriaChat), (snap) => {
+      if (snap.exists()) {
+        setChats([{ id: porteriaChat, ...snap.data() } as ChatResumen]);
+      } else {
+        setChats([]);
+      }
       setLoadingChats(false);
     }, () => setLoadingChats(false));
     return () => unsub();
-  }, [comunidadId, user]);
+  }, [porteriaChat]);
 
   // Mensajes del chat abierto
   useEffect(() => {
     if (!chatAbierto) return;
     const q = query(
-      collection(db, 'chats_vigilancia', chatAbierto.id, 'mensajes'),
+      collection(db, 'chats_comunidad', chatAbierto.id, 'mensajes'),
       orderBy('created_at', 'asc'),
     );
     let isFirst = true;
@@ -217,7 +215,7 @@ export default function PorteriaPage() {
       }
       isFirst = false;
       setMensajes(snap.docs.map(d => ({ id: d.id, ...d.data() } as Mensaje)));
-      updateDoc(doc(db, 'chats_vigilancia', chatAbierto.id), { no_leidos_vecino: 0 }).catch(() => {});
+      updateDoc(doc(db, 'chats_comunidad', chatAbierto.id), { no_leidos_vecino: 0 }).catch(() => {});
     });
     return () => unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -225,11 +223,11 @@ export default function PorteriaPage() {
 
   useEffect(() => {
     if (!chatAbierto) return;
-    const unsub = onSnapshot(doc(db, 'chats_vigilancia', chatAbierto.id), (snap) => {
+    const unsub = onSnapshot(doc(db, 'chats_comunidad', chatAbierto.id), (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
-      if (data.typing_vigilante && data.typing_vigilante_at) {
-        setVigilanteTyping(Date.now() - new Date(data.typing_vigilante_at).getTime() < 5000);
+      if (data.typing_contraparte && data.typing_contraparte_at) {
+        setVigilanteTyping(Date.now() - new Date(data.typing_contraparte_at).getTime() < 5000);
       } else {
         setVigilanteTyping(false);
       }
@@ -243,7 +241,7 @@ export default function PorteriaPage() {
 
   const notifyVecinoTyping = useCallback(() => {
     if (!chatAbierto || !user) return;
-    const chatRef = doc(db, 'chats_vigilancia', chatAbierto.id);
+    const chatRef = doc(db, 'chats_comunidad', chatAbierto.id);
     updateDoc(chatRef, { typing_vecino: true, typing_vecino_at: new Date().toISOString() }).catch(() => {});
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
@@ -357,14 +355,15 @@ export default function PorteriaPage() {
     if (!texto.trim() || sending || !chatAbierto || !user) return;
     setSending(true);
     try {
-      await addDoc(collection(db, 'chats_vigilancia', chatAbierto.id, 'mensajes'), {
-        sender_id: user.uid, texto: texto.trim(), tipo: 'texto', leido: false,
-        created_at: new Date().toISOString(),
+      const now = new Date().toISOString();
+      await addDoc(collection(db, 'chats_comunidad', chatAbierto.id, 'mensajes'), {
+        sender_id: user.uid, sender_rol: 'vecino', tipo: 'texto', texto: texto.trim(),
+        leido: false, created_at: now,
       });
-      await updateDoc(doc(db, 'chats_vigilancia', chatAbierto.id), {
-        ultimo_mensaje: texto.trim().slice(0, 100),
-        no_leidos_vigilante: 1,
-        updated_at: new Date().toISOString(),
+      await updateDoc(doc(db, 'chats_comunidad', chatAbierto.id), {
+        ultimo_mensaje:     texto.trim().slice(0, 100),
+        no_leidos_contraparte: 1,
+        updated_at:         now,
       });
       if (comunidadId && chatAbierto.vigilante_id) {
         fetch('/api/notificaciones/push', {

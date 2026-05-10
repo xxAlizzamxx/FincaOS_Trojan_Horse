@@ -345,6 +345,27 @@
       ]
     },
 
+    // ── Chats unificados (chats_comunidad) ───────────────────────────────
+
+    {
+      "collectionGroup": "chats_comunidad",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "tipo",         "order": "ASCENDING" },
+        { "fieldPath": "updated_at",   "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chats_comunidad",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "tipo",         "order": "ASCENDING" },
+        { "fieldPath": "vecino_id",    "order": "ASCENDING" }
+      ]
+    },
+
     // ── Cobros ────────────────────────────────────────────────────────────
 
     {

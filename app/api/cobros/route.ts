@@ -100,40 +100,40 @@ export async function POST(req: NextRequest) {
       created_at: now,
     });
 
-    // ── 5. Asegurar chat admin ↔ vecino ─────────────────────────────────────
-    const chatId = `${comunidad_id}_${vecino_id}`;
-    const chatRef = db.collection('chats_admin').doc(chatId);
-    const chatSnap = await chatRef.get();
-    if (!chatSnap.exists) {
-      await chatRef.set({
-        comunidad_id,
-        admin_id:   uid,
-        vecino_id,
-        ultimo_mensaje: `Cobro: ${concepto.trim()}`,
-        no_leidos_vecino: 1,
-        updated_at: now,
-        created_at: now,
-      });
-    } else {
-      await chatRef.update({
-        admin_id:         uid,
-        ultimo_mensaje:   `Cobro: ${concepto.trim()}`,
-        no_leidos_vecino: (chatSnap.data()?.no_leidos_vecino ?? 0) + 1,
-        updated_at:       now,
-      });
-    }
+    // ── 5. Asegurar chat unificado admin ↔ vecino en chats_comunidad ─────────
+    const { FieldValue } = await import('firebase-admin/firestore');
+    const chatId = `${comunidad_id}_admin_${vecino_id}`;
+    const chatRef = db.collection('chats_comunidad').doc(chatId);
 
-    // ── 6. Mensaje tipo 'cobro' en el chat ──────────────────────────────────
+    // set with merge creates the doc if it doesn't exist, preserves existing fields
+    await chatRef.set({
+      comunidad_id,
+      tipo:             'admin',
+      contraparte_id:   uid,
+      contraparte_rol:  perfil.rol,
+      vecino_id,
+      updated_at:       now,
+      created_at:       now,
+    }, { merge: true });
+
+    await chatRef.update({
+      ultimo_mensaje:   `Solicitud de pago: ${concepto.trim()}`,
+      no_leidos_vecino: FieldValue.increment(1),
+      updated_at:       now,
+    });
+
+    // ── 6. Mensaje tipo 'payment_request' en el chat ────────────────────────
     await chatRef.collection('mensajes').add({
-      sender_id:   uid,
-      tipo:        'cobro',
-      cobro_id:    cobroRef.id,
-      concepto:    concepto.trim(),
-      descripcion: descripcion?.trim() || null,
-      monto:       montoNum,
-      estado:      'pendiente',
-      leido:       false,
-      created_at:  now,
+      sender_id:    uid,
+      sender_rol:   perfil.rol,
+      tipo:         'payment_request',
+      cobro_id:     cobroRef.id,
+      concepto:     concepto.trim(),
+      descripcion:  descripcion?.trim() || null,
+      monto:        montoNum,
+      estado:       'pendiente',
+      leido:        false,
+      created_at:   now,
     });
 
     // ── 7. Push notification al vecino ──────────────────────────────────────
