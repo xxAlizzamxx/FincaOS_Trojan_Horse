@@ -14,7 +14,7 @@ export interface ReciboData {
 }
 
 export async function generarReciboPDF(data: ReciboData): Promise<void> {
-  const { jsPDF } = await import('jspdf');
+  const { jsPDF, GState } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
   const coral  = [255, 99,  71] as const;
@@ -108,9 +108,9 @@ export async function generarReciboPDF(data: ReciboData): Promise<void> {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(32);
   doc.setTextColor(22, 163, 74);
-  doc.setGState({ opacity: 0.12 });
+  doc.setGState(new GState({ opacity: 0.12 }));
   doc.text('PAGADO', W / 2, 120, { align: 'center', angle: 30 });
-  doc.setGState({ opacity: 1 });
+  doc.setGState(new GState({ opacity: 1 }));
 
   // ── Footer ──
   doc.setFillColor(...coral);
