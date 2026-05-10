@@ -225,13 +225,17 @@ export default function AccesosPage() {
         created_at:          now,
       });
 
-      // Notificar al vecino via chats_comunidad (chat vigilante)
+      toast.success(vecinoSeleccionado ? 'Visita registrada — vecino notificado' : 'Visita registrada');
+      setShowForm(false);
+      resetForm();
+
+      // Notificar al vecino via chats_comunidad — fire-and-forget
       if (vecinoSeleccionado && comunidadId) {
         const chatId  = `${comunidadId}_vigilante_${vecinoSeleccionado.id}`;
         const chatRef = doc(db, 'chats_comunidad', chatId);
         const texto = `🚪 Tiene una visita esperando en portería.\n👤 Visitante: ${nombre}${cedula ? ` (C.C. ${cedula})` : ''}${motivo ? `\n📋 Motivo: ${motivo}` : ''}\n\nAutorizar o rechazar desde la sección Portería.`;
 
-        await setDoc(chatRef, {
+        setDoc(chatRef, {
           comunidad_id:   comunidadId,
           tipo:           'vigilante',
           contraparte_id: user.uid,
@@ -239,32 +243,24 @@ export default function AccesosPage() {
           vecino_id:      vecinoSeleccionado.id,
           updated_at:     now,
           created_at:     now,
-        }, { merge: true });
-
-        await addDoc(collection(db, 'chats_comunidad', chatId, 'mensajes'), {
-          sender_id:      user.uid,
-          sender_rol:     'vigilante',
-          texto,
-          tipo:           'plantilla',
-          plantilla_tipo: 'visita',
-          acceso_id:      accesoRef.id,
-          leido:          false,
-          created_at:     now,
-        });
-
-        await updateDoc(chatRef, {
-          ultimo_mensaje:   texto.slice(0, 100),
-          no_leidos_vecino: 1,
-          updated_at:       now,
-        });
-
-        toast.success('Visita registrada — vecino notificado');
-      } else {
-        toast.success('Visita registrada');
+        }, { merge: true })
+          .then(() => addDoc(collection(db, 'chats_comunidad', chatId, 'mensajes'), {
+            sender_id:      user.uid,
+            sender_rol:     'vigilante',
+            texto,
+            tipo:           'plantilla',
+            plantilla_tipo: 'visita',
+            acceso_id:      accesoRef.id,
+            leido:          false,
+            created_at:     now,
+          }))
+          .then(() => updateDoc(chatRef, {
+            ultimo_mensaje:   texto.slice(0, 100),
+            no_leidos_vecino: 1,
+            updated_at:       now,
+          }))
+          .catch(err => console.error('[Accesos] Chat notify error:', err));
       }
-
-      setShowForm(false);
-      resetForm();
     } catch (err) {
       console.error('[Accesos] Error:', err);
       toast.error('Error al registrar la visita');
