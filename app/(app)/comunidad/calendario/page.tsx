@@ -91,22 +91,16 @@ export default function CalendarioPage() {
     setLoading(true);
     const mesInicio = startOfMonth(mes);
     const mesFin = endOfMonth(mes);
-    const mesInicioISO = mesInicio.toISOString();
-    const mesFinISO = mesFin.toISOString();
 
     try {
       const [votSnap, cuotaSnap, incSnap, evtSnap] = await Promise.all([
         getDocs(query(
           collection(db, 'votaciones'),
           where('comunidad_id', '==', cid),
-          where('created_at', '>=', mesInicioISO),
-          where('created_at', '<=', mesFinISO),
         )),
         getDocs(query(
           collection(db, 'cuotas'),
           where('comunidad_id', '==', cid),
-          where('fecha_limite', '>=', mesInicioISO),
-          where('fecha_limite', '<=', mesFinISO),
         )),
         getDocs(query(
           collection(db, 'incidencias'),
@@ -115,40 +109,55 @@ export default function CalendarioPage() {
         getDocs(query(
           collection(db, 'eventos_calendario'),
           where('comunidad_id', '==', cid),
-          where('fecha', '>=', mesInicioISO),
-          where('fecha', '<=', mesFinISO),
         )),
       ]);
 
+      const mesInicioMs = mesInicio.getTime();
+      const mesFinMs    = mesFin.getTime();
+
       const evts: CalendarioEvent[] = [
-        ...votSnap.docs.map(d => {
-          const data = d.data();
-          return {
-            id: d.id,
-            titulo: data.titulo as string,
-            tipo: 'votacion' as const,
-            fecha: new Date(data.created_at as string),
-            descripcion: data.descripcion as string | undefined,
-            color: TIPO_CONFIG.votacion.color,
-            url: '/votos',
-            source: 'votaciones' as const,
-            editable: false,
-          };
-        }),
-        ...cuotaSnap.docs.map(d => {
-          const data = d.data();
-          return {
-            id: d.id,
-            titulo: (data.nombre as string) || 'Cuota',
-            tipo: 'cuota' as const,
-            fecha: new Date(data.fecha_limite as string),
-            descripcion: data.monto ? `${data.monto}€` : undefined,
-            color: TIPO_CONFIG.cuota.color,
-            url: '/cuotas',
-            source: 'cuotas' as const,
-            editable: false,
-          };
-        }),
+        ...votSnap.docs
+          .filter(d => {
+            const ca = d.data().created_at as string | undefined;
+            if (!ca) return false;
+            const t = new Date(ca).getTime();
+            return t >= mesInicioMs && t <= mesFinMs;
+          })
+          .map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              titulo: data.titulo as string,
+              tipo: 'votacion' as const,
+              fecha: new Date(data.created_at as string),
+              descripcion: data.descripcion as string | undefined,
+              color: TIPO_CONFIG.votacion.color,
+              url: '/votos',
+              source: 'votaciones' as const,
+              editable: false,
+            };
+          }),
+        ...cuotaSnap.docs
+          .filter(d => {
+            const fl = d.data().fecha_limite as string | undefined;
+            if (!fl) return false;
+            const t = new Date(fl).getTime();
+            return t >= mesInicioMs && t <= mesFinMs;
+          })
+          .map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              titulo: (data.nombre as string) || 'Cuota',
+              tipo: 'cuota' as const,
+              fecha: new Date(data.fecha_limite as string),
+              descripcion: data.monto ? `${data.monto}€` : undefined,
+              color: TIPO_CONFIG.cuota.color,
+              url: '/cuotas',
+              source: 'cuotas' as const,
+              editable: false,
+            };
+          }),
         ...incSnap.docs
           .filter(d => {
             const ca = d.data().created_at as string | undefined;
@@ -170,19 +179,26 @@ export default function CalendarioPage() {
               editable: false,
             };
           }),
-        ...evtSnap.docs.map(d => {
-          const data = d.data();
-          return {
-            id: d.id,
-            titulo: data.titulo as string,
-            tipo: (data.tipo as TipoEvento) || 'evento',
-            fecha: new Date(data.fecha as string),
-            descripcion: data.descripcion as string | undefined,
-            color: TIPO_CONFIG[(data.tipo as TipoEvento) || 'evento']?.color || TIPO_CONFIG.evento.color,
-            source: 'eventos_calendario' as const,
-            editable: true,
-          };
-        }),
+        ...evtSnap.docs
+          .filter(d => {
+            const f = d.data().fecha as string | undefined;
+            if (!f) return false;
+            const t = new Date(f).getTime();
+            return t >= mesInicioMs && t <= mesFinMs;
+          })
+          .map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              titulo: data.titulo as string,
+              tipo: (data.tipo as TipoEvento) || 'evento',
+              fecha: new Date(data.fecha as string),
+              descripcion: data.descripcion as string | undefined,
+              color: TIPO_CONFIG[(data.tipo as TipoEvento) || 'evento']?.color || TIPO_CONFIG.evento.color,
+              source: 'eventos_calendario' as const,
+              editable: true,
+            };
+          }),
       ];
       setEventos(evts);
     } catch (e) {

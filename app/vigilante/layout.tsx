@@ -74,7 +74,7 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
   if (!user) return null;
 
   const Sidebar = () => (
-    <aside className="w-64 bg-white border-r border-border flex flex-col h-full">
+    <aside className="w-64 bg-card border-r border-border flex flex-col h-full">
       {/* Logo — misma cabecera que el panel admin */}
       <div className="px-5 py-4 bg-gradient-to-br from-finca-coral to-finca-salmon">
         <Image
@@ -134,7 +134,7 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <div className="flex h-screen bg-gray-50/80 overflow-hidden">
+    <div className="flex h-screen bg-background overflow-hidden">
       {/* Desktop sidebar */}
       <div className="hidden md:flex flex-col">
         <Sidebar />
@@ -152,7 +152,7 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-14 bg-white border-b border-border flex items-center px-4 gap-3 shrink-0">
+        <header className="h-14 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
           <Button
             variant="ghost"
             size="icon"
@@ -178,7 +178,7 @@ export default function VigilanteLayout({ children }: { children: React.ReactNod
                 'text-xs px-2 py-0.5 rounded-full font-medium transition-colors',
                 enTurno
                   ? 'bg-finca-peach/60 text-finca-coral hover:bg-finca-peach'
-                  : 'bg-gray-200 text-gray-500 hover:bg-gray-300',
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
               )}
             >
               {enTurno ? 'En turno' : 'En descanso'}

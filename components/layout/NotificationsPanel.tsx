@@ -91,7 +91,7 @@ export function NotificationsPanel({
       ref={panelRef}
       className={cn(
         'absolute right-0 top-full mt-2 w-80 z-50',
-        'bg-white rounded-2xl shadow-xl border border-border',
+        'bg-popover rounded-2xl shadow-xl border border-border',
         'overflow-hidden',
       )}
     >

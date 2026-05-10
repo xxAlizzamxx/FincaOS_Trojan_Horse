@@ -609,7 +609,7 @@ export default function ProveedorDashboardPage() {
     .join(' ');
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* ── Hero header ── */}
       <header className="relative overflow-hidden">
         {/* Gradient background */}
@@ -689,7 +689,7 @@ export default function ProveedorDashboardPage() {
       </header>
 
       {/* ── Tab bar ── */}
-      <nav className="flex bg-white border-b overflow-x-auto shadow-sm sticky top-0 z-10">
+      <nav className="flex bg-card border-b border-border overflow-x-auto shadow-sm sticky top-0 z-10">
         {TABS.map((t) => {
           const isActive = activeTab === t.key;
           const icons: Record<Tab, React.ReactNode> = {
@@ -1308,7 +1308,7 @@ export default function ProveedorDashboardPage() {
                     { label: 'Trabajos',  value: String(trabajosValue)  },
                     { label: 'Zona',      value: proveedor.zona || '—'  },
                   ].map((stat) => (
-                    <div key={stat.label} className="bg-gray-50 rounded-xl p-2.5 text-center">
+                    <div key={stat.label} className="bg-muted rounded-xl p-2.5 text-center">
                       <p className="text-sm font-bold text-finca-dark">{stat.value}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">{stat.label}</p>
                     </div>
