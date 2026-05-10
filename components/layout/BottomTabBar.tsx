@@ -64,7 +64,7 @@ export function BottomTabBar() {
   const tabs: TabItem[] = esVigilante ? tabsVigilante : tabsVecino;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border safe-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border safe-bottom">
       <div className="flex items-center h-16 max-w-lg md:max-w-2xl lg:max-w-5xl mx-auto">
         {tabs.map((tab) => {
           const isActive = pathname.startsWith(tab.href);

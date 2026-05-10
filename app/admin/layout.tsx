@@ -9,6 +9,7 @@ import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/animation/PageTransition';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -45,7 +46,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!user) return null;
 
   const Sidebar = () => (
-    <aside className="w-64 bg-white border-r border-border flex flex-col h-full">
+    <aside className="w-64 bg-card border-r border-border flex flex-col h-full">
       {/* Logo — coral gradient header */}
       <div className="px-5 py-4 bg-gradient-to-br from-finca-coral to-finca-salmon">
         <Image
@@ -105,7 +106,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 
   return (
-    <div className="flex h-screen bg-gray-50/80 overflow-hidden">
+    <div className="flex h-screen bg-background overflow-hidden">
       <div className="hidden md:flex flex-col">
         <Sidebar />
       </div>
@@ -120,7 +121,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-14 bg-white border-b border-border flex items-center px-4 gap-3 shrink-0">
+        <header className="h-14 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
           <Button
             variant="ghost"
             size="icon"
@@ -137,6 +138,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             {perfil && <AvatarVecino perfil={perfil} size="sm" />}
           </div>
         </header>
