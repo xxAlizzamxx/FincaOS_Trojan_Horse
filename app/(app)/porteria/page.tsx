@@ -541,8 +541,10 @@ export default function PorteriaPage() {
               return (
                 <div key={msg.id} className={cn('flex gap-2', mio ? 'flex-row-reverse' : 'flex-row')}>
                   {mio ? (
-                    <div className="w-7 h-7 rounded-full bg-finca-peach flex items-center justify-center text-[10px] font-bold text-finca-coral shrink-0">
-                      {perfil?.nombre_completo?.[0]?.toUpperCase()}
+                    <div className="w-7 h-7 rounded-full bg-finca-peach flex items-center justify-center text-[10px] font-bold text-finca-coral shrink-0 overflow-hidden">
+                      {(perfil as any)?.avatar_url
+                        ? <img src={(perfil as any).avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        : perfil?.nombre_completo?.[0]?.toUpperCase()}
                     </div>
                   ) : (
                     <div className={cn('w-7 h-7 rounded-full flex items-center justify-center shrink-0', 'bg-finca-coral')}>
