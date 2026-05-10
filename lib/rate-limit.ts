@@ -50,7 +50,7 @@ export function maybeCleanBuckets() {
   const now = Date.now();
   if (now - lastClean < 300_000) return; // clean at most every 5 min
   lastClean = now;
-  for (const [k, b] of buckets) {
+  buckets.forEach((b, k) => {
     if (b.resetAt <= now) buckets.delete(k);
-  }
+  });
 }
