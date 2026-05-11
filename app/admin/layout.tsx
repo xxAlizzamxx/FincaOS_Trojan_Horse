@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { LayoutDashboard, CircleAlert as AlertCircle, Users, Megaphone, LogOut, Menu, Wallet, CreditCard, ShieldCheck, FileSpreadsheet, ClipboardList, TrendingUp, Wrench, UserCheck } from 'lucide-react';
+import { LayoutDashboard, CircleAlert as AlertCircle, Users, Megaphone, LogOut, Menu, Wallet, CreditCard, ShieldCheck, FileSpreadsheet, ClipboardList, Sparkles } from 'lucide-react';
 import { AvatarVecino } from '@/components/ui/avatar-vecino';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -12,18 +12,15 @@ import { PageTransition } from '@/components/animation/PageTransition';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/admin',             icon: LayoutDashboard,  label: 'Panel'        },
-  { href: '/admin/incidencias', icon: AlertCircle,       label: 'Incidencias'  },
-  { href: '/admin/vecinos',     icon: Users,             label: 'Vecinos'      },
-  { href: '/admin/vigilantes',  icon: ShieldCheck,       label: 'Vigilantes'   },
-  { href: '/admin/anuncios',    icon: Megaphone,         label: 'Anuncios'     },
-  { href: '/admin/cobros',      icon: Wallet,            label: 'Cobros'       },
-  { href: '/admin/cuotas',      icon: CreditCard,        label: 'Cuotas'       },
-  { href: '/admin/financiero',   icon: TrendingUp,        label: 'Financiero'   },
-  { href: '/admin/mantenimientos', icon: Wrench,          label: 'Mantenimientos' },
-  { href: '/admin/portal',      icon: UserCheck,         label: 'Portal vecinos' },
-  { href: '/admin/reportes',    icon: FileSpreadsheet,   label: 'Reportes'     },
-  { href: '/admin/auditoria',   icon: ClipboardList,     label: 'Auditoría'    },
+  { href: '/admin',             icon: LayoutDashboard,  label: 'Panel'       },
+  { href: '/admin/incidencias', icon: AlertCircle,      label: 'Incidencias' },
+  { href: '/admin/vecinos',     icon: Users,            label: 'Vecinos'     },
+  { href: '/admin/vigilantes',  icon: ShieldCheck,      label: 'Vigilantes'  },
+  { href: '/admin/anuncios',    icon: Megaphone,        label: 'Anuncios'    },
+  { href: '/admin/cobros',      icon: Wallet,           label: 'Cobros'      },
+  { href: '/admin/cuotas',      icon: CreditCard,       label: 'Cuotas'      },
+  { href: '/admin/reportes',    icon: FileSpreadsheet,  label: 'Reportes'    },
+  { href: '/admin/auditoria',   icon: ClipboardList,    label: 'Auditoría'   },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -86,6 +83,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Link>
           );
         })}
+
+        {/* V2 Roadmap — special item */}
+        <div className="pt-2 mt-2 border-t border-border">
+          <Link
+            href="/admin/v2"
+            onClick={() => setSidebarOpen(false)}
+            className={cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
+              pathname.startsWith('/admin/v2')
+                ? 'bg-gradient-to-r from-finca-coral to-orange-400 text-white shadow-sm shadow-finca-coral/40'
+                : 'bg-gradient-to-r from-finca-coral/10 to-orange-400/10 text-finca-coral border border-finca-coral/20 hover:from-finca-coral/20 hover:to-orange-400/20',
+            )}
+          >
+            <Sparkles className="w-4 h-4 shrink-0" />
+            <span className="flex-1">Próximamente V2</span>
+            {!pathname.startsWith('/admin/v2') && (
+              <span className="text-[9px] font-bold bg-finca-coral text-white px-1.5 py-0.5 rounded-full animate-pulse">
+                NEW
+              </span>
+            )}
+          </Link>
+        </div>
       </nav>
 
       {/* Bottom actions */}
@@ -135,9 +154,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Button>
           <div className="flex-1">
             <p className="text-sm font-medium text-finca-dark">
-              {navItems.find((n) =>
-              pathname === n.href || (n.href !== '/admin' && pathname.startsWith(n.href)),
-            )?.label || 'Admin'}
+              {pathname.startsWith('/admin/v2')
+                ? '🚀 Próximamente V2'
+                : navItems.find((n) =>
+                    pathname === n.href || (n.href !== '/admin' && pathname.startsWith(n.href)),
+                  )?.label || 'Admin'}
             </p>
           </div>
           <div className="flex items-center gap-2">
