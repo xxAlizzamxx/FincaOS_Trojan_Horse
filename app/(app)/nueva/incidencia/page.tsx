@@ -466,10 +466,9 @@ export default function NuevaIncidenciaPage() {
           </div>
 
           {/* Quick options — always visible */}
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {TIPO_PROBLEMA_OPTIONS.map((t) => {
               const isOtro    = t.value === 'otro';
-              const isExpanded = tipoProblema === 'otro' || (isOtro && !TIPO_PROBLEMA_OPTIONS.some(o => o.value === tipoProblema && o.value !== 'otro'));
               const isSelected = isOtro
                 ? !TIPO_PROBLEMA_OPTIONS.slice(0, -1).some(o => o.value === tipoProblema)
                 : tipoProblema === t.value;
@@ -483,12 +482,13 @@ export default function NuevaIncidenciaPage() {
                   }}
                   className={cn(
                     'p-2.5 rounded-xl border text-center transition-all',
+                    isOtro && 'col-span-2',
                     isSelected
                       ? 'border-finca-coral bg-finca-peach/30 text-finca-coral'
                       : 'border-border bg-white text-muted-foreground hover:border-finca-salmon',
                   )}
                 >
-                  <span className="text-lg block mb-0.5">{t.emoji}</span>
+                  <span className="text-xl block mb-1">{t.emoji}</span>
                   <span className="text-xs font-medium">{t.label}</span>
                 </button>
               );
