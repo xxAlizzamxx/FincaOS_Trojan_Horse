@@ -176,7 +176,7 @@ export default function V2Page() {
 
           <div className="flex flex-wrap gap-4 mt-6">
             {[
-              { label: 'Módulos nuevos', value: CATEGORIAS.length },
+              { label: 'Módulos nuevos', value: 6 },
               { label: 'Funcionalidades', value: totalFeatures },
               { label: 'Categorías', value: CATEGORIAS.length },
             ].map(stat => (
@@ -243,36 +243,6 @@ export default function V2Page() {
         </section>
       ))}
 
-      {/* ── Impacto esperado ── */}
-      <section className="space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 mt-0.5 bg-gradient-to-br from-finca-coral to-finca-salmon">
-            <span>📈</span>
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-finca-dark">Impacto esperado</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Resultados medibles para tu comunidad desde el primer mes.</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { icon: TrendingDown, value: '−70%', label: 'tiempo administrativo',  color: 'text-finca-coral', bg: 'bg-finca-coral/8' },
-            { icon: TrendingDown, value: '−60%', label: 'incidencias sin seguimiento', color: 'text-finca-coral', bg: 'bg-finca-coral/8' },
-            { icon: MessageSquare,value: '↑',    label: 'comunicación vecinal',   color: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { icon: Cpu,          value: '↑',    label: 'automatización operativa',color: 'text-violet-600',  bg: 'bg-violet-50'  },
-          ].map((m) => (
-            <div key={m.label} className="bg-card border border-border rounded-xl p-4 flex flex-col items-center text-center gap-2 hover:shadow-md hover:border-finca-coral/30 transition-all">
-              <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', m.bg)}>
-                <m.icon className={cn('w-5 h-5', m.color)} />
-              </div>
-              <p className={cn('text-2xl font-extrabold leading-none', m.color)}>{m.value}</p>
-              <p className="text-[11px] text-muted-foreground leading-snug">{m.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* ── Cumplimiento y Seguridad ── */}
       <section className="space-y-4">
         <div className="flex items-start gap-3">
@@ -302,6 +272,36 @@ export default function V2Page() {
                 <p className="text-sm font-semibold text-finca-dark leading-snug">{item.label}</p>
                 <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{item.desc}</p>
               </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Impacto esperado ── */}
+      <section className="space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 mt-0.5 bg-gradient-to-br from-finca-coral to-finca-salmon">
+            <span>📈</span>
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-finca-dark">Impacto esperado</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Resultados medibles para tu comunidad desde el primer mes.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { icon: TrendingDown, value: '−70%', label: 'tiempo administrativo',   color: 'text-finca-coral', bg: 'bg-finca-coral/8' },
+            { icon: TrendingDown, value: '−60%', label: 'incidencias sin seguimiento', color: 'text-finca-coral', bg: 'bg-finca-coral/8' },
+            { icon: MessageSquare,value: '↑',    label: 'comunicación vecinal',    color: 'text-emerald-600', bg: 'bg-emerald-50' },
+            { icon: Cpu,          value: '↑',    label: 'automatización operativa', color: 'text-violet-600',  bg: 'bg-violet-50'  },
+          ].map((m) => (
+            <div key={m.label} className="bg-card border border-border rounded-xl p-4 flex flex-col items-center text-center gap-2 hover:shadow-md hover:border-finca-coral/30 transition-all">
+              <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', m.bg)}>
+                <m.icon className={cn('w-5 h-5', m.color)} />
+              </div>
+              <p className={cn('text-2xl font-extrabold leading-none', m.color)}>{m.value}</p>
+              <p className="text-[11px] text-muted-foreground leading-snug">{m.label}</p>
             </div>
           ))}
         </div>
