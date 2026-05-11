@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
               title: `Cobro pendiente: ${concepto.trim()}`,
               body: `${montoNum.toFixed(2)}€ — Toca para pagar`,
               url: '/mensajes-admin',
-              icon: '/logo.png',
+              icon: '/logo_ok.png',
             },
           },
         });

@@ -12,9 +12,9 @@ export const metadata: Metadata = {
   description: 'La plataforma digital para comunidades de propietarios en España.',
   manifest: '/manifest.json',
   icons: {
-    icon: '/logo.png',
-    shortcut: '/logo.png',
-    apple: '/logo.png',
+    icon: '/logo_ok.png',
+    shortcut: '/logo_ok.png',
+    apple: '/logo_ok.png',
   },
   other: {
     'mobile-web-app-capable': 'yes',
@@ -31,7 +31,7 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <head>
         <meta name="theme-color" content="#FF6E61" />
-        <link rel="apple-touch-icon" href="/logo.png" />
+        <link rel="apple-touch-icon" href="/logo_ok.png" />
       </head>
       <body className={inter.className}>
         <Providers>
