@@ -128,13 +128,13 @@ self.addEventListener('push', (event) => {
   const title = data.title || notif.title || 'FincaOS';
   const body  = data.body  || notif.body  || '';
   const url   = data.url   || notif.click_action || '/inicio';
-  const icon  = data.icon  || '/logo.png';
+  const icon  = data.icon  || '/logo_ok.png';
 
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
       icon,
-      badge:   '/logo.png',
+      badge:   '/logo_ok.png',
       data:    { url },
       vibrate: [200, 100, 200],
     })
