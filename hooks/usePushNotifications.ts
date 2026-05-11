@@ -82,8 +82,8 @@ export function sendLocalNotification(title: string, body: string, url?: string)
 
   const notification = new Notification(title, {
     body,
-    icon: '/logo-app.png',
-    badge: '/logo-app.png',
+    icon: '/logo.png',
+    badge: '/logo.png',
   });
 
   if (url) {
