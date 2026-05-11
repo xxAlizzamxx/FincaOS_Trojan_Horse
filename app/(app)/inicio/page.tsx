@@ -322,7 +322,7 @@ export default function InicioPage() {
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-finca-dark">Tablón</h2>
-            <Link href="/comunidad" className="text-xs text-finca-coral flex items-center gap-0.5">
+            <Link href="/anuncios" className="text-xs text-finca-coral flex items-center gap-0.5">
               Ver todo <ChevronRight className="w-3 h-3" />
             </Link>
           </div>

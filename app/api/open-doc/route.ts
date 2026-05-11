@@ -29,9 +29,10 @@ const CONTENT_TYPES: Record<string, string> = {
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
 
-  const publicId = searchParams.get('public_id') ?? '';
-  const nombre   = searchParams.get('nombre')    ?? 'documento';
-  const tipo     = searchParams.get('tipo')      ?? 'pdf';
+  const publicId   = searchParams.get('public_id') ?? '';
+  const nombre     = searchParams.get('nombre')    ?? 'documento';
+  const tipo       = searchParams.get('tipo')      ?? 'pdf';
+  const forceDownload = searchParams.get('dl') === '1';
 
   /* ── Validación ── */
   if (!publicId) {
@@ -65,13 +66,11 @@ export async function GET(req: NextRequest) {
   /* ── Headers de respuesta ── */
   const contentType = CONTENT_TYPES[tipo] ?? 'application/octet-stream';
 
-  // PDF → inline: el navegador lo renderiza en la propia pestaña
-  // Word/Excel → attachment: descarga directa con el nombre del fichero
   const ext = tipo === 'pdf' ? '.pdf' : tipo === 'word' ? '.docx' : '.xlsx';
   const disposition =
-    tipo === 'pdf'
-      ? `inline; filename="${encodeURIComponent(nombre)}${ext}"`
-      : `attachment; filename="${encodeURIComponent(nombre)}${ext}"`;
+    forceDownload || tipo !== 'pdf'
+      ? `attachment; filename="${encodeURIComponent(nombre)}${ext}"`
+      : `inline; filename="${encodeURIComponent(nombre)}${ext}"`;
 
   const body = await cloudRes.arrayBuffer();
 

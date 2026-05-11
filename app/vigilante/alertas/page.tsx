@@ -73,6 +73,7 @@ export default function AlertasPage() {
   }, [searchParams]);
 
   const comunidadId = perfil?.comunidad_id;
+  const puedeCrear = perfil?.rol === 'vigilante' || perfil?.rol === 'admin' || perfil?.rol === 'presidente';
 
   useEffect(() => {
     if (!comunidadId) return;
@@ -145,16 +146,18 @@ export default function AlertasPage() {
           <h1 className="text-xl font-bold text-finca-dark">Alertas comunitarias</h1>
           <p className="text-sm text-muted-foreground">Avisos y alertas para la comunidad</p>
         </div>
-        <Button
-          onClick={() => setShowForm(!showForm)}
-          className={showForm ? 'bg-gray-500 hover:bg-gray-600' : 'bg-orange-600 hover:bg-orange-700'}
-        >
-          {showForm ? <><X className="w-4 h-4 mr-1" />Cancelar</> : <><Plus className="w-4 h-4 mr-1" />Nueva alerta</>}
-        </Button>
+        {puedeCrear && (
+          <Button
+            onClick={() => setShowForm(!showForm)}
+            className={showForm ? 'bg-gray-500 hover:bg-gray-600' : 'bg-orange-600 hover:bg-orange-700'}
+          >
+            {showForm ? <><X className="w-4 h-4 mr-1" />Cancelar</> : <><Plus className="w-4 h-4 mr-1" />Nueva alerta</>}
+          </Button>
+        )}
       </div>
 
       {/* Formulario */}
-      {showForm && (
+      {showForm && puedeCrear && (
         <Card className="border-2 border-orange-200 shadow-md">
           <CardContent className="p-4">
             <form onSubmit={handleCrear} className="space-y-3">
@@ -274,15 +277,17 @@ export default function AlertasPage() {
                               {format(new Date(a.created_at), "dd MMM yyyy - HH:mm", { locale: es })}
                             </p>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 shrink-0"
-                            onClick={() => toggleAlerta(a.id, a.activa)}
-                          >
-                            <BellOff className="w-3 h-3 mr-1" />
-                            Desactivar
-                          </Button>
+                          {puedeCrear && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 shrink-0"
+                              onClick={() => toggleAlerta(a.id, a.activa)}
+                            >
+                              <BellOff className="w-3 h-3 mr-1" />
+                              Desactivar
+                            </Button>
+                          )}
                         </div>
                       </CardContent>
                     </Card>

@@ -260,9 +260,14 @@ export default function DocsPage() {
     return `/api/open-doc?${params.toString()}`;
   }
 
-  function accionPorTipo(tipo?: string): { label: string; icono: React.ElementType } {
-    if (tipo === 'pdf') return { label: 'Ver',       icono: ExternalLink };
-    return                      { label: 'Descargar', icono: Download     };
+  function downloadUrl(documento: Documento): string {
+    const params = new URLSearchParams({
+      public_id: documento.storage_path ?? '',
+      nombre:    documento.nombre,
+      tipo:      documento.tipo ?? 'pdf',
+      dl:        '1',
+    });
+    return `/api/open-doc?${params.toString()}`;
   }
 
   /* ── Skeleton ── */
@@ -367,20 +372,26 @@ export default function DocsPage() {
 
                 <div className="flex items-center gap-2 shrink-0">
                   {documento.url ? (
-                    (() => {
-                      const { label, icono: Icono } = accionPorTipo(documento.tipo);
-                      return (
+                    <>
+                      {documento.tipo === 'pdf' && (
                         <a
                           href={proxyUrl(documento)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 h-8 px-3 rounded-md text-xs font-medium border border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white transition-colors"
                         >
-                          <Icono className="w-3.5 h-3.5" />
-                          {label}
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Ver
                         </a>
-                      );
-                    })()
+                      )}
+                      <a
+                        href={downloadUrl(documento)}
+                        className="inline-flex items-center gap-1 h-8 px-3 rounded-md text-xs font-medium border border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Descargar
+                      </a>
+                    </>
                   ) : (
                     <span className="text-xs text-muted-foreground">Sin URL</span>
                   )}
