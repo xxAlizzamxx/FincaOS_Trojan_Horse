@@ -1,11 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import {
   FileText, Users, PenLine, Award, Home,
   BookOpen, BarChart3, Calculator, Receipt, Download, Building2,
   Wrench, Calendar, History, Hammer, Shield, Zap,
   Bot, BellRing, Search, Sparkles, Clock,
-  Building, LayoutDashboard, PieChart, ShoppingBag, Activity, Lock,
+  Building, LayoutDashboard, PieChart, ShoppingBag, Activity, Lock, Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -136,12 +137,24 @@ const ICON_BG: Record<string, string> = {
 
 export default function V2Page() {
   const totalFeatures = CATEGORIAS.reduce((s, c) => s + c.features.length, 0);
+  const [sugerencia, setSugerencia] = useState('');
+  const [enviado, setEnviado] = useState(false);
+
+  const handleEnviar = () => {
+    if (sugerencia.trim()) {
+      setEnviado(true);
+      setTimeout(() => {
+        setSugerencia('');
+        setEnviado(false);
+      }, 2000);
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-10 pb-12">
 
       {/* ── Hero ── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-finca-dark to-finca-dark/90 px-8 py-10 text-white">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-finca-coral to-finca-salmon px-8 py-10 text-white">
         {/* decorative blobs */}
         <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-finca-coral/20 blur-3xl" />
         <div className="absolute -bottom-10 -left-10 w-48 h-48 rounded-full bg-finca-coral/10 blur-3xl" />
@@ -171,7 +184,7 @@ export default function V2Page() {
               </div>
             ))}
             <div className="bg-finca-coral/20 border border-finca-coral/30 rounded-xl px-4 py-2 text-center">
-              <p className="text-2xl font-bold text-finca-coral">2025</p>
+              <p className="text-2xl font-bold text-white">2026</p>
               <p className="text-[11px] text-white/50">Lanzamiento V2</p>
             </div>
           </div>
@@ -229,17 +242,49 @@ export default function V2Page() {
       ))}
 
       {/* ── Footer CTA ── */}
-      <div className="rounded-2xl border-2 border-dashed border-finca-coral/30 bg-finca-peach/10 p-8 text-center space-y-3">
+      <div className="rounded-2xl border-2 border-dashed border-finca-coral/30 bg-finca-peach/10 p-8 text-center space-y-4">
         <div className="w-12 h-12 rounded-full bg-finca-coral/10 flex items-center justify-center mx-auto">
           <Sparkles className="w-6 h-6 text-finca-coral" />
         </div>
         <h3 className="font-bold text-finca-dark text-lg">¿Tienes una funcionalidad en mente?</h3>
+
+        {/* Input + Send */}
+        <div className="flex gap-2 max-w-sm mx-auto">
+          <input
+            type="text"
+            value={sugerencia}
+            onChange={(e) => setSugerencia(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleEnviar()}
+            placeholder="Comparte tu sugerencia..."
+            className="flex-1 px-3 py-2 rounded-lg border border-finca-coral/20 bg-white text-sm focus:outline-none focus:border-finca-coral focus:ring-2 focus:ring-finca-coral/20"
+            disabled={enviado}
+          />
+          <button
+            onClick={handleEnviar}
+            disabled={enviado || !sugerencia.trim()}
+            className={cn(
+              'px-3 py-2 rounded-lg font-medium text-sm transition-all',
+              enviado
+                ? 'bg-green-500 text-white'
+                : 'bg-finca-coral hover:bg-finca-coral/90 text-white disabled:opacity-50'
+            )}
+          >
+            {enviado ? '✓' : <Send className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {enviado && <p className="text-xs text-green-600 font-medium">¡Gracias por tu sugerencia!</p>}
+
         <p className="text-sm text-muted-foreground max-w-sm mx-auto">
           Todas estas funcionalidades están en desarrollo activo. FincaOS V2 será la plataforma
           definitiva para la gestión de comunidades en España.
         </p>
         <div className="flex items-center justify-center gap-2 pt-2">
-          <span className="w-2 h-2 rounded-full bg-finca-coral animate-pulse" />
+          <span className="inline-flex gap-1">
+            <span className="w-2 h-2 rounded-full bg-finca-coral animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-finca-coral animate-pulse" style={{ animationDelay: '0.2s' }} />
+            <span className="w-2 h-2 rounded-full bg-finca-coral animate-pulse" style={{ animationDelay: '0.4s' }} />
+          </span>
           <span className="text-xs font-medium text-finca-coral">En desarrollo activo</span>
         </div>
       </div>
