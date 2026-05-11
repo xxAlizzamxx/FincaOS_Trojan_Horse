@@ -170,16 +170,13 @@ function detectIntent(msg: string): Intent {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, ''); // strip accents → "votación" → "votacion"
 
+  if (/resumen|estado general|como esta|en este momento|estado de (mi |la )?comunidad|novedades generales|turno actual|del turno/.test(m)) return 'resumen';
   if (/cuota|debo|pago pendiente|deuda|vencimiento|mora|adeudo/.test(m))  return 'cuotas';
   if (/votac|votar|referend|referendum/.test(m))                           return 'votaciones';
   if (/anuncio|comunicado|aviso|tablon/.test(m))                           return 'anuncios';
   if (/incidencia|averia|reparac|reporte|averias/.test(m))                 return 'incidencias';
-  // Alertas comunitarias
   if (/alerta|emergencia activa|avisos? activ/.test(m))                    return 'alertas';
-  // Porteria: paquetes, recibos, visitas, domicilios, accesos
   if (/porteria|paquete|recibo|domicilio|visita.*(espera|pend|autor)|espera.*(autor|ingres)|pendiente.*(recoger)|autorizar visita/.test(m)) return 'porteria';
-  // Resumen general de la comunidad o del turno
-  if (/resumen|estado general|como esta|en este momento|estado de (mi |la )?comunidad|novedades generales|turno actual/.test(m)) return 'resumen';
   return null;
 }
 
@@ -646,22 +643,34 @@ async function directResumen(comunidadId: string, uid: string, rol: string): Pro
       if (rec) partes.push(`${rec} rechazado${rec > 1 ? 's' : ''}`);
       if (esp) partes.push(`${esp} esperando`);
       lines.push(`• Accesos hoy: ${accesosHoy.length} total (${partes.join(', ')}).${esp > 0 ? ' ⚠️ Hay visitas pendientes de autorizar.' : ''}`);
+      const esperando = accesosHoy.filter(a => a.estado === 'esperando');
+      if (esperando.length > 0) {
+        esperando.slice(0, 5).forEach(a => lines.push(`  - ${a.visitante_nombre} → ${a.apartamento_destino} (${a.tipo ?? 'visita'})`));
+      }
     }
 
     // 2. Paquetes pendientes
     const paqPend = paquetes.filter(p => ['recibido', 'notificado'].includes(p.estado as string));
-    lines.push(paqPend.length === 0
-      ? '• Paquetería: sin pendientes.'
-      : `• Paquetería: ${paqPend.length} paquete${paqPend.length > 1 ? 's/recibos' : '/recibo'} pendiente${paqPend.length > 1 ? 's' : ''} de recogida.`,
-    );
+    if (paqPend.length === 0) {
+      lines.push('• Paquetería: sin pendientes.');
+    } else {
+      lines.push(`• Paquetería: ${paqPend.length} pendiente${paqPend.length > 1 ? 's' : ''} de recogida:`);
+      paqPend.slice(0, 5).forEach(p => {
+        const tipo = p.tipo === 'recibo' ? `Recibo${p.recibo_tipo ? ` (${p.recibo_tipo})` : ''}` : (p.tipo as string);
+        lines.push(`  - ${p.destinatario_nombre} (Apto ${p.apartamento}) — ${tipo}${p.remitente ? `, de ${p.remitente}` : ''}`);
+      });
+      if (paqPend.length > 5) lines.push(`  ... y ${paqPend.length - 5} más.`);
+    }
 
     // 3. Alertas
-    if (urgAlerta) {
-      lines.push(`• ⚠️ Alerta urgente activa: "${urgAlerta.titulo}".`);
-    } else if (alertas.length > 0) {
-      lines.push(`• Alertas: ${alertas.length} activa${alertas.length > 1 ? 's' : ''}.`);
-    } else {
+    if (alertas.length === 0) {
       lines.push('• Alertas: ninguna activa.');
+    } else {
+      lines.push(`• Alertas: ${alertas.length} activa${alertas.length > 1 ? 's' : ''}:`);
+      alertas.slice(0, 4).forEach(a => {
+        const prio = (a.prioridad as string) === 'urgente' ? ' [URGENTE]' : (a.prioridad as string) === 'alta' ? ' [ALTA]' : '';
+        lines.push(`  - ${a.titulo}${prio} (${(a.tipo as string) ?? 'informativa'})`);
+      });
     }
 
     // 4. Incidencias abiertas
@@ -669,7 +678,12 @@ async function directResumen(comunidadId: string, uid: string, rol: string): Pro
       lines.push('• Incidencias: ninguna abierta.');
     } else {
       const urg = urgentes.length > 0 ? `, ${urgentes.length} urgente${urgentes.length > 1 ? 's' : ''}` : '';
-      lines.push(`• Incidencias: ${abiertas.length} abierta${abiertas.length > 1 ? 's' : ''}${urg}.`);
+      lines.push(`• Incidencias: ${abiertas.length} abierta${abiertas.length > 1 ? 's' : ''}${urg}:`);
+      abiertas.slice(0, 4).forEach(inc => {
+        const estado = ((inc.estado as string) ?? '').replace(/_/g, ' ');
+        lines.push(`  - "${inc.titulo}" — ${estado}`);
+      });
+      if (abiertas.length > 4) lines.push(`  ... y ${abiertas.length - 4} más.`);
     }
 
     // 5. Mensajes no leídos de vecinos
@@ -679,17 +693,22 @@ async function directResumen(comunidadId: string, uid: string, rol: string): Pro
     );
 
     // 6. Bitácora del turno
-    lines.push(bitacora.length > 0
-      ? `• Bitácora: ${bitacora.length} entrada${bitacora.length > 1 ? 's' : ''} en las últimas 24 h.`
-      : '• Bitácora: sin entradas en las últimas 24 h.',
-    );
+    if (bitacora.length === 0) {
+      lines.push('• Bitácora: sin entradas en las últimas 24 h.');
+    } else {
+      lines.push(`• Bitácora: ${bitacora.length} entrada${bitacora.length > 1 ? 's' : ''} en las últimas 24 h:`);
+      bitacora.slice(0, 4).forEach(b => {
+        lines.push(`  - ${b.titulo} (${(b.tipo as string) ?? 'general'}${b.vigilante_nombre ? `, ${b.vigilante_nombre}` : ''})`);
+      });
+    }
 
     // 7. Rondas del día
     const rondasCompletas = rondasHoy.filter(r => r.estado === 'completada').length;
-    lines.push(rondasHoy.length > 0
-      ? `• Rondas hoy: ${rondasHoy.length}${rondasCompletas > 0 ? `, ${rondasCompletas} completada${rondasCompletas > 1 ? 's' : ''}` : ' en curso'}.`
-      : '• Rondas: ninguna registrada hoy.',
-    );
+    if (rondasHoy.length === 0) {
+      lines.push('• Rondas: ninguna registrada hoy.');
+    } else {
+      lines.push(`• Rondas hoy: ${rondasHoy.length}${rondasCompletas > 0 ? `, ${rondasCompletas} completada${rondasCompletas > 1 ? 's' : ''}` : ' en curso'}.`);
+    }
 
     if (anuncios.length > 0) {
       lines.push(`• Últimos anuncios: ${anuncios.map(a => `"${a.titulo as string}"`).join(' / ')}.`);
