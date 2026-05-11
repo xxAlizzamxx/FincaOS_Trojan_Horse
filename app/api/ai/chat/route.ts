@@ -162,7 +162,7 @@ function stripMarkdown(text: string): string {
 // Covers ~80% of common user queries without touching Gemini.
 // Normalise: lowercase + strip Spanish diacritics before matching.
 
-type Intent = 'cuotas' | 'votaciones' | 'anuncios' | 'incidencias' | 'resumen' | 'porteria' | null;
+type Intent = 'cuotas' | 'votaciones' | 'anuncios' | 'incidencias' | 'resumen' | 'porteria' | 'alertas' | null;
 
 function detectIntent(msg: string): Intent {
   const m = msg
@@ -174,10 +174,12 @@ function detectIntent(msg: string): Intent {
   if (/votac|votar|referend|referendum/.test(m))                           return 'votaciones';
   if (/anuncio|comunicado|aviso|tablon/.test(m))                           return 'anuncios';
   if (/incidencia|averia|reparac|reporte|averias/.test(m))                 return 'incidencias';
+  // Alertas comunitarias
+  if (/alerta|emergencia activa|avisos? activ/.test(m))                    return 'alertas';
   // Porteria: paquetes, recibos, visitas, domicilios, accesos
   if (/porteria|paquete|recibo|domicilio|visita.*(espera|pend|autor)|espera.*(autor|ingres)|pendiente.*(recoger)|autorizar visita/.test(m)) return 'porteria';
-  // Resumen general de la comunidad
-  if (/resumen|estado general|como esta|en este momento|estado de (mi |la )?comunidad|novedades generales/.test(m)) return 'resumen';
+  // Resumen general de la comunidad o del turno
+  if (/resumen|estado general|como esta|en este momento|estado de (mi |la )?comunidad|novedades generales|turno actual/.test(m)) return 'resumen';
   return null;
 }
 
@@ -438,6 +440,53 @@ async function directIncidencias(comunidadId: string, uid: string, rol: string):
     }),
   ];
   if (abiertas.length > 4) lines.push(`... y ${abiertas.length - 4} más.`);
+  return lines.join('\n');
+}
+
+// ── directAlertas ────────────────────────────────────────────────────────────
+// Reads active community alerts and returns a formatted list.
+
+async function directAlertas(comunidadId: string): Promise<string | null> {
+  const db = getAdminDb();
+  const snap = await db.collection('alertas_comunidad')
+    .where('comunidad_id', '==', comunidadId)
+    .where('activa', '==', true)
+    .get();
+
+  if (snap.empty) return 'No hay alertas activas en tu comunidad en este momento. Todo en calma.';
+
+  const alertas = snap.docs
+    .map(d => d.data())
+    .sort((a, b) => ((b.created_at as string) ?? '') > ((a.created_at as string) ?? '') ? 1 : -1);
+
+  const urgentes = alertas.filter(a => a.prioridad === 'urgente');
+  const altas    = alertas.filter(a => a.prioridad === 'alta');
+
+  const s = alertas.length > 1;
+  const lines: string[] = [
+    `Hay ${alertas.length} alerta${s ? 's' : ''} activa${s ? 's' : ''} en la comunidad:`,
+  ];
+
+  for (const a of alertas.slice(0, 6)) {
+    const tipo      = (a.tipo as string) ?? 'informativa';
+    const prioridad = (a.prioridad as string) ?? 'media';
+    const fecha     = (a.created_at as string)
+      ? new Date(a.created_at as string).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+      : '';
+    const prio = prioridad === 'urgente' ? ' [URGENTE]' : prioridad === 'alta' ? ' [ALTA]' : '';
+    lines.push(`• ${a.titulo}${prio} (${tipo}) — ${fecha}`);
+    if (a.descripcion) {
+      lines.push(`  ${(a.descripcion as string).slice(0, 120)}`);
+    }
+  }
+  if (alertas.length > 6) lines.push(`... y ${alertas.length - 6} más.`);
+
+  if (urgentes.length > 0) {
+    lines.push(`\n${urgentes.length} de estas alerta${urgentes.length > 1 ? 's son' : ' es'} de prioridad urgente.`);
+  } else if (altas.length > 0) {
+    lines.push(`\n${altas.length} de prioridad alta.`);
+  }
+
   return lines.join('\n');
 }
 
@@ -717,6 +766,7 @@ async function buildDirectFirestoreResponse(
     case 'votaciones':  return directVotaciones(comunidadId);
     case 'anuncios':    return directAnuncios(comunidadId);
     case 'incidencias': return directIncidencias(comunidadId, uid, rol);
+    case 'alertas':     return directAlertas(comunidadId);
     case 'porteria':    return directPorteria(comunidadId, uid, rol);
     case 'resumen':     return directResumen(comunidadId, uid, rol);
   }
@@ -727,7 +777,7 @@ async function buildDirectFirestoreResponse(
 async function buildContext(comunidadId: string, uid: string, rol: string) {
   const db = getAdminDb();
 
-  const [incSnap, cuotasSnap, votSnap, anunciosSnap, insightsSnap, perfilSnap] =
+  const [incSnap, cuotasSnap, votSnap, anunciosSnap, insightsSnap, perfilSnap, alertasSnap] =
     await Promise.allSettled([
       db.collection('incidencias').where('comunidad_id', '==', comunidadId).limit(50).get(),
       db.collection('cuotas').where('comunidad_id', '==', comunidadId).get(),
@@ -735,6 +785,7 @@ async function buildContext(comunidadId: string, uid: string, rol: string) {
       db.collection('anuncios').where('comunidad_id', '==', comunidadId).limit(5).get(),
       db.collection('ai_insights').doc(comunidadId).get(),
       db.collection('perfiles').doc(uid).get(),
+      db.collection('alertas_comunidad').where('comunidad_id', '==', comunidadId).where('activa', '==', true).get(),
     ]);
 
   const isAdmin = rol === 'admin' || rol === 'presidente';
@@ -817,13 +868,23 @@ async function buildContext(comunidadId: string, uid: string, rol: string) {
       ? (perfilSnap.value.data()?.nombre_completo as string) ?? 'vecino'
       : 'vecino';
 
+  const alertasActivas =
+    alertasSnap.status === 'fulfilled'
+      ? alertasSnap.value.docs
+          .map(d => d.data())
+          .sort((a, b) => ((b.created_at as string) ?? '') > ((a.created_at as string) ?? '') ? 1 : -1)
+          .slice(0, 5)
+          .map(d => ({ titulo: d.titulo, tipo: d.tipo, prioridad: d.prioridad, descripcion: (d.descripcion as string)?.slice(0, 120) }))
+      : [];
+
   return {
     usuario:               { nombre: nombreUsuario, rol },
-    resumen:               { incidencias_abiertas: incidencias.length, cuotas_pendientes: cuotasPendientes.length, votaciones_activas: votaciones.length },
+    resumen:               { incidencias_abiertas: incidencias.length, cuotas_pendientes: cuotasPendientes.length, votaciones_activas: votaciones.length, alertas_activas: alertasActivas.length },
     incidencias_abiertas:  incidencias,
     tus_cuotas_pendientes: cuotasPendientes,
     votaciones_activas:    votaciones,
     anuncios_recientes:    anuncios,
+    alertas_activas:       alertasActivas,
     ia_insights:           insights,
   };
 }
