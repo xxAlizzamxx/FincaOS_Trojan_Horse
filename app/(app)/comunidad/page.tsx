@@ -346,12 +346,12 @@ export default function ComunidadPage() {
       <Tabs defaultValue="reservas">
         <TabsList className="flex w-full h-9 px-0 gap-0">
           <TabsTrigger value="reservas"      className="flex-1 text-xs min-w-0 px-1">Reservas</TabsTrigger>
-          <TabsTrigger value="participacion" className="flex-1 text-xs min-w-0 px-1">Participar</TabsTrigger>
-          <TabsTrigger value="finanzas"      className="flex-1 text-xs min-w-0 px-1">Finanzas</TabsTrigger>
+          <TabsTrigger value="participacion" className="flex-1 text-xs min-w-0 px-1">Foro</TabsTrigger>
+          <TabsTrigger value="finanzas"      className="flex-1 text-xs min-w-0 px-1">Pagos</TabsTrigger>
           <TabsTrigger value="sugerencias"   className="flex-1 text-xs min-w-0 px-1">Buzón</TabsTrigger>
           <TabsTrigger value="docs"          className="flex-1 text-xs min-w-0 px-1">Docs</TabsTrigger>
           <TabsTrigger value="vigilancia"    className="flex-1 text-xs min-w-0 px-1 relative">
-            <span className="truncate">Seguridad</span>
+            <span className="truncate">Acceso</span>
             {(paquetes.length > 0 || alertas.length > 0) && (
               <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-finca-coral" />
             )}
