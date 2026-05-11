@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
   /* ── 6. Create Stripe Checkout session — ALWAYS runs ── */
   console.log('Creando sesión Stripe...');
 
-  const origin = req.headers.get('origin') || 'https://finca-os-trojan-horse.vercel.app';
+  const origin = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'https://finca-os-trojan-horse.vercel.app';
 
   const labelMap: Record<string, string> = {
     cuota:      'Cuota de comunidad',

@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     const planData = PLANS[plan as keyof typeof PLANS];
 
-    const origin = req.headers.get('origin') || 'http://localhost:3000';
+    const origin = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'https://finca-os-trojan-horse.vercel.app';
 
     const session = await getStripe().checkout.sessions.create({
       mode: 'subscription',
