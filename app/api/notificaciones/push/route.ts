@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
           title,
           body: msgBody,
           url,
-          icon: '/logo.jpeg',
+          icon: '/logo.png',
         },
         headers: {
           TTL: '86400',
