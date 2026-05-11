@@ -425,7 +425,7 @@ export default function ComunidadPage() {
                 </div>
               )}
               {esAdmin && (
-                <Button variant="outline" size="sm" className="w-full border-finca-coral/30 text-finca-coral" onClick={() => router.push('/votos/nueva')}>
+                <Button variant="outline" size="sm" className="w-full border-finca-coral/30 text-finca-coral" onClick={() => router.push('/votos/nuevo')}>
                   <Plus className="w-3.5 h-3.5 mr-1.5" />Nueva votación
                 </Button>
               )}
@@ -647,7 +647,7 @@ export default function ComunidadPage() {
           {subTabDocs === 'reglamentos' ? (
             <>
               {esAdmin && (
-                <Button variant="outline" size="sm" className="w-full border-finca-coral/30 text-finca-coral" onClick={() => toast.info('Subir documentos — próximamente')}>
+                <Button variant="outline" size="sm" className="w-full border-finca-coral/30 text-finca-coral" onClick={() => router.push('/docs')}>
                   <Plus className="w-3.5 h-3.5 mr-1.5" />Subir documento
                 </Button>
               )}
@@ -658,21 +658,37 @@ export default function ComunidadPage() {
                   <p className="text-xs text-muted-foreground">El administrador subirá estatutos y reglamentos aquí</p>
                 </div>
               ) : (
-                documentos.map((documento) => (
-                  <Card key={documento.id} className="border-0 shadow-sm">
-                    <CardContent className="p-3 flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-finca-peach/50 flex items-center justify-center shrink-0">
-                        <FileText className="w-5 h-5 text-finca-coral" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-finca-dark truncate">{documento.nombre}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {format(new Date(documento.created_at), "d MMM yyyy", { locale: es })}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
+                documentos.map((documento) => {
+                  const dlParams = new URLSearchParams({
+                    public_id: documento.storage_path ?? '',
+                    nombre:    documento.nombre,
+                    tipo:      documento.tipo ?? 'pdf',
+                    dl:        '1',
+                  });
+                  return (
+                    <Card key={documento.id} className="border-0 shadow-sm">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-finca-peach/50 flex items-center justify-center shrink-0">
+                          <FileText className="w-5 h-5 text-finca-coral" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-finca-dark truncate">{documento.nombre}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {format(new Date(documento.created_at), "d MMM yyyy", { locale: es })}
+                          </p>
+                        </div>
+                        {documento.url && (
+                          <a
+                            href={`/api/open-doc?${dlParams.toString()}`}
+                            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[11px] font-medium border border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white transition-colors shrink-0"
+                          >
+                            Descargar
+                          </a>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })
               )}
             </>
           ) : (
