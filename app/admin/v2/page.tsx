@@ -7,6 +7,8 @@ import {
   Wrench, Calendar, History, Hammer, Shield, Zap,
   Bot, BellRing, Search, Sparkles, Clock,
   Building, LayoutDashboard, PieChart, ShoppingBag, Activity, Lock, Send,
+  TrendingDown, TrendingUp, MessageSquare, Cpu,
+  Database, UserCheck, Cloud, ClipboardCheck, ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -240,6 +242,70 @@ export default function V2Page() {
           </div>
         </section>
       ))}
+
+      {/* ── Impacto esperado ── */}
+      <section className="space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 mt-0.5 bg-gradient-to-br from-finca-coral to-finca-salmon">
+            <span>📈</span>
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-finca-dark">Impacto esperado</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Resultados medibles para tu comunidad desde el primer mes.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { icon: TrendingDown, value: '−70%', label: 'tiempo administrativo',  color: 'text-finca-coral', bg: 'bg-finca-coral/8' },
+            { icon: TrendingDown, value: '−60%', label: 'incidencias sin seguimiento', color: 'text-finca-coral', bg: 'bg-finca-coral/8' },
+            { icon: MessageSquare,value: '↑',    label: 'comunicación vecinal',   color: 'text-emerald-600', bg: 'bg-emerald-50' },
+            { icon: Cpu,          value: '↑',    label: 'automatización operativa',color: 'text-violet-600',  bg: 'bg-violet-50'  },
+          ].map((m) => (
+            <div key={m.label} className="bg-card border border-border rounded-xl p-4 flex flex-col items-center text-center gap-2 hover:shadow-md hover:border-finca-coral/30 transition-all">
+              <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', m.bg)}>
+                <m.icon className={cn('w-5 h-5', m.color)} />
+              </div>
+              <p className={cn('text-2xl font-extrabold leading-none', m.color)}>{m.value}</p>
+              <p className="text-[11px] text-muted-foreground leading-snug">{m.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Cumplimiento y Seguridad ── */}
+      <section className="space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 mt-0.5 bg-gradient-to-br from-emerald-600 to-teal-400">
+            <span>🔒</span>
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-finca-dark">Cumplimiento y Seguridad</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Diseñado para que administradores operen con total tranquilidad legal y técnica.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[
+            { icon: Shield,        label: 'Protección de datos GDPR',      desc: 'Cumplimiento total con el Reglamento europeo de protección de datos' },
+            { icon: Database,      label: 'Backups automáticos',            desc: 'Copias de seguridad diarias cifradas en la nube sin intervención' },
+            { icon: ClipboardCheck,label: 'Historial y auditoría',          desc: 'Registro completo de cada acción realizada en la plataforma' },
+            { icon: UserCheck,     label: 'Acceso seguro por roles',        desc: 'Permisos granulares: admin, presidente, vecino, proveedor' },
+            { icon: Cloud,         label: 'Infraestructura cloud segura',   desc: 'Alojamiento en servidores certificados ISO 27001 con alta disponibilidad' },
+            { icon: ShieldCheck,   label: 'Autenticación segura',           desc: 'Login con verificación en dos pasos y sesiones protegidas' },
+          ].map((item) => (
+            <div key={item.label} className="group bg-card border border-border rounded-xl p-4 flex gap-3 hover:shadow-md hover:border-emerald-300 transition-all">
+              <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+                <item.icon className="w-4.5 h-4.5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-finca-dark leading-snug">{item.label}</p>
+                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* ── Footer CTA ── */}
       <div className="rounded-2xl border-2 border-dashed border-finca-coral/30 bg-finca-peach/10 p-8 text-center space-y-4">
