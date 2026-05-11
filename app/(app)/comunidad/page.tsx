@@ -348,7 +348,7 @@ export default function ComunidadPage() {
           <TabsTrigger value="reservas"      className="flex-1 text-xs min-w-0 px-1">Reservas</TabsTrigger>
           <TabsTrigger value="participacion" className="flex-1 text-xs min-w-0 px-1">Participar</TabsTrigger>
           <TabsTrigger value="finanzas"      className="flex-1 text-xs min-w-0 px-1">Finanzas</TabsTrigger>
-          <TabsTrigger value="sugerencias"   className="flex-1 text-xs min-w-0 px-1">Sugerir</TabsTrigger>
+          <TabsTrigger value="sugerencias"   className="flex-1 text-xs min-w-0 px-1">Buzón</TabsTrigger>
           <TabsTrigger value="docs"          className="flex-1 text-xs min-w-0 px-1">Docs</TabsTrigger>
           <TabsTrigger value="vigilancia"    className="flex-1 text-xs min-w-0 px-1 relative">
             <span className="truncate">Seguridad</span>

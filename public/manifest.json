@@ -12,15 +12,15 @@
   "categories": ["business", "utilities"],
   "icons": [
     {
-      "src": "/logo.png",
+      "src": "/logo.jpeg",
       "sizes": "192x192",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "any"
     },
     {
-      "src": "/logo.png",
+      "src": "/logo.jpeg",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     }
   ],
@@ -30,21 +30,21 @@
       "short_name": "Incidencia",
       "description": "Reportar una nueva incidencia en la comunidad",
       "url": "/nueva/incidencia",
-      "icons": [{ "src": "/logo.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/logo.jpeg", "sizes": "96x96" }]
     },
     {
       "name": "Mis incidencias",
       "short_name": "Incidencias",
       "description": "Ver el listado de incidencias",
       "url": "/incidencias",
-      "icons": [{ "src": "/logo.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/logo.jpeg", "sizes": "96x96" }]
     },
     {
       "name": "Mediaciones",
       "short_name": "Mediaciones",
       "description": "Gestionar mediaciones vecinales",
       "url": "/mediaciones",
-      "icons": [{ "src": "/logo.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/logo.jpeg", "sizes": "96x96" }]
     }
   ]
 }
